@@ -1,0 +1,3083 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Harvest IA by Figueira Marketing - Sistema de Prospecção</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+    <style>
+        /* Custom styles */
+        :root {
+            --harvest-primary: #C62828;
+            --harvest-secondary: #121212;
+            --harvest-neutral: #FFFFFF;
+            --harvest-gray-light: #D9D9D9;
+            --harvest-gray-mid: #8E8E8E;
+            --harvest-accent-green: #4CAF50;
+            --harvest-accent-yellow: #FFC107;
+        }
+
+        /* Override do “primary” do Bootstrap para não usar azul */
+        .btn-primary {
+            background-color: var(--harvest-primary);
+            border-color: var(--harvest-primary);
+        }
+
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background-color: #a32020;
+            border-color: #a32020;
+        }
+
+        .btn-outline-primary {
+            color: var(--harvest-primary);
+            border-color: var(--harvest-primary);
+        }
+
+        .btn-outline-primary:hover,
+        .btn-outline-primary:focus {
+            background-color: var(--harvest-primary);
+            border-color: var(--harvest-primary);
+            color: #fff;
+        }
+
+        .text-primary {
+            color: var(--harvest-primary) !important;
+        }
+
+        .bg-primary {
+            background-color: var(--harvest-primary) !important;
+        }
+
+        .badge.bg-primary {
+            background-color: var(--harvest-primary) !important;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #C62828, #121212);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #C62828, #121212);
+        }
+
+        .gradient-bg-success {
+            background: linear-gradient(135deg, #4CAF50, #C62828);
+        }
+
+
+        .prospect-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .prospect-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .prospect-card.selected {
+            border: 2px solid #C62828 !important;
+            background-color: rgba(198, 40, 40, 0.08);
+        }
+
+
+        .stats-card {
+            background: linear-gradient(135deg, #FFFFFF, #F5F5F5);
+            border-radius: 15px;
+            transition: all 0.3s ease;
+        }
+
+        [data-bs-theme="dark"] .stats-card {
+            background: linear-gradient(135deg, #1b1b1b, #121212);
+        }
+
+
+        .stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-bs-theme="dark"] .stats-card {
+            background: linear-gradient(135deg, #212529, #495057);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .webhook-section {
+            background: linear-gradient(135deg, rgba(198, 40, 40, 0.12), rgba(18, 18, 18, 0.9));
+            border-radius: 15px;
+            border: 2px dashed #4CAF50;
+        }
+
+        .search-header {
+            background: linear-gradient(135deg, rgba(198, 40, 40, 0.18), rgba(18, 18, 18, 0.9));
+            border-radius: 15px;
+        }
+
+        .whatsapp-status {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+            border-radius: 12px;
+        }
+
+        .rating-stars {
+            color: #ffc107;
+        }
+
+        .loading-spinner {
+            display: none;
+        }
+
+        .hero-section {
+            background: linear-gradient(135deg, #C62828, #121212);
+            color: #FFFFFF;
+            border-radius: 20px;
+            margin-bottom: 2rem;
+        }
+
+
+        .pagination-controls {
+            background: linear-gradient(135deg, rgba(198, 40, 40, 0.06), rgba(18, 18, 18, 0.6));
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        #minimap {
+            height: 300px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+        }
+
+        .prospect-popup {
+            min-width: 200px;
+        }
+
+        .prospect-popup h6 {
+            margin: 0 0 5px 0;
+            color: #0d6efd;
+        }
+
+        .prospect-popup .badge {
+            font-size: 0.7rem;
+        }
+
+        .filter-status {
+            background: rgba(198, 40, 40, 0.08);
+            border: 1px solid rgba(198, 40, 40, 0.4);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            margin-bottom: 10px;
+        }
+
+        .webhook-status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .webhook-success {
+            background: rgba(25, 135, 84, 0.1);
+            border: 1px solid #198754;
+            color: #198754;
+        }
+
+        .webhook-error {
+            background: rgba(220, 53, 69, 0.1);
+            border: 1px solid #dc3545;
+            color: #dc3545;
+        }
+
+        .webhook-loading {
+            background: rgba(13, 110, 253, 0.1);
+            border: 1px solid #0d6efd;
+            color: #0d6efd;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg bg-body-tertiary shadow-sm">
+        <div class="container-fluid">
+            <div class="navbar-brand d-flex align-items-center">
+                <div class="gradient-bg text-white rounded-3 p-2 me-3">
+                    <i class="bi bi-robot fs-5"></i>
+                </div>
+                <div class="d-flex flex-column">
+                    <span class="fs-3 fw-bold gradient-text">Harvest IA</span>
+                    <small class="text-muted">by Figueira Marketing</small>
+                </div>
+            </div>
+
+
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-outline-secondary" onclick="toggleTheme()" id="theme-toggle">
+                    <i class="bi bi-sun" id="theme-icon"></i>
+                </button>
+                <button class="btn btn-outline-secondary" onclick="showConfigModal()">
+                    <i class="bi bi-gear"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <div class="hero-section p-4 text-center">
+            <h1 class="display-5 fw-bold mb-3">
+                <i class="bi bi-bullseye me-3"></i>Sua prospecção automatizada, do primeiro contato à conversão.
+            </h1>
+            <p class="lead mb-0">
+                A Harvest IA encontra, analisa e se conecta aos seus leads certos — tudo em um fluxo inteligente de vendas.
+            </p>
+        </div>
+
+
+        <div class="row g-4">
+
+            <div class="col-lg-8">
+                
+                <div class="card shadow-sm mb-4 border-primary">
+                    <div class="card-header bg-transparent">
+                        <h6 class="mb-0"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Importar Lista (CSV/Excel)</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-end">
+                            <div class="col-md-9">
+                                <label class="form-label">Selecione seu arquivo CSV</label>
+                                <input type="file" class="form-control" id="csvFile" accept=".csv">
+                                <div class="form-text">
+                                    O sistema tentará identificar automaticamente colunas como: <strong>nome, empresa, telefone, celular, whatsapp, site, segmento</strong>.
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-success w-100" onclick="processCSV()">
+                                    <i class="bi bi-upload me-2"></i>Carregar Lista
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm h-100">
+                    <div class="card-header search-header">
+                        <div class="row align-items-center">
+                            <div class="col">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-search me-2"></i>Buscar Prospects (Maps)
+                                </h5>
+                            </div>
+                            <div class="col-auto">
+                                <span class="badge bg-primary" id="results-count">0 empresas encontradas</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text">
+                                        <i class="bi bi-search"></i>
+                                    </span>
+                                    <input type="text" class="form-control" id="search-input"
+                                        placeholder="Ex: Petshop em Salvador, Dentista em São Paulo..."
+                                        onkeyup="filterProspects()" onkeypress="handleEnterKey(event)">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select form-select-lg" id="results-limit">
+                                    <option value="20">20 resultados</option>
+                                    <option value="20" data-pages="2">40 resultados (2 páginas)</option>
+                                    <option value="20" data-pages="3">60 resultados (3 páginas)</option>
+                                    <option value="20" data-pages="5">100 resultados (5 páginas)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-lg gradient-bg text-white w-100" onclick="searchProspects()">
+                                    <span class="loading-spinner spinner-border spinner-border-sm me-2"
+                                        role="status"></span>
+                                    <span id="search-btn-text">
+                                        <i class="bi bi-search me-2"></i>Buscar
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="pagination-controls d-none" id="pagination-controls">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button class="btn btn-outline-primary btn-sm" onclick="loadPreviousPage()"
+                                            id="prev-btn" disabled>
+                                            <i class="bi bi-chevron-left"></i> Anterior
+                                        </button>
+                                        <span class="badge bg-light text-dark" id="page-info">Página 1</span>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="loadNextPage()"
+                                            id="next-btn">
+                                            Próxima <i class="bi bi-chevron-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 text-md-end">
+                                    <small class="text-muted">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Mostrando <span id="showing-range">1-20</span> de <span
+                                            id="total-available">20+</span> resultados disponíveis
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-4">
+                            <div class="col-auto">
+                                <select class="form-select form-select-sm" id="whatsapp-filter"
+                                    onchange="applyFilters()">
+                                    <option value="">Todos</option>
+                                    <option value="true">Apenas com WhatsApp</option>
+                                    <option value="false">Sem WhatsApp</option>
+                                </select>
+                            </div>
+                            <div class="col-auto">
+                                <select class="form-select form-select-sm" id="rating-filter" onchange="applyFilters()">
+                                    <option value="">Todas as avaliações</option>
+                                    <option value="4">4+ estrelas</option>
+                                    <option value="3">3+ estrelas</option>
+                                </select>
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="clearFilters()">
+                                    <i class="bi bi-x-circle me-1"></i>Limpar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="filter-status d-none" id="filter-status">
+                            <small><i class="bi bi-funnel me-1"></i><span id="filter-description"></span></small>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button class="btn btn-outline-primary btn-sm" onclick="selectAll()">
+                                    <i class="bi bi-check-all me-1"></i>Selecionar Página
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="clearSelection()">
+                                    <i class="bi bi-x-square me-1"></i>Limpar Página
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm" onclick="clearAllSelections()"
+                                    title="Limpar seleções de todas as páginas">
+                                    <i class="bi bi-trash me-1"></i>Limpar Tudo
+                                </button>
+                            </div>
+                            <span class="text-muted">
+                                <strong id="selected-count">0</strong> selecionados
+                                <small class="text-muted">(total)</small>
+                            </span>
+                        </div>
+
+                        <div class="row g-2" id="prospects-container">
+                            </div>
+
+                        <div class="text-center py-5 d-none" id="empty-state">
+                            <i class="bi bi-search fs-1 text-muted mb-3"></i>
+                            <h5 class="text-muted">Nenhum resultado encontrado</h5>
+                            <p class="text-muted">Tente ajustar os filtros ou termos de busca</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="card-title mb-0">
+                                <i class="bi bi-geo-alt me-2"></i>Mapa dos Prospects
+                            </h6>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="centerMapOnResults()"
+                                    title="Centralizar no resultado">
+                                    <i class="bi bi-crosshair"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="toggleMapView()"
+                                    title="Alternar vista">
+                                    <i class="bi bi-layers" id="map-view-icon"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="minimap"></div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-bar-chart me-2"></i>Estatísticas da Página
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <div class="stats-card p-3 text-center">
+                                    <div class="fs-2 fw-bold text-success" id="whatsapp-count">0</div>
+                                    <small class="text-muted">Com WhatsApp</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="stats-card p-3 text-center">
+                                    <div class="fs-2 fw-bold text-danger" id="no-whatsapp-count">0</div>
+                                    <small class="text-muted">Sem WhatsApp</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="stats-card p-3 text-center">
+                                    <div class="fs-2 fw-bold text-warning" id="avg-rating">0.0</div>
+                                    <small class="text-muted">Rating Médio</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="stats-card p-3 text-center">
+                                    <div class="fs-2 fw-bold text-info" id="verified-count">0</div>
+                                    <small class="text-muted">Verificados</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="webhook-section p-4">
+                    <div class="text-center mb-3">
+                        <i class="bi bi-send-check fs-1 text-primary"></i>
+                        <h5 class="mt-2">Enviar para IA</h5>
+                        <p class="text-muted mb-0">Envie os dados selecionados via webhook</p>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <button class="btn btn-primary btn-lg w-100" onclick="sendToWebhook()" id="webhook-btn"
+                                    disabled>
+                                    <i class="bi bi-send me-2"></i>
+                                    Enviar <span id="webhook-count">0</span> Selecionados
+                                </button>
+                            </div>
+                            <div class="col-6 d-none" id="pause-btn-container">
+                                <button class="btn btn-warning w-100" onclick="pauseWebhookSending()" id="pause-btn">
+                                    <i class="bi bi-pause-circle me-2"></i>Pausar
+                                </button>
+                            </div>
+                            <div class="col-6 d-none" id="stop-btn-container">
+                                <button class="btn btn-danger w-100" onclick="stopWebhookSending()" id="stop-btn">
+                                    <i class="bi bi-stop-circle me-2"></i>Parar
+                                </button>
+                            </div>
+
+                            <div class="col-12">
+                                <button class="btn btn-outline-secondary btn-lg w-100"
+                                    onclick="showIntervalConfigModal()">
+                                    <i class="bi bi-clock me-2"></i>Configurar Intervalos
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="webhook-status-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+
+
+// Adicione no início do seu JavaScript, antes de qualquer outra coisa:
+
+// Detectar se está em iframe e tentar quebrar
+if (window.self !== window.top) {
+    try {
+        // Tentar quebrar o iframe (só funciona se mesmo domínio)
+        window.top.location = window.self.location;
+    } catch (e) {
+        console.log('Detectado iframe, adaptando funcionalidades...');
+        
+        // Fallback para localStorage se estiver em iframe
+        if (typeof Storage === "undefined") {
+            // Criar um polyfill simples para localStorage
+            window.localStorage = {
+                _data: {},
+                setItem: function(key, value) {
+                    this._data[key] = value;
+                },
+                getItem: function(key) {
+                    return this._data[key] || null;
+                },
+                removeItem: function(key) {
+                    delete this._data[key];
+                },
+                clear: function() {
+                    this._data = {};
+                }
+            };
+        }
+    }
+}
+
+        // Apply theme immediately to prevent flash
+        (function () {
+            const savedTheme = localStorage.getItem('prospecta_ia_theme') || 'dark';
+            document.documentElement.setAttribute('data-bs-theme', savedTheme);
+            console.log(`🎨 Tema aplicado imediatamente: ${savedTheme}`);
+        })();
+
+        // Webhook sending control
+        let webhookSendingState = {
+            isRunning: false,
+            isPaused: false,
+            isStopped: false,
+            currentIndex: 0,
+            totalProspects: 0
+        };
+
+        // Global state
+        let selectedProspects = new Set();
+        let filteredProspects = [];
+        let allProspects = [];
+        let searchInProgress = false;
+        let searchResults = [];
+
+        let currentPageProspects = [];
+        let currentFilters = {
+            whatsapp: '',
+            rating: '',
+            search: ''
+        };
+
+        // Debug mode state
+        let debugMode = false;
+
+        // Pagination state
+        let currentPage = 1;
+        let currentSearchTerm = '';
+        let searchCoordinates = null;
+        let hasMoreResults = false;
+        let pagesData = {};
+        let totalPagesLoaded = 0;
+
+        // Map state
+        let miniMap = null;
+        let mapMarkers = [];
+        let currentMapView = 'street';
+
+        // Backend Configuration
+        // Todas as chaves (SerpAPI, Evolution) vivem no n8n. O painel só conhece URLs.
+        const BACKEND_CONFIG = {
+            searchUrl: '',    // POST {termo, pagina, ll} -> resultados do Google Maps
+            whatsappUrl: ''   // POST {telefones: []}     -> validação de WhatsApp
+        };
+
+        // Webhook Configuration (disparo das mensagens)
+        const WEBHOOK_CONFIG = {
+            url: ''
+        };
+
+        // Debug logging function
+        function debugLog(message, data = null) {
+            if (!debugMode) return;
+
+            const timestamp = new Date().toISOString();
+            const verbose = true;
+
+            if (verbose) {
+                if (data) {
+                    console.log(`🔍 [${timestamp}] ${message}`, data);
+                } else {
+                    console.log(`🔍 [${timestamp}] ${message}`);
+                }
+            }
+        }
+
+        // Theme functions
+        function setTheme(theme) {
+            const html = document.documentElement;
+            const themeIcon = document.getElementById('theme-icon');
+
+            html.setAttribute('data-bs-theme', theme);
+
+            if (themeIcon) {
+                if (theme === 'dark') {
+                    themeIcon.className = 'bi bi-moon';
+                } else {
+                    themeIcon.className = 'bi bi-sun';
+                }
+            }
+
+            localStorage.setItem('prospecta_ia_theme', theme);
+            debugLog(`Tema alterado para: ${theme}`);
+        }
+
+        function loadThemeFromStorage() {
+            const savedTheme = localStorage.getItem('prospecta_ia_theme') || 'dark';
+            const themeIcon = document.getElementById('theme-icon');
+
+            debugLog(`Atualizando ícone para tema: ${savedTheme}`);
+
+            if (themeIcon) {
+                if (savedTheme === 'dark') {
+                    themeIcon.className = 'bi bi-moon';
+                } else {
+                    themeIcon.className = 'bi bi-sun';
+                }
+            }
+
+            document.documentElement.setAttribute('data-bs-theme', savedTheme);
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+
+            if (html.getAttribute('data-bs-theme') === 'light') {
+                setTheme('dark');
+            } else {
+                setTheme('light');
+            }
+        }
+
+        // Initialize
+        function init() {
+            updateCounts();
+            loadAllConfigs();
+            loadThemeFromStorage();
+            updateSearchButtonState();
+            initializeMap();
+            showWelcomeMessage();
+            updateIntervalDisplay();
+            debugLog('Sistema inicializado');
+        }
+
+        // --- FUNÇÃO PARA PROCESSAR CSV (NOVA) ---
+        function processCSV() {
+            const fileInput = document.getElementById('csvFile');
+            if (!fileInput.files.length) {
+                showErrorToast('Por favor, selecione um arquivo CSV.');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const btn = fileInput.parentElement.parentElement.querySelector('button');
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Processando...';
+            btn.disabled = true;
+
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const csvData = results.data;
+                    console.log('Dados CSV:', csvData);
+                    
+                    if(csvData.length === 0) {
+                        showErrorToast('Arquivo CSV vazio ou inválido.');
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    // Resetar estados
+                    allProspects = [];
+                    filteredProspects = [];
+                    selectedProspects.clear();
+                    currentPage = 1;
+                    
+                    // Transformar dados
+                    const importedProspects = csvData.map((row, index) => {
+                        // Tentar mapear campos comuns (case insensitive)
+                        const getField = (keys) => {
+                            const foundKey = Object.keys(row).find(k => keys.includes(k.toLowerCase().trim()));
+                            return foundKey ? row[foundKey] : '';
+                        };
+
+                        const name = getField(['nome', 'name', 'empresa', 'company', 'business', 'cliente']);
+                        const phone = getField(['telefone', 'phone', 'celular', 'mobile', 'whatsapp', 'tel', 'contato']);
+                        const address = getField(['endereço', 'endereco', 'address', 'local', 'cidade', 'city']);
+                        const website = getField(['site', 'website', 'url', 'web']);
+                        const category = getField(['categoria', 'category', 'segmento', 'nicho', 'tipo', 'type']);
+                        const email = getField(['email', 'e-mail', 'mail']);
+
+                        return {
+                            id: Date.now() + index,
+                            name: name || 'Nome não identificado',
+                            title: name || 'Nome não identificado', // Compatibilidade
+                            endereco: address || 'Endereço não informado',
+                            address: address || 'Endereço não informado',
+                            telefone: phone || 'Telefone não disponível',
+                            phone: phone || 'Telefone não disponível',
+                            email: email || null,
+                            rating: 0,
+                            reviews: 0,
+                            website: website || null,
+                            types: category || 'Importado via CSV',
+                            type: category || 'Importado via CSV',
+                            hasWhatsApp: null, 
+                            category: 'Importado',
+                            source: 'CSV',
+                            gps_coordinates: null
+                        };
+                    });
+
+                    // Validar WhatsApps automaticamente se possível
+                    const phones = extractPhoneNumbers(importedProspects);
+                    
+                    if(phones.length > 0 && BACKEND_CONFIG.whatsappUrl) {
+                        btn.innerHTML = 'Validando WhatsApps...';
+                        validateWhatsAppNumbers(phones).then(validation => {
+                            const processed = processResults(importedProspects, validation);
+                            
+                            // Atualizar globais
+                            allProspects = processed;
+                            filteredProspects = processed;
+                            // Paginação simples para CSV (tudo em 1 página por enquanto, ou slice se quiser)
+                            currentPageProspects = processed.slice(0, 500); 
+                            
+                            loadProspects();
+                            updateCounts();
+                            
+                            document.getElementById('pagination-controls').classList.add('d-none'); // Esconder paginação API
+                            showSuccessToast(`✅ ${processed.length} leads importados e validados!`);
+                            
+                            btn.innerHTML = originalText;
+                            btn.disabled = false;
+                        });
+                    } else {
+                        // Sem validação
+                        allProspects = importedProspects;
+                        filteredProspects = importedProspects;
+                        currentPageProspects = importedProspects.slice(0, 500);
+                        
+                        loadProspects();
+                        updateCounts();
+                        
+                        showSuccessToast(`✅ ${importedProspects.length} leads importados (sem validação)!`);
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    }
+                },
+                error: function(error) {
+                    showErrorToast('Erro ao ler CSV: ' + error.message);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            });
+        }
+
+        function showWelcomeMessage() {
+            const container = document.getElementById('prospects-container');
+            const emptyState = document.getElementById('empty-state');
+
+            if (container && emptyState) {
+                container.classList.add('d-none');
+                emptyState.classList.remove('d-none');
+
+                emptyState.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-robot fs-1 text-primary mb-3"></i>
+                        <h4 class="text-primary mb-3">Bem-vindo ao Prospecta IA!</h4>
+                        <p class="text-muted mb-4">
+                            Encontre leads qualificados e envie automaticamente para sua IA.<br>
+                            Busque empresas, valide WhatsApp e envie dados via webhook.
+                        </p>
+                        <div class="alert alert-info d-inline-block">
+                            <i class="bi bi-gear me-2"></i>
+                            <strong>Primeiro passo:</strong> Configure suas APIs clicando no ícone da engrenagem <i class="bi bi-gear"></i> no canto superior direito.
+                        </div>
+                        <div class="mt-4">
+                            <button class="btn btn-primary me-2" onclick="showConfigModal()">
+                                <i class="bi bi-gear me-2"></i>Configurar APIs
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function updateSearchButtonState() {
+            const searchBtn = document.querySelector('.btn.gradient-bg, .btn-secondary');
+            const searchBtnText = document.getElementById('search-btn-text');
+
+            if (!searchBtn || !searchBtnText) {
+                debugLog('Botão de busca não encontrado para atualizar');
+                return;
+            }
+
+            const isConfigured = BACKEND_CONFIG.searchUrl;
+
+            debugLog('Verificando configurações:', {
+                busca: !!BACKEND_CONFIG.searchUrl,
+                whatsapp: !!BACKEND_CONFIG.whatsappUrl,
+                disparo: !!WEBHOOK_CONFIG.url,
+                isConfigured: isConfigured
+            });
+
+            if (isConfigured) {
+                searchBtn.disabled = false;
+                searchBtn.classList.remove('btn-secondary');
+                searchBtn.classList.add('gradient-bg', 'text-white');
+                searchBtn.title = '';
+                searchBtnText.innerHTML = '<i class="bi bi-search me-2"></i>Buscar';
+                debugLog('Botão de busca habilitado');
+            } else {
+                searchBtn.disabled = true;
+                searchBtn.classList.remove('gradient-bg', 'text-white');
+                searchBtn.classList.add('btn-secondary');
+                searchBtn.title = 'Configure a URL de busca primeiro! Clique na engrenagem.';
+                searchBtnText.innerHTML = '<i class="bi bi-gear me-2"></i>Configurar';
+                debugLog('Botão de busca desabilitado - URL de busca não configurada');
+            }
+        }
+
+        // Apply filters to current page data only
+        function applyFiltersToCurrentPage() {
+            console.log('🔧 INICIANDO applyFiltersToCurrentPage');
+            console.log('🔧 currentPageProspects:', currentPageProspects.length);
+            console.log('🔧 currentFilters:', currentFilters);
+
+            let filtered = [...currentPageProspects];
+            console.log('🔧 Cópia inicial:', filtered.length);
+
+            // Apply search filter
+            if (currentFilters.search && currentFilters.search.trim() !== '') {
+                const searchTerm = currentFilters.search.toLowerCase();
+                const beforeSearch = filtered.length;
+                filtered = filtered.filter(prospect =>
+                    prospect.name.toLowerCase().includes(searchTerm) ||
+                    prospect.endereco.toLowerCase().includes(searchTerm) ||
+                    (prospect.category && prospect.category.toLowerCase().includes(searchTerm)) ||
+                    (prospect.types && prospect.types.toLowerCase().includes(searchTerm))
+                );
+                console.log(`🔧 Após filtro de busca "${searchTerm}": ${beforeSearch} → ${filtered.length}`);
+            }
+
+            // Apply WhatsApp filter
+            if (currentFilters.whatsapp !== '') {
+                const beforeWhatsApp = filtered.length;
+                if (currentFilters.whatsapp === 'true') {
+                    filtered = filtered.filter(p => p.hasWhatsApp === true);
+                    console.log(`🔧 Filtro "Apenas com WhatsApp": ${beforeWhatsApp} → ${filtered.length}`);
+                } else if (currentFilters.whatsapp === 'false') {
+                    filtered = filtered.filter(p => p.hasWhatsApp === false || p.hasWhatsApp === null);
+                    console.log(`🔧 Filtro "Sem WhatsApp/Não Verificado": ${beforeWhatsApp} → ${filtered.length}`);
+                }
+            }
+
+            // Apply rating filter
+            if (currentFilters.rating !== '') {
+                const beforeRating = filtered.length;
+                filtered = filtered.filter(p => (p.rating || 0) >= parseFloat(currentFilters.rating));
+                console.log(`🔧 Após filtro rating "${currentFilters.rating}": ${beforeRating} → ${filtered.length}`);
+            }
+
+            filteredProspects = filtered;
+            console.log(`🔧 RESULTADO FINAL: ${currentPageProspects.length} → ${filteredProspects.length} prospects`);
+
+            // Update filter status display
+            updateFilterStatus();
+        }
+
+        // Search prospects using improved debug approach
+        async function searchProspects(pageNum = 1) {
+            debugLog('=== INICIANDO BUSCA DE PROSPECTS ===');
+            debugLog(`Página: ${pageNum}`);
+
+            const searchInput = document.getElementById('search-input');
+            const searchBtn = document.getElementById('search-btn-text');
+            const spinner = document.querySelector('.loading-spinner');
+            const paginationControls = document.getElementById('pagination-controls');
+
+            if (!searchInput || !searchBtn || !spinner) {
+                console.error('Elementos da interface não encontrados');
+                return;
+            }
+
+            if (!BACKEND_CONFIG.searchUrl) {
+                showErrorToast('❌ Configure a URL de busca primeiro! Clique na engrenagem para configurar.');
+                return;
+            }
+
+            if (!BACKEND_CONFIG.whatsappUrl) {
+                debugLog('⚠️ Validação de WhatsApp não configurada - será marcado como "não verificado"');
+            }
+
+            const searchTerm = searchInput.value.trim();
+
+            if (!searchTerm) {
+                showErrorToast('Por favor, digite um termo de busca');
+                return;
+            }
+
+            const resultsLimitInput = document.getElementById('results-limit');
+            const selectedOption = resultsLimitInput.options[resultsLimitInput.selectedIndex];
+            const targetResults = parseInt(selectedOption.dataset.pages) ?
+                parseInt(selectedOption.dataset.pages) * 20 : 20;
+            const pagesNeeded = Math.ceil(targetResults / 20);
+
+            // If it's a new search (page 1), reset pagination state
+            if (pageNum === 1) {
+                currentSearchTerm = searchTerm;
+                currentFilters.search = '';
+                searchCoordinates = null;
+                currentPage = 1;
+                allProspects = [];
+                selectedProspects.clear();
+                pagesData = {};
+                totalPagesLoaded = 0;
+
+                currentFilters = {
+                    whatsapp: '',
+                    rating: '',
+                    search: ''
+                };
+
+                const whatsappFilter = document.getElementById('whatsapp-filter');
+                const ratingFilter = document.getElementById('rating-filter');
+                if (whatsappFilter) whatsappFilter.value = '';
+                if (ratingFilter) ratingFilter.value = '';
+
+                debugLog('Nova busca iniciada - estado resetado');
+
+                if (pagesNeeded > 1) {
+                    searchBtn.innerHTML = `Buscando ${targetResults} resultados...`;
+                }
+            }
+
+            spinner.style.display = 'inline-block';
+            searchBtn.innerHTML = pageNum === 1 ? 'Buscando...' : `Carregando página ${pageNum}...`;
+
+            try {
+                debugLog('=== ETAPA 1: BUSCANDO NA SERPAPI ===');
+                const apiResponse = await callSerpAPI(searchTerm, pageNum);
+                const results = apiResponse.results || [];
+                debugLog(`SerpAPI retornou: ${results.length} resultados`);
+
+                if (pageNum === 1 && apiResponse.coordinates) {
+                    searchCoordinates = apiResponse.coordinates;
+                    debugLog('Coordenadas salvas para paginação:', searchCoordinates);
+                }
+
+                hasMoreResults = apiResponse.hasMore || false;
+                currentPage = pageNum;
+
+                if (results && results.length > 0) {
+                    debugLog('=== ETAPA 2: EXTRAINDO TELEFONES ===');
+                    const phoneNumbers = extractPhoneNumbers(results);
+                    debugLog(`Números extraídos: ${phoneNumbers.length}`, phoneNumbers);
+
+                    debugLog('=== ETAPA 3: VALIDANDO WHATSAPP ===');
+                    searchBtn.innerHTML = 'Validando WhatsApp...';
+                    const whatsappValidation = await validateWhatsAppNumbers(phoneNumbers);
+                    debugLog('Validação WhatsApp concluída');
+
+                    debugLog('=== ETAPA 4: PROCESSANDO RESULTADOS FINAIS ===');
+                    const processedResults = processResults(results, whatsappValidation);
+
+                    pagesData[pageNum] = processedResults;
+                    totalPagesLoaded = Math.max(totalPagesLoaded, pageNum);
+
+                    currentPage = pageNum;
+                    currentPageProspects = processedResults;
+
+                    console.log('🔧 Dados processados:', processedResults.length);
+                    console.log('🔧 currentPageProspects atribuído:', currentPageProspects.length);
+
+                    applyFiltersToCurrentPage();
+
+                    allProspects = [];
+                    for (let i = 1; i <= totalPagesLoaded; i++) {
+                        if (pagesData[i]) {
+                            allProspects = [...allProspects, ...pagesData[i]];
+                        }
+                    }
+
+                    loadProspects();
+                    updatePaginationControls();
+                    updateMapMarkers();
+
+                    paginationControls.classList.remove('d-none');
+
+                    const totalFound = pageNum === 1 ? results.length : allProspects.length;
+                    showSuccessToast(`🎉 ${pageNum === 1 ? 'Encontrados' : 'Carregados'} ${results.length} novos prospects${pageNum > 1 ? ` (Total: ${totalFound})` : ''}`);
+
+                    debugLog('=== BUSCA CONCLUÍDA COM SUCESSO ===');
+                } else {
+                    if (pageNum === 1) {
+                        showErrorToast('Nenhum resultado encontrado. Tente outros termos de busca.');
+                        paginationControls.classList.add('d-none');
+                    } else {
+                        showErrorToast('Não há mais resultados disponíveis.');
+                    }
+                }
+
+            } catch (error) {
+                console.error('Erro na busca:', error);
+                debugLog('=== ERRO NA BUSCA ===', error);
+                showErrorToast(`Erro ao buscar prospects: ${error.message}`);
+
+                if (pageNum === 1) {
+                    paginationControls.classList.add('d-none');
+                }
+            } finally {
+                spinner.style.display = 'none';
+                searchBtn.innerHTML = '<i class="bi bi-search me-2"></i>Buscar';
+            }
+
+            debugLog('=== BUSCA CONCLUÍDA COM SUCESSO ===');
+            debugLog('Dados finais:', {
+                currentPageProspects: currentPageProspects.length,
+                filteredProspects: filteredProspects.length,
+                allProspects: allProspects.length
+            });
+        }
+
+        // Extract phone numbers from results
+        function extractPhoneNumbers(results) {
+            debugLog('Extraindo números de telefone...');
+
+            const phoneNumbers = [];
+            const phoneSet = new Set();
+
+            results.forEach((result, index) => {
+                const phoneField = result.telefone || result.phone;
+                debugLog(`[${index + 1}] ${result.name || result.title}:`);
+                debugLog(`   Telefone original: "${phoneField}"`);
+
+                if (!phoneField || phoneField === 'Telefone não disponível') {
+                    debugLog(`   ❌ Sem telefone válido`);
+                    return;
+                }
+
+                const cleanPhone = phoneField.replace(/\D/g, '');
+                debugLog(`   Telefone limpo: "${cleanPhone}"`);
+                debugLog(`   Tamanho: ${cleanPhone.length} dígitos`);
+
+                if (cleanPhone.length >= 10) {
+                    if (!phoneSet.has(cleanPhone)) {
+                        phoneSet.add(cleanPhone);
+                        phoneNumbers.push(cleanPhone);
+                        debugLog(`   ✅ Número válido adicionado`);
+                    } else {
+                        debugLog(`   ⚠️ Número duplicado ignorado`);
+                    }
+                } else {
+                    debugLog(`   ❌ Número muito curto (< 10 dígitos)`);
+                }
+            });
+
+            debugLog('RESUMO EXTRAÇÃO:', {
+                totalProspects: results.length,
+                numerosValidos: phoneNumbers.length,
+                numerosDuplicados: results.length - phoneNumbers.length,
+                listaNumeros: phoneNumbers
+            });
+
+            return phoneNumbers;
+        }
+
+        // Validate WhatsApp numbers
+        async function validateWhatsAppNumbers(phoneNumbers) {
+            debugLog('=== INÍCIO VALIDAÇÃO WHATSAPP ===');
+            debugLog(`Total de números a validar: ${phoneNumbers.length}`, phoneNumbers);
+
+            if (phoneNumbers.length === 0) {
+                debugLog('Nenhum número para validar');
+                return {};
+            }
+
+            if (!BACKEND_CONFIG.whatsappUrl) {
+                debugLog('⚠️ URL de validação não configurada - retornando validação vazia');
+                showErrorToast('⚠️ URL de validação de WhatsApp não configurada.');
+                return {};
+            }
+
+            debugLog('URL de validação (backend):', BACKEND_CONFIG.whatsappUrl);
+
+            const requestBody = { telefones: phoneNumbers };
+            debugLog('Request body:', requestBody);
+
+            try {
+                debugLog('Enviando requisição...');
+                const response = await fetch(BACKEND_CONFIG.whatsappUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                debugLog(`Status da resposta: ${response.status}`);
+                debugLog('Headers da resposta:', Object.fromEntries(response.headers.entries()));
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    debugLog('Erro HTTP:', { status: response.status, error: errorText });
+                    throw new Error(`WhatsApp API error: ${response.status} - ${errorText}`);
+                }
+
+                const responseData = await response.json();
+                debugLog('Resposta RAW:', responseData);
+                debugLog(`Tipo da resposta: ${typeof responseData}, É array: ${Array.isArray(responseData)}`);
+
+                const validationMap = {};
+
+                if (Array.isArray(responseData)) {
+                    debugLog('Processando resposta como array...');
+                    debugLog(`Total de itens na resposta: ${responseData.length}`);
+
+                    responseData.forEach((item, index) => {
+                        debugLog(`[${index + 1}] Processando item:`, item);
+
+                        if (item.number) {
+                            const number = item.number.toString();
+                            const hasWhatsApp = item.exists === true;
+
+                            validationMap[number] = {
+                                hasWhatsApp: hasWhatsApp,
+                                status: hasWhatsApp ? 'verified' : 'no_whatsapp',
+                                jid: item.jid || null,
+                                rawData: item
+                            };
+
+                            debugLog(`   Número: ${number}`);
+                            debugLog(`   Exists: ${item.exists} (tipo: ${typeof item.exists})`);
+                            debugLog(`   Resultado: ${hasWhatsApp ? 'TEM' : 'NÃO TEM'} WhatsApp`);
+                            debugLog(`   JID: ${item.jid || 'N/A'}`);
+                        } else {
+                            debugLog(`   ⚠️ Item sem propriedade 'number':`, item);
+                        }
+                    });
+                } else {
+                    debugLog('⚠️ Resposta não é array:', responseData);
+                    throw new Error('Formato de resposta não reconhecido');
+                }
+
+                const withWhatsApp = Object.values(validationMap).filter(v => v.hasWhatsApp).length;
+                const withoutWhatsApp = Object.values(validationMap).filter(v => !v.hasWhatsApp).length;
+                debugLog('=== RESUMO VALIDAÇÃO WHATSAPP ===', {
+                    totalProcessados: Object.keys(validationMap).length,
+                    comWhatsApp: withWhatsApp,
+                    semWhatsApp: withoutWhatsApp
+                });
+
+                Object.entries(validationMap).forEach(([number, data]) => {
+                    debugLog(`${number}: ${data.hasWhatsApp ? '✅ TEM' : '❌ NÃO TEM'} WhatsApp`);
+                });
+
+                debugLog('=== FIM VALIDAÇÃO WHATSAPP ===');
+
+                return validationMap;
+
+            } catch (error) {
+                debugLog('Erro na validação WhatsApp:', error);
+                showErrorToast(`⚠️ Erro na validação WhatsApp: ${error.message}. Continuando sem validação.`);
+                return {};
+            }
+        }
+
+        // Process final results
+        function processResults(serpResults, whatsappValidation) {
+            debugLog('=== PROCESSANDO RESULTADOS FINAIS ===');
+            debugLog(`Prospects SerpAPI: ${serpResults.length}`);
+            debugLog(`Validações WhatsApp: ${Object.keys(whatsappValidation).length}`);
+
+            const hasWhatsAppValidation = Object.keys(whatsappValidation).length > 0;
+
+            if (!hasWhatsAppValidation) {
+                debugLog('⚠️ Nenhuma validação WhatsApp disponível - todos serão marcados como "não verificado"');
+            }
+
+            const processedResults = serpResults.map((prospect, index) => {
+                debugLog(`[${index + 1}] Processando: ${prospect.title || prospect.name}`);
+
+                const originalPhone = prospect.phone || prospect.telefone;
+                const cleanPhone = originalPhone ? originalPhone.replace(/\D/g, '') : null;
+
+                debugLog(`   Telefone original: "${originalPhone}"`);
+                debugLog(`   Telefone limpo: "${cleanPhone}"`);
+
+                let whatsappData = null;
+                let hasWhatsApp = null;
+                let status = 'not_checked';
+
+                if (hasWhatsAppValidation && cleanPhone && whatsappValidation[cleanPhone]) {
+                    whatsappData = whatsappValidation[cleanPhone];
+                    hasWhatsApp = whatsappData.hasWhatsApp;
+                    status = whatsappData.status;
+                    debugLog(`   Encontrado na validação:`, whatsappData);
+                    debugLog(`   Resultado: ${hasWhatsApp ? 'TEM' : 'NÃO TEM'} WhatsApp (status: ${status})`);
+                } else {
+                    debugLog(`   ${hasWhatsAppValidation ? 'NÃO encontrado na validação' : 'Validação não realizada'}`);
+                    debugLog(`   Resultado: NÃO VERIFICADO (status: ${status})`);
+                }
+
+                return {
+                    id: prospect.id || (Date.now() + index),
+                    name: prospect.title || prospect.name || 'Nome não disponível',
+                    endereco: prospect.address || prospect.endereco || 'Endereço não disponível',
+                    telefone: originalPhone || 'Telefone não disponível',
+                    email: prospect.email || null,
+                    rating: prospect.rating || 0,
+                    reviews: prospect.reviews || 0,
+                    website: prospect.website || null,
+                    types: prospect.type ? (Array.isArray(prospect.type) ? prospect.type.join(', ') : prospect.type) : 'Categoria não disponível',
+                    hasWhatsApp: hasWhatsApp,
+                    status: status,
+                    category: extractMainCategory(prospect.type || prospect.types || ''),
+                    place_id: prospect.place_id || null,
+                    gps_coordinates: prospect.gps_coordinates || null,
+                    whatsappJid: whatsappData ? whatsappData.jid : null,
+                    source: prospect.source || 'API', // Track source
+                    debugInfo: debugMode ? {
+                        originalPhone: originalPhone,
+                        cleanPhone: cleanPhone,
+                        whatsappData: whatsappData,
+                        processed: true
+                    } : null
+                };
+            });
+
+            const withWhatsApp = processedResults.filter(p => p.hasWhatsApp === true).length;
+            const withoutWhatsApp = processedResults.filter(p => p.hasWhatsApp === false).length;
+            const notChecked = processedResults.filter(p => p.hasWhatsApp === null).length;
+
+            debugLog('=== RESUMO PROCESSAMENTO ===', {
+                resultadoFinal: `${withWhatsApp} com WhatsApp, ${withoutWhatsApp} sem WhatsApp, ${notChecked} não verificados`
+            });
+
+            return processedResults;
+        }
+
+        // Extract main category from types
+        function extractMainCategory(types) {
+            if (!types) return 'Outros';
+
+            const typesList = types.toLowerCase();
+
+            if (typesList.includes('dental') || typesList.includes('dentist')) return 'Dentista';
+            if (typesList.includes('pet')) return 'Pet Shop';
+            if (typesList.includes('restaurant')) return 'Restaurante';
+            if (typesList.includes('store')) return 'Loja';
+            if (typesList.includes('hospital')) return 'Hospital';
+            if (typesList.includes('school')) return 'Escola';
+            if (typesList.includes('hotel')) return 'Hotel';
+            if (typesList.includes('clinic')) return 'Clínica';
+            if (typesList.includes('pharmacy')) return 'Farmácia';
+            if (typesList.includes('bank')) return 'Banco';
+
+            return 'Outros';
+        }
+
+        // Busca via backend n8n. A chave da SerpAPI fica no servidor — o painel não a conhece.
+        async function callSerpAPI(searchTerm, pageNum = 1) {
+            debugLog(`Buscando via backend - Página ${pageNum} - Termo: ${searchTerm}`);
+
+            if (!BACKEND_CONFIG.searchUrl) {
+                throw new Error('URL de busca não configurada. Clique na engrenagem.');
+            }
+
+            const body = {
+                termo: searchTerm,
+                pagina: pageNum
+            };
+
+            // Paginação da SerpAPI é de 20 em 20; o backend calcula o start.
+            // Reaproveita as coordenadas da página 1 para as seguintes ficarem na mesma região.
+            if (pageNum > 1 && searchCoordinates && searchCoordinates.lat && searchCoordinates.lng) {
+                const lat = parseFloat(searchCoordinates.lat);
+                const lng = parseFloat(searchCoordinates.lng);
+
+                if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                    body.ll = `@${lat.toFixed(6)},${lng.toFixed(6)},12z`;
+                    debugLog('Usando coordenadas salvas para paginação:', body.ll);
+                }
+            }
+
+            debugLog('Body enviado ao backend:', body);
+
+            const response = await fetch(BACKEND_CONFIG.searchUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            debugLog(`Status da resposta: ${response.status}`);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Backend de busca respondeu ${response.status}: ${errorText}`);
+            }
+
+            const data = await response.json();
+            debugLog('Resposta do backend:', data);
+
+            if (data.erro) {
+                throw new Error(`SerpAPI: ${data.erro}`);
+            }
+
+            const localResults = Array.isArray(data.local_results) ? data.local_results : [];
+            debugLog(`Encontrados ${localResults.length} resultados locais na página ${pageNum}`);
+
+            const transformedResults = localResults.map((result, index) => ({
+                id: `${pageNum}-${index}-${result.place_id || result.title}`,
+                name: result.title || 'Nome não disponível',
+                title: result.title || 'Nome não disponível',
+                endereco: result.address || 'Endereço não disponível',
+                address: result.address || 'Endereço não disponível',
+                telefone: result.phone || 'Telefone não disponível',
+                phone: result.phone || 'Telefone não disponível',
+                rating: result.rating || 0,
+                reviews: result.reviews || 0,
+                website: result.website || null,
+                types: result.type ? (Array.isArray(result.type) ? result.type.join(', ') : result.type) : 'Categoria não disponível',
+                type: result.type || 'Categoria não disponível',
+                place_id: result.place_id || null,
+                gps_coordinates: result.gps_coordinates || null,
+                source: 'API'
+            }));
+
+            let coordinates = data.coordinates || null;
+            if (!coordinates && localResults[0] && localResults[0].gps_coordinates) {
+                coordinates = {
+                    lat: localResults[0].gps_coordinates.latitude,
+                    lng: localResults[0].gps_coordinates.longitude
+                };
+            }
+
+            return {
+                results: transformedResults,
+                coordinates: coordinates,
+                hasMore: localResults.length >= 20,
+                totalResults: data.total_resultados || localResults.length
+            };
+        }
+
+        // Extract coordinates from Google Maps URL
+        function extractCoordinatesFromUrl(url) {
+            try {
+                const patterns = [
+                    /@(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+                    /ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+                    /!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/
+                ];
+
+                for (const pattern of patterns) {
+                    const match = url.match(pattern);
+                    if (match) {
+                        const lat = parseFloat(match[1]);
+                        const lng = parseFloat(match[2]);
+
+                        if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                            return { lat: lat, lng: lng };
+                        }
+                    }
+                }
+
+                return null;
+            } catch (error) {
+                debugLog('Erro ao extrair coordenadas da URL:', error);
+                return null;
+            }
+        }
+
+        // Load next page
+        async function loadNextPage() {
+            if (!hasMoreResults || searchInProgress) return;
+
+            const nextPage = currentPage + 1;
+
+            if (pagesData[nextPage]) {
+                debugLog(`Página ${nextPage} já está em cache, carregando localmente`);
+                currentPage = nextPage;
+                currentPageProspects = pagesData[nextPage];
+
+                applyFiltersToCurrentPage();
+                loadProspects();
+                updatePaginationControls();
+                updateMapMarkers();
+
+                showSuccessToast(`📄 Página ${currentPage} carregada (cache)`);
+                return;
+            }
+
+            debugLog(`Carregando nova página ${nextPage} da API`);
+            searchInProgress = true;
+            await searchProspects(nextPage);
+            searchInProgress = false;
+        }
+
+        // Load previous page
+        function loadPreviousPage() {
+            if (currentPage <= 1 || searchInProgress) return;
+
+            const previousPage = currentPage - 1;
+
+            if (pagesData[previousPage]) {
+                debugLog(`Navegando para página ${previousPage} (cache)`);
+                currentPage = previousPage;
+                currentPageProspects = pagesData[previousPage];
+
+                applyFiltersToCurrentPage();
+                loadProspects();
+                updatePaginationControls();
+                updateMapMarkers();
+
+                showSuccessToast(`📄 Página ${currentPage} carregada`);
+            } else {
+                showErrorToast('❌ Dados da página anterior não disponíveis. Use uma nova busca.');
+                debugLog(`Dados da página ${previousPage} não encontrados`);
+            }
+        }
+
+        // Update pagination controls
+        function updatePaginationControls() {
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const pageInfo = document.getElementById('page-info');
+            const showingRange = document.getElementById('showing-range');
+            const totalAvailable = document.getElementById('total-available');
+
+            if (prevBtn) {
+                prevBtn.disabled = currentPage <= 1;
+            }
+
+            if (nextBtn) {
+                nextBtn.disabled = !hasMoreResults;
+                nextBtn.innerHTML = hasMoreResults ?
+                    'Próxima <i class="bi bi-chevron-right"></i>' :
+                    'Fim dos resultados';
+            }
+
+            if (pageInfo) {
+                pageInfo.textContent = `Página ${currentPage}`;
+            }
+
+            const currentPageStart = 1;
+            const currentPageEnd = filteredProspects.length;
+
+            if (showingRange) {
+                showingRange.textContent = `${currentPageStart}-${currentPageEnd}`;
+            }
+
+            if (totalAvailable) {
+                const totalLoadedSoFar = allProspects.length;
+                totalAvailable.textContent = hasMoreResults ? `${totalLoadedSoFar}+` : totalLoadedSoFar.toString();
+            }
+        }
+
+        function loadProspects() {
+            console.log('🔧 CARREGANDO PROSPECTS - filteredProspects:', filteredProspects.length);
+
+            const container = document.getElementById('prospects-container');
+            const emptyState = document.getElementById('empty-state');
+
+            if (!container || !emptyState) {
+                console.log('❌ Container ou emptyState não encontrados');
+                return;
+            }
+
+            container.innerHTML = '';
+
+            if (filteredProspects.length === 0) {
+                container.classList.add('d-none');
+                emptyState.classList.remove('d-none');
+                return;
+            }
+
+            container.classList.remove('d-none');
+            emptyState.classList.add('d-none');
+
+            filteredProspects.forEach(prospect => {
+                const prospectElement = createProspectElement(prospect);
+                container.appendChild(prospectElement);
+            });
+
+            updateCounts();
+            updateMapMarkers();
+            updateWebhookButtons();
+        }
+
+        // Create prospect element
+        function createProspectElement(prospect) {
+            const div = document.createElement('div');
+            div.className = 'col-12';
+
+            const isSelected = selectedProspects.has(prospect.id);
+            const formattedPhone = formatPhoneNumber(prospect.telefone);
+
+            div.innerHTML = `
+                <div class="card prospect-card fade-in ${isSelected ? 'selected' : ''}" onclick="toggleProspectSelection(${prospect.id})">
+                    <div class="card-body p-3">
+                        <div class="row align-items-start">
+                            <div class="col-auto">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" ${isSelected ? 'checked' : ''} 
+                                            onclick="event.stopPropagation()" onchange="toggleProspectSelection(${prospect.id})">
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <h6 class="mb-0 me-2 text-truncate" style="max-width: 300px;" title="${prospect.name}">${prospect.name}</h6>
+                                            <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                                                ${prospect.hasWhatsApp === true ?
+                    '<span class="whatsapp-status bg-success text-white">WhatsApp</span>' :
+                    prospect.hasWhatsApp === false ?
+                        '<span class="whatsapp-status bg-danger text-white">Sem WhatsApp</span>' :
+                        '<span class="whatsapp-status bg-secondary text-white">Não Verificado</span>'
+                }
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="small text-muted">
+                                            <div class="d-flex align-items-start mb-1">
+                                                <i class="bi bi-geo-alt me-2 flex-shrink-0 mt-1"></i>
+                                                <span class="text-truncate" title="${prospect.endereco}">${prospect.endereco}</span>
+                                            </div>
+                                            <div class="d-flex align-items-center mb-1">
+                                                <i class="bi bi-telephone me-2 flex-shrink-0"></i>
+                                                <span class="me-2">${formattedPhone}</span>
+                                                ${prospect.hasWhatsApp === true ?
+                    `<a href="https://wa.me/${prospect.telefone.replace(/\D/g, '')}" target="_blank" class="text-success">
+                                                        <i class="bi bi-whatsapp"></i>
+                                                    </a>` : ''
+                }
+                                            </div>
+                                            ${prospect.website ? `
+                                                <div class="d-flex align-items-center mb-1">
+                                                    <i class="bi bi-globe me-2 flex-shrink-0"></i>
+                                                    <a href="${prospect.website}" target="_blank" class="text-decoration-none text-truncate" style="max-width: 250px;">
+                                                        ${prospect.website}
+                                                    </a>
+                                                </div>
+                                            ` : ''}
+                                            ${prospect.email ? `
+                                                <div class="d-flex align-items-center mb-1">
+                                                    <i class="bi bi-envelope me-2 flex-shrink-0"></i>
+                                                    <span class="text-truncate" style="max-width: 250px;" title="${prospect.email}">
+                                                        ${prospect.email}
+                                                    </span>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4 text-md-end">
+                                        <div class="mb-2">
+                                            ${prospect.rating > 0 ? `
+                                                <div class="d-flex align-items-center justify-content-md-end">
+                                                    <div class="rating-stars me-1">
+                                                        ${generateStars(prospect.rating)}
+                                                    </div>
+                                                    <span class="small fw-bold">${prospect.rating}</span>
+                                                    <span class="small text-muted ms-1">(${prospect.reviews})</span>
+                                                </div>
+                                            ` : '<span class="small text-muted">Sem avaliações</span>'}
+                                        </div>
+                                        <div class="d-flex justify-content-md-end">
+                                            <span class="badge bg-primary">${prospect.category || 'Outros'}</span>
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-muted text-truncate d-block" style="max-width: 200px;" title="${prospect.types}">
+                                                <i class="bi bi-tags me-1"></i>${prospect.types}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            return div;
+        }
+
+        // Format phone number
+        function formatPhoneNumber(phone) {
+            if (!phone) return 'Não informado';
+
+            const cleaned = phone.replace(/\D/g, '');
+
+            if (cleaned.length === 11) {
+                return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
+            } else if (cleaned.length === 10) {
+                return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
+            }
+
+            return phone;
+        }
+
+        // Generate star rating
+        function generateStars(rating) {
+            const fullStars = Math.floor(rating);
+            const hasHalfStar = rating % 1 !== 0;
+            let stars = '';
+
+            for (let i = 0; i < fullStars; i++) {
+                stars += '<i class="bi bi-star-fill"></i>';
+            }
+
+            if (hasHalfStar) {
+                stars += '<i class="bi bi-star-half"></i>';
+                for (let i = fullStars + 1; i < 5; i++) {
+                    stars += '<i class="bi bi-star"></i>';
+                }
+            } else {
+                for (let i = fullStars; i < 5; i++) {
+                    stars += '<i class="bi bi-star"></i>';
+                }
+            }
+
+            return stars;
+        }
+
+        // Toggle prospect selection
+        function toggleProspectSelection(id) {
+            if (selectedProspects.has(id)) {
+                selectedProspects.delete(id);
+                debugLog(`Prospect ${id} desmarcado`);
+            } else {
+                selectedProspects.add(id);
+                debugLog(`Prospect ${id} marcado`);
+            }
+
+            loadProspects();
+            updateWebhookButtons();
+
+            debugLog(`Total selecionados: ${selectedProspects.size}`);
+        }
+
+        // Select all prospects
+        function selectAll() {
+            filteredProspects.forEach(prospect => {
+                selectedProspects.add(prospect.id);
+            });
+            loadProspects();
+            updateWebhookButtons();
+
+            showSuccessToast(`✅ ${filteredProspects.length} prospects desta página foram selecionados`);
+            debugLog(`Selecionados todos da página atual. Total global: ${selectedProspects.size}`);
+        }
+
+        // Clear selection
+        function clearSelection() {
+            filteredProspects.forEach(prospect => {
+                selectedProspects.delete(prospect.id);
+            });
+
+            loadProspects();
+            updateWebhookButtons();
+
+            showSuccessToast(`🗑️ Seleção da página atual foi limpa`);
+            debugLog(`Limpeza da página atual. Total global restante: ${selectedProspects.size}`);
+        }
+
+        // Clear all selections across all pages
+        function clearAllSelections() {
+            const totalBefore = selectedProspects.size;
+            selectedProspects.clear();
+            loadProspects();
+            updateWebhookButtons();
+
+            showSuccessToast(`🗑️ Todas as seleções foram limpas (${totalBefore} prospects)`);
+            debugLog('Todas as seleções foram limpas');
+        }
+
+        // Update counts
+        function updateCounts() {
+            const selectedCountEl = document.getElementById('selected-count');
+            const resultsCountEl = document.getElementById('results-count');
+            const whatsappCountEl = document.getElementById('whatsapp-count');
+            const noWhatsappCountEl = document.getElementById('no-whatsapp-count');
+            const verifiedCountEl = document.getElementById('verified-count');
+            const avgRatingEl = document.getElementById('avg-rating');
+
+            if (selectedCountEl) selectedCountEl.textContent = selectedProspects.size;
+
+            if (resultsCountEl) {
+                const pageText = currentPage > 1 ? ` (Página ${currentPage})` : '';
+                const filterText = (currentFilters.whatsapp || currentFilters.rating || currentFilters.search) ? ' (filtrado)' : '';
+                resultsCountEl.textContent = `${filteredProspects.length} empresas encontradas${pageText}${filterText}`;
+            }
+
+            const whatsappCount = filteredProspects.filter(p => p.hasWhatsApp === true).length;
+            const noWhatsappCount = filteredProspects.filter(p => p.hasWhatsApp === false).length;
+            const notCheckedCount = filteredProspects.filter(p => p.hasWhatsApp === null).length;
+            const verifiedCount = filteredProspects.filter(p => p.status === 'verified').length;
+
+            const ratingsSum = filteredProspects.reduce((sum, p) => sum + (p.rating || 0), 0);
+            const avgRating = filteredProspects.length > 0 ? (ratingsSum / filteredProspects.length).toFixed(1) : '0.0';
+
+            if (whatsappCountEl) whatsappCountEl.textContent = whatsappCount;
+            if (noWhatsappCountEl) {
+                noWhatsappCountEl.textContent = noWhatsappCount + notCheckedCount;
+                noWhatsappCountEl.parentElement.querySelector('small').textContent =
+                    notCheckedCount > 0 ? `Sem/Não Verificado` : 'Sem WhatsApp';
+            }
+            if (verifiedCountEl) verifiedCountEl.textContent = verifiedCount;
+            if (avgRatingEl) avgRatingEl.textContent = avgRating;
+        }
+
+
+        // Update webhook buttons
+        function updateWebhookButtons() {
+            const webhookBtn = document.getElementById('webhook-btn');
+            const webhookCount = document.getElementById('webhook-count');
+            const webhookAllBtn = document.getElementById('webhook-all-btn');
+            const webhookAllCount = document.getElementById('webhook-all-count');
+
+            if (webhookCount) webhookCount.textContent = selectedProspects.size;
+
+            const hasWebhookUrl = WEBHOOK_CONFIG.url && WEBHOOK_CONFIG.url.trim() !== '';
+            const isCurrentlySending = webhookSendingState.isRunning;
+
+            if (webhookBtn) {
+                if (selectedProspects.size > 0 && hasWebhookUrl && !isCurrentlySending) {
+                    webhookBtn.disabled = false;
+                    webhookBtn.classList.remove('btn-outline-primary');
+                    webhookBtn.classList.add('btn-primary');
+                    webhookBtn.title = '';
+                } else {
+                    webhookBtn.disabled = true;
+                    webhookBtn.classList.remove('btn-primary');
+                    webhookBtn.classList.add('btn-outline-primary');
+                    if (!hasWebhookUrl) {
+                        webhookBtn.title = 'Configure o Webhook primeiro!';
+                    } else if (isCurrentlySending) {
+                        webhookBtn.title = 'Aguarde o envio atual terminar';
+                    }
+                }
+            }
+
+            if (webhookAllBtn && webhookAllCount) {
+                webhookAllCount.textContent = allProspects.length;
+
+                if (allProspects.length > 0 && hasWebhookUrl && !isCurrentlySending) {
+                    webhookAllBtn.disabled = false;
+                    webhookAllBtn.classList.remove('btn-outline-secondary');
+                    webhookAllBtn.classList.add('btn-outline-primary');
+                    webhookAllBtn.title = `Enviar todos os ${allProspects.length} prospects carregados`;
+                } else {
+                    webhookAllBtn.disabled = true;
+                    webhookAllBtn.classList.remove('btn-outline-primary');
+                    webhookAllBtn.classList.add('btn-outline-secondary');
+                    if (!hasWebhookUrl) {
+                        webhookAllBtn.title = 'Configure o Webhook primeiro!';
+                    } else if (isCurrentlySending) {
+                        webhookAllBtn.title = 'Aguarde o envio atual terminar';
+                    } else {
+                        webhookAllBtn.title = 'Faça uma busca primeiro para ativar';
+                    }
+                }
+            }
+        }
+
+        // Send selected prospects to webhook
+        async function sendToWebhook() {
+            if (selectedProspects.size === 0) {
+                showErrorToast('❌ Nenhum prospect selecionado para enviar');
+                return;
+            }
+
+            const selectedData = allProspects.filter(p => selectedProspects.has(p.id));
+            await sendDataToWebhook(selectedData, 'selecionados');
+        }
+
+        // Send all prospects to webhook
+        async function sendAllToWebhook() {
+            if (allProspects.length === 0) {
+                showErrorToast('❌ Nenhum prospect encontrado para enviar. Faça uma busca primeiro!');
+                return;
+            }
+
+            await sendDataToWebhook(allProspects, 'todos');
+        }
+
+        // Send data to webhook with random intervals and pause/stop controls
+        async function sendDataToWebhook(prospects, type) {
+            const webhookBtn = document.getElementById('webhook-btn');
+            const webhookAllBtn = document.getElementById('webhook-all-btn');
+            const pauseBtnContainer = document.getElementById('pause-btn-container');
+            const stopBtnContainer = document.getElementById('stop-btn-container');
+            const pauseBtn = document.getElementById('pause-btn');
+            const statusContainer = document.getElementById('webhook-status-container');
+
+            // Get interval settings (default: 30-60 seconds)
+            const minInterval = parseInt(localStorage.getItem('webhook_min_interval') || '30');
+            const maxInterval = parseInt(localStorage.getItem('webhook_max_interval') || '60');
+
+            // Initialize sending state
+            webhookSendingState = {
+                isRunning: true,
+                isPaused: false,
+                isStopped: false,
+                currentIndex: 0,
+                totalProspects: prospects.length
+            };
+
+            // Show control buttons
+            pauseBtnContainer.classList.remove('d-none');
+            stopBtnContainer.classList.remove('d-none');
+
+            // Show loading status
+            showWebhookStatus('loading', `Iniciando envio de ${prospects.length} prospects...`);
+
+            // Disable main buttons during sending
+            if (webhookBtn) webhookBtn.disabled = true;
+            if (webhookAllBtn) webhookAllBtn.disabled = true;
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            try {
+                debugLog(`Enviando ${prospects.length} prospects para webhook com controles`);
+
+                for (let i = 0; i < prospects.length; i++) {
+                    // Check if stopped
+                    if (webhookSendingState.isStopped) {
+                        showWebhookStatus('error', `❌ Envio interrompido pelo usuário. ${successCount} enviados, ${errorCount} erros.`);
+                        break;
+                    }
+
+                    // Handle pause
+                    while (webhookSendingState.isPaused && !webhookSendingState.isStopped) {
+                        showWebhookStatus('loading', `⏸️ Pausado na empresa ${i + 1}/${prospects.length}. (${successCount} enviados, ${errorCount} erros)`);
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+
+                    // Check if stopped after pause
+                    if (webhookSendingState.isStopped) {
+                        showWebhookStatus('error', `❌ Envio interrompido pelo usuário. ${successCount} enviados, ${errorCount} erros.`);
+                        break;
+                    }
+
+                    const prospect = prospects[i];
+                    webhookSendingState.currentIndex = i;
+
+                    // Clean and format phone number
+                    let cleanPhone = '';
+                    if (prospect.telefone && prospect.telefone !== 'Telefone não disponível') {
+                        cleanPhone = prospect.telefone.replace(/\D/g, '');
+
+                        if (cleanPhone.length >= 10 && !cleanPhone.startsWith('55')) {
+                            cleanPhone = '55' + cleanPhone;
+                        }
+                    }
+
+                    // Prepare individual prospect data
+                    const webhookData = {
+                        place_id: prospect.place_id || null,
+                        nome_empresa: prospect.name,
+                        telefone: cleanPhone || 'Não informado',
+                        telefone_original: prospect.telefone || 'Não informado',
+                        rating_google: prospect.rating || 0,
+                        reviews_google: prospect.reviews || 0,
+                        especialidades: prospect.types || 'Não informado',
+                        site_empresa: prospect.website || 'Não informado',
+                        has_whatsapp: prospect.hasWhatsApp === true ? 'Sim' : prospect.hasWhatsApp === false ? 'Não' : 'Não verificado',
+                        source: prospect.source || 'API'
+                    };
+
+                    // Update status
+                    showWebhookStatus('loading',
+                        `Enviando ${i + 1}/${prospects.length}: ${prospect.name}... (${successCount} enviados, ${errorCount} erros)`
+                    );
+
+                    try {
+                        // Send individual prospect to webhook
+                        const response = await fetch(WEBHOOK_CONFIG.url, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                prospect: webhookData,
+                                prospect_number: i + 1,
+                                total_prospects: prospects.length,
+                                timestamp: new Date().toISOString(),
+                                source: 'Prospecta IA'
+                            })
+                        });
+
+                        if (response.ok) {
+                            successCount++;
+                            debugLog(`Prospect ${i + 1} enviado com sucesso: ${prospect.name} - Tel: ${cleanPhone}`);
+                        } else {
+                            errorCount++;
+                            const errorText = await response.text();
+                            debugLog(`Erro ao enviar prospect ${i + 1}:`, { status: response.status, error: errorText });
+                        }
+
+                    } catch (error) {
+                        errorCount++;
+                        debugLog(`Erro de conexão no prospect ${i + 1}:`, error);
+                    }
+
+                    // Wait random interval before next send (except for the last one)
+                    if (i < prospects.length - 1 && !webhookSendingState.isStopped) {
+                        const randomInterval = Math.floor(Math.random() * (maxInterval - minInterval + 1)) + minInterval;
+                        debugLog(`Aguardando ${randomInterval}s antes do próximo envio...`);
+
+                        // Show countdown with pause/stop checks
+                        for (let countdown = randomInterval; countdown > 0; countdown--) {
+                            // Check if stopped during countdown
+                            if (webhookSendingState.isStopped) {
+                                break;
+                            }
+
+                            // Handle pause during countdown
+                            while (webhookSendingState.isPaused && !webhookSendingState.isStopped) {
+                                showWebhookStatus('loading', `⏸️ Pausado. Próximo em ${countdown}s quando retomar...`);
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+                            }
+
+                            // Check if stopped after pause
+                            if (webhookSendingState.isStopped) {
+                                break;
+                            }
+
+                            showWebhookStatus('loading',
+                                `Próximo envio em ${countdown}s... (${successCount} enviados, ${errorCount} erros)`
+                            );
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                    }
+                }
+
+                // Final status (only if not stopped)
+                if (!webhookSendingState.isStopped) {
+                    if (errorCount === 0) {
+                        showWebhookStatus('success', `✅ Todos os ${successCount} prospects enviados com sucesso!`);
+                        showSuccessToast(`🚀 Envio concluído! ${successCount} prospects processados pela IA.`);
+                    } else {
+                        showWebhookStatus('success', `⚠️ Envio concluído: ${successCount} sucessos, ${errorCount} erros`);
+                        showSuccessToast(`📊 Envio concluído: ${successCount} enviados, ${errorCount} com erro.`);
+                    }
+                }
+
+                debugLog('Envio em lote concluído:', {
+                    total: prospects.length,
+                    sucessos: successCount,
+                    erros: errorCount,
+                    interrompido: webhookSendingState.isStopped,
+                    type: type,
+                    webhook_url: WEBHOOK_CONFIG.url
+                });
+
+            } catch (error) {
+                console.error('Erro geral no envio:', error);
+                debugLog('Erro geral no webhook:', error);
+
+                showWebhookStatus('error', `❌ Erro geral: ${error.message}`);
+                showErrorToast(`❌ Falha no envio: ${error.message}`);
+            } finally {
+                // Reset sending state
+                webhookSendingState.isRunning = false;
+
+                // Hide control buttons
+                pauseBtnContainer.classList.add('d-none');
+                stopBtnContainer.classList.add('d-none');
+
+                // Re-enable buttons
+                updateWebhookButtons();
+            }
+        }
+
+        // Pause webhook sending
+        function pauseWebhookSending() {
+            const pauseBtn = document.getElementById('pause-btn');
+
+            if (webhookSendingState.isPaused) {
+                // Resume
+                webhookSendingState.isPaused = false;
+                pauseBtn.innerHTML = '<i class="bi bi-pause-circle me-2"></i>Pausar';
+                pauseBtn.className = 'btn btn-warning w-100';
+                showSuccessToast('▶️ Envio retomado!');
+                debugLog('Envio retomado pelo usuário');
+            } else {
+                // Pause
+                webhookSendingState.isPaused = true;
+                pauseBtn.innerHTML = '<i class="bi bi-play-circle me-2"></i>Retomar';
+                pauseBtn.className = 'btn btn-success w-100';
+                showSuccessToast('⏸️ Envio pausado!');
+                debugLog('Envio pausado pelo usuário');
+            }
+        }
+
+        // Stop webhook sending
+        function stopWebhookSending() {
+            const confirmStop = confirm('⚠️ Tem certeza que deseja parar o envio?\n\nEsta ação não pode ser desfeita.');
+
+            if (confirmStop) {
+                webhookSendingState.isStopped = true;
+                webhookSendingState.isPaused = false;
+
+                showErrorToast('🛑 Envio interrompido pelo usuário!');
+                debugLog('Envio interrompido pelo usuário');
+
+                // Update status immediately
+                const successCount = webhookSendingState.currentIndex || 0;
+                const errorCount = webhookSendingState.totalProspects - successCount;
+                showWebhookStatus('error', `🛑 Envio interrompido! ${successCount} prospects foram enviados.`);
+            }
+        }
+
+        // Show webhook status
+        function showWebhookStatus(type, message) {
+            const statusContainer = document.getElementById('webhook-status-container');
+            if (!statusContainer) return;
+
+            let statusClass = '';
+            let icon = '';
+
+            switch (type) {
+                case 'loading':
+                    statusClass = 'webhook-loading';
+                    icon = '<i class="bi bi-hourglass-split me-2"></i>';
+                    break;
+                case 'success':
+                    statusClass = 'webhook-success';
+                    icon = '<i class="bi bi-check-circle-fill me-2"></i>';
+                    break;
+                case 'error':
+                    statusClass = 'webhook-error';
+                    icon = '<i class="bi bi-exclamation-triangle-fill me-2"></i>';
+                    break;
+            }
+
+            statusContainer.innerHTML = `
+                <div class="webhook-status ${statusClass}">
+                    ${icon}${message}
+                </div>
+            `;
+
+            // Auto-hide success/error messages after 5 seconds
+            if (type !== 'loading') {
+                setTimeout(() => {
+                    statusContainer.innerHTML = '';
+                }, 5000);
+            }
+        }
+
+        // Handle Enter key in search
+        function handleEnterKey(event) {
+            if (event.key === 'Enter') {
+                searchProspects();
+            }
+        }
+
+        // Filter prospects
+        function filterProspects() {
+            const searchInput = document.getElementById('search-input');
+            if (!searchInput) return;
+
+            currentFilters.search = searchInput.value.trim();
+            console.log('🔧 Filtro de busca atualizado:', currentFilters.search);
+
+            applyFiltersToCurrentPage();
+            loadProspects();
+            updateMapMarkers();
+        }
+
+        // Apply filters
+        function applyFilters() {
+            const whatsappFilter = document.getElementById('whatsapp-filter');
+            const ratingFilter = document.getElementById('rating-filter');
+
+            if (!whatsappFilter || !ratingFilter) return;
+
+            currentFilters.whatsapp = whatsappFilter.value;
+            currentFilters.rating = ratingFilter.value;
+
+            console.log('🔧 Filtros atualizados:', currentFilters);
+
+            applyFiltersToCurrentPage();
+            loadProspects();
+            updateMapMarkers();
+        }
+
+        // Clear filters
+        function clearFilters() {
+            const whatsappFilter = document.getElementById('whatsapp-filter');
+            const ratingFilter = document.getElementById('rating-filter');
+            const searchInput = document.getElementById('search-input');
+
+            if (whatsappFilter) whatsappFilter.value = '';
+            if (ratingFilter) ratingFilter.value = '';
+            if (searchInput) searchInput.value = '';
+
+            currentFilters = {
+                whatsapp: '',
+                rating: '',
+                search: ''
+            };
+
+            console.log('🔧 Filtros limpos');
+
+            applyFiltersToCurrentPage();
+            loadProspects();
+            updateMapMarkers();
+        }
+
+        // Show success toast
+        function showSuccessToast(message) {
+            const toastHtml = `
+                <div class="toast-container position-fixed bottom-0 end-0 p-3">
+                    <div class="toast show" role="alert">
+                        <div class="toast-header">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            <strong class="me-auto">Sucesso!</strong>
+                            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                        </div>
+                        <div class="toast-body">
+                            ${message}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', toastHtml);
+
+            setTimeout(() => {
+                const toastElement = document.querySelector('.toast-container');
+                if (toastElement) {
+                    toastElement.remove();
+                }
+            }, 5000);
+        }
+
+        // Show error toast
+        function showErrorToast(message) {
+            const toastHtml = `
+                <div class="toast-container position-fixed bottom-0 end-0 p-3">
+                    <div class="toast show" role="alert">
+                        <div class="toast-header">
+                            <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>
+                            <strong class="me-auto">Erro!</strong>
+                            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                        </div>
+                        <div class="toast-body">
+                            ${message}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', toastHtml);
+
+            setTimeout(() => {
+                const toastElement = document.querySelector('.toast-container');
+                if (toastElement) {
+                    toastElement.remove();
+                }
+            }, 5000);
+        }
+
+        // Show configuration modal
+        // Show configuration modal
+        function showConfigModal() {
+            const modalHtml = `
+        <div class="modal fade" id="configModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-gear me-2"></i>Configurações das APIs
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-success">
+                            <i class="bi bi-shield-check me-2"></i>
+                            <strong>Nenhuma chave fica no navegador.</strong> As chaves da SerpAPI e da Evolution API
+                            vivem nas credenciais do n8n. O painel só precisa saber as URLs abaixo.
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-search me-2"></i>Endpoint de Busca
+                                    <span class="badge bg-warning ms-2">Obrigatório</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">URL de busca (n8n)</label>
+                                    <input type="url" class="form-control" id="backend-search-url"
+                                            value="${BACKEND_CONFIG.searchUrl}"
+                                            placeholder="https://seu-n8n.com/webhook/prospecta-busca">
+                                    <div class="form-text">
+                                        Recebe <code>{termo, pagina, ll}</code> e devolve os resultados do Google Maps.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-whatsapp me-2"></i>Endpoint de Validação de WhatsApp
+                                    <span class="badge bg-secondary ms-2">Opcional</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    <strong>Configuração opcional:</strong> sem ela os números aparecem como "Não Verificado".
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">URL de validação (n8n)</label>
+                                    <input type="url" class="form-control" id="backend-whatsapp-url"
+                                            value="${BACKEND_CONFIG.whatsappUrl}"
+                                            placeholder="https://seu-n8n.com/webhook/prospecta-whatsapp">
+                                    <div class="form-text">
+                                        Recebe <code>{telefones: []}</code> e devolve <code>[{number, exists, jid}]</code>.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-send me-2"></i>Configuração Webhook
+                                    <span class="badge bg-warning ms-2">Obrigatório</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    <strong>Configure seu webhook:</strong> URL para onde os dados dos prospects serão enviados (N8N)
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">URL do Webhook</label>
+                                    <input type="url" class="form-control" id="webhook-url" 
+                                            value="${WEBHOOK_CONFIG.url}" 
+                                            placeholder="https://seu-n8n.com/webhook/prospecta-ia">
+                                    <div class="form-text">
+                                        <strong>Exemplos:</strong><br>
+                                        • N8N: https://seu-n8n.com/webhook/prospecta-ia
+                                    </div>
+                                </div>
+                                <small class="text-muted">
+                                    <strong>Dados enviados:</strong> Nome da Empresa, Telefone, Rating, Reviews, Especialidades, Site e Status WhatsApp
+                                </small>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-check-circle me-2"></i>Testar Configurações
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2">
+                                    <div class="col-4">
+                                        <button type="button" class="btn btn-outline-success w-100" onclick="testSerpAPI()">
+                                            <i class="bi bi-search me-1"></i>Testar Busca
+                                        </button>
+                                    </div>
+                                    <div class="col-4">
+                                        <button type="button" class="btn btn-outline-success w-100" onclick="testWhatsAppAPI()">
+                                            <i class="bi bi-whatsapp me-1"></i>Testar WhatsApp
+                                        </button>
+                                    </div>
+                                    <div class="col-4">
+                                        <button type="button" class="btn btn-outline-success w-100" onclick="testWebhook()">
+                                            <i class="bi bi-send me-1"></i>Testar Webhook
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" onclick="saveAllConfigs()">
+                            <i class="bi bi-check me-1"></i>Salvar Todas
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('configModal'));
+            modal.show();
+
+            document.getElementById('configModal').addEventListener('hidden.bs.modal', function () {
+                this.remove();
+            });
+        }
+
+        // Show webhook example
+        function showWebhookExample() {
+            const exampleData = {
+                prospect: {
+                    nome_empresa: "Exemplo Empresa LTDA",
+                    telefone: "5571999999999",
+                    telefone_original: "(71) 99999-9999",
+                    rating_google: 4.5,
+                    reviews_google: 123,
+                    especialidades: "Consultoria em tecnologia, desenvolvimento de software",
+                    site_empresa: "https://exemploempresa.com.br",
+                    has_whatsapp: "Sim"
+                },
+                prospect_number: 1,
+                total_prospects: 10,
+                timestamp: "2025-01-07T12:00:00Z",
+                source: "Prospecta IA"
+            };
+
+            const modalHtml = `
+        <div class="modal fade" id="webhookExampleModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-code me-2"></i>Exemplo de Dados do Webhook
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted">Este é o formato JSON que será enviado para seu webhook:</p>
+                        <pre class="bg-dark text-light p-3 rounded"><code>${JSON.stringify(exampleData, null, 2)}</code></pre>
+                        <div class="alert alert-info mt-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Importante:</strong> Cada prospect é enviado individualmente com intervalos configuráveis para evitar bloqueios.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('webhookExampleModal'));
+            modal.show();
+
+            document.getElementById('webhookExampleModal').addEventListener('hidden.bs.modal', function () {
+                this.remove();
+            });
+        }
+
+        function togglePasswordVisibility(inputId) {
+            const input = document.getElementById(inputId);
+            const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
+            input.setAttribute('type', type);
+        }
+
+        // Save all configurations
+        function saveAllConfigs() {
+            const searchUrl = document.getElementById('backend-search-url').value.trim();
+            const whatsappUrl = document.getElementById('backend-whatsapp-url').value.trim();
+            const webhookUrl = document.getElementById('webhook-url').value.trim();
+
+            if (!searchUrl) {
+                showErrorToast('❌ Por favor, preencha a URL de busca (obrigatório).');
+                return;
+            }
+
+            if (!webhookUrl) {
+                showErrorToast('❌ Por favor, configure a URL do Webhook (obrigatório).');
+                return;
+            }
+
+            for (const [label, value] of [['busca', searchUrl], ['validação de WhatsApp', whatsappUrl], ['webhook', webhookUrl]]) {
+                if (!value) continue;
+                try {
+                    new URL(value);
+                } catch {
+                    showErrorToast(`❌ URL de ${label} inválida. Use um formato como: https://exemplo.com/webhook`);
+                    return;
+                }
+            }
+
+            if (!whatsappUrl) {
+                const proceed = confirm('⚠️ URL de validação de WhatsApp não configurada.\n\nSem ela, não será possível validar números.\n\nDeseja continuar mesmo assim?');
+
+                if (!proceed) {
+                    return;
+                }
+            }
+
+            // Save configurations
+            BACKEND_CONFIG.searchUrl = searchUrl;
+            BACKEND_CONFIG.whatsappUrl = whatsappUrl;
+            WEBHOOK_CONFIG.url = webhookUrl;
+
+            localStorage.setItem('backend_config', JSON.stringify({
+                searchUrl: searchUrl,
+                whatsappUrl: whatsappUrl
+            }));
+
+            localStorage.setItem('webhook_config', JSON.stringify({
+                url: webhookUrl
+            }));
+
+            updateSearchButtonState();
+            updateWebhookButtons();
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById('configModal'));
+            modal.hide();
+
+            if (whatsappUrl) {
+                showSuccessToast('✅ Todas as configurações foram salvas com sucesso!');
+            } else {
+                showSuccessToast('✅ Busca e Webhook configurados! Validação de WhatsApp não configurada.');
+            }
+
+            debugLog('Configurações salvas', {
+                busca: true,
+                whatsapp: !!whatsappUrl,
+                webhook: !!webhookUrl
+            });
+        }
+
+        // Feedback visual compartilhado pelos botões de teste
+        function testButtonResult(btn, originalText, ok, message) {
+            btn.innerHTML = `<i class="bi bi-${ok ? 'check' : 'x'}-circle me-1"></i>${ok ? '✅' : '❌'} ${message}`;
+            btn.className = `btn btn-${ok ? 'success' : 'danger'} w-100`;
+
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.className = 'btn btn-outline-success w-100';
+                btn.disabled = false;
+            }, 4000);
+        }
+
+        // Testa o endpoint de busca do n8n (que por sua vez chama a SerpAPI)
+        async function testSerpAPI() {
+            const testBtn = event.target;
+            const originalText = testBtn.innerHTML;
+
+            try {
+                testBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testando...';
+                testBtn.disabled = true;
+
+                const searchUrl = document.getElementById('backend-search-url').value.trim();
+                if (!searchUrl) {
+                    throw new Error('Informe a URL de busca');
+                }
+
+                debugLog('Testando endpoint de busca:', searchUrl);
+
+                const response = await fetch(searchUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ termo: 'restaurante São Paulo', pagina: 1 })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                debugLog('Resposta do teste de busca:', data);
+
+                if (data.erro) {
+                    throw new Error(data.erro);
+                }
+
+                const total = Array.isArray(data.local_results) ? data.local_results.length : 0;
+                testButtonResult(testBtn, originalText, total > 0, total > 0 ? `${total} resultados` : 'Zero resultados');
+
+            } catch (error) {
+                debugLog('Erro no teste de busca:', error);
+                const msg = error.message.includes('Failed to fetch')
+                    ? 'Sem conexão com o n8n'
+                    : error.message;
+                testButtonResult(testBtn, originalText, false, msg);
+                showErrorToast(`Erro no teste de busca: ${msg}`);
+            }
+        }
+
+        // Testa o endpoint de validação de WhatsApp do n8n
+        async function testWhatsAppAPI() {
+            const testBtn = event.target;
+            const originalText = testBtn.innerHTML;
+
+            try {
+                testBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testando...';
+                testBtn.disabled = true;
+
+                const whatsappUrl = document.getElementById('backend-whatsapp-url').value.trim();
+                if (!whatsappUrl) {
+                    throw new Error('Informe a URL de validação');
+                }
+
+                debugLog('Testando endpoint de validação:', whatsappUrl);
+
+                const response = await fetch(whatsappUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefones: ['5571999999999'] })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+                debugLog('Resposta do teste de validação:', result);
+
+                const ok = Array.isArray(result) && result.length > 0 && 'exists' in result[0];
+                testButtonResult(testBtn, originalText, ok, ok ? 'API funcionando!' : 'Resposta inesperada');
+
+            } catch (error) {
+                debugLog('Erro no teste de validação:', error);
+                const msg = error.message.includes('Failed to fetch')
+                    ? 'Sem conexão com o n8n'
+                    : error.message;
+                testButtonResult(testBtn, originalText, false, msg);
+            }
+        }
+
+        // Test Webhook
+        async function testWebhook() {
+            const testBtn = event.target;
+            const originalText = testBtn.innerHTML;
+
+            try {
+                testBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testando...';
+                testBtn.disabled = true;
+
+                const webhookUrl = document.getElementById('webhook-url').value.trim();
+
+                if (!webhookUrl) {
+                    throw new Error('Por favor, configure a URL do webhook primeiro');
+                }
+
+                // Validate URL format
+                let validUrl;
+                try {
+                    validUrl = new URL(webhookUrl);
+                } catch {
+                    throw new Error('URL do webhook inválida. Use formato: https://exemplo.com/webhook');
+                }
+
+                // Check if URL is using http/https (not file://)
+                if (!validUrl.protocol.startsWith('http')) {
+                    throw new Error('URL deve usar protocolo HTTP ou HTTPS');
+                }
+
+                debugLog('Testando webhook:', webhookUrl);
+
+                // Send test data
+                const testData = {
+                    prospect: {
+                        nome_empresa: 'Empresa Teste',
+                        telefone: '5571999999999',
+                        telefone_original: '(71) 99999-9999',
+                        rating_google: 4.5,
+                        reviews_google: 123,
+                        especialidades: 'Teste de conectividade',
+                        site_empresa: 'https://exemplo.com.br',
+                        has_whatsapp: 'Sim'
+                    },
+                    prospect_number: 1,
+                    total_prospects: 1,
+                    timestamp: new Date().toISOString(),
+                    source: 'Prospecta IA - Teste',
+                    test: true
+                };
+
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData)
+                });
+
+                debugLog(`Status da resposta webhook test: ${response.status}`);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    debugLog('Erro HTTP webhook test:', { status: response.status, error: errorText });
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.text();
+                debugLog('Resposta do teste webhook:', result);
+
+                testBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>✅ Webhook OK';
+                testBtn.className = 'btn btn-success w-100';
+                debugLog('Teste webhook bem-sucedido');
+
+                setTimeout(() => {
+                    testBtn.innerHTML = originalText;
+                    testBtn.className = 'btn btn-outline-success w-100';
+                    testBtn.disabled = false;
+                }, 4000);
+
+            } catch (error) {
+                debugLog('Erro no teste webhook:', error);
+
+                let errorMessage = error.message;
+                if (error.message.includes('Failed to fetch')) {
+                    errorMessage = 'Erro de conexão - Verifique se a URL está acessível';
+                } else if (error.message.includes('CORS')) {
+                    errorMessage = 'Erro CORS - Configure CORS no seu webhook';
+                } else if (error.message.includes('404')) {
+                    errorMessage = 'Webhook não encontrado (404)';
+                } else if (error.message.includes('500')) {
+                    errorMessage = 'Erro interno do webhook (500)';
+                } else if (error.message.includes('Network')) {
+                    errorMessage = 'Problema de rede ou URL inválida';
+                } else if (error.message.includes('protocolo HTTP')) {
+                    errorMessage = 'Use uma URL com https:// ou http://';
+                }
+
+                testBtn.innerHTML = `<i class="bi bi-x-circle me-1"></i>❌ ${errorMessage}`;
+                testBtn.className = 'btn btn-danger w-100';
+
+                setTimeout(() => {
+                    testBtn.innerHTML = originalText;
+                    testBtn.className = 'btn btn-outline-success w-100';
+                    testBtn.disabled = false;
+                }, 4000);
+            }
+        }
+
+        // Load webhook configuration
+        function loadWebhookConfig() {
+            const savedWebhookConfig = localStorage.getItem('webhook_config');
+            if (savedWebhookConfig) {
+                try {
+                    const config = JSON.parse(savedWebhookConfig);
+                    WEBHOOK_CONFIG.url = config.url || '';
+                    debugLog('Configuração webhook carregada:', config.url);
+                } catch (error) {
+                    debugLog('Erro ao carregar configuração webhook:', error);
+                }
+            }
+        }
+
+        // Load all configurations from localStorage
+        function loadAllConfigs() {
+            const savedBackendConfig = localStorage.getItem('backend_config');
+            if (savedBackendConfig) {
+                try {
+                    const config = JSON.parse(savedBackendConfig);
+                    BACKEND_CONFIG.searchUrl = config.searchUrl || BACKEND_CONFIG.searchUrl;
+                    BACKEND_CONFIG.whatsappUrl = config.whatsappUrl || BACKEND_CONFIG.whatsappUrl;
+                    debugLog('Configuração do backend carregada');
+                } catch (error) {
+                    debugLog('Erro ao carregar configuração do backend:', error);
+                }
+            }
+
+            // Limpa chaves antigas que ficavam guardadas no navegador
+            localStorage.removeItem('serpapi_config');
+            localStorage.removeItem('whatsapp_config');
+
+            // Load webhook configuration
+            loadWebhookConfig();
+
+            debugLog('Configurações atuais:', {
+                busca: BACKEND_CONFIG.searchUrl || 'Não configurado',
+                whatsapp: BACKEND_CONFIG.whatsappUrl || 'Não configurado',
+                webhook: WEBHOOK_CONFIG.url || 'Não configurado',
+                theme: localStorage.getItem('prospecta_ia_theme') || 'dark'
+            });
+
+            updateSearchButtonState();
+            updateWebhookButtons(); // Add this line
+        }
+
+        // Initialize map
+        function initializeMap() {
+            try {
+                miniMap = L.map('minimap').setView([-14.235, -51.9253], 4);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 18
+                }).addTo(miniMap);
+
+                const info = L.control({ position: 'bottomleft' });
+                info.onAdd = function () {
+                    const div = L.DomUtil.create('div', 'map-info');
+                    div.innerHTML = '<small class="text-muted">🔵 Com WhatsApp &nbsp; 🔴 Sem WhatsApp</small>';
+                    div.style.background = 'rgba(255,255,255,0.8)';
+                    div.style.padding = '5px';
+                    div.style.borderRadius = '3px';
+                    return div;
+                };
+                info.addTo(miniMap);
+
+                debugLog('Mapa inicializado com sucesso');
+            } catch (error) {
+                debugLog('Erro ao inicializar mapa:', error);
+            }
+        }
+
+        // Update map markers
+        function updateMapMarkers() {
+            if (!miniMap) return;
+
+            debugLog(`Atualizando marcadores do mapa para ${filteredProspects.length} prospects`);
+
+            mapMarkers.forEach(marker => {
+                miniMap.removeLayer(marker);
+            });
+            mapMarkers = [];
+
+            let markersAdded = 0;
+
+            filteredProspects.forEach((prospect, index) => {
+                let lat, lng;
+
+                if (prospect.gps_coordinates && prospect.gps_coordinates.latitude && prospect.gps_coordinates.longitude) {
+                    lat = prospect.gps_coordinates.latitude;
+                    lng = prospect.gps_coordinates.longitude;
+                } else {
+                    const baseCoords = getBaseCoordinatesFromAddress(prospect.endereco);
+                    if (baseCoords) {
+                        lat = baseCoords.lat + (Math.random() - 0.5) * 0.01;
+                        lng = baseCoords.lng + (Math.random() - 0.5) * 0.01;
+                    } else {
+                        lat = -12.971598 + (Math.random() - 0.5) * 0.1;
+                        lng = -38.501310 + (Math.random() - 0.5) * 0.1;
+                    }
+                }
+
+                if (lat && lng) {
+                    debugLog(`Adicionando marcador para ${prospect.name} em ${lat}, ${lng}`);
+
+                    const markerColor = prospect.hasWhatsApp ? '#28a745' : '#dc3545';
+                    const markerIcon = L.divIcon({
+                        className: 'custom-marker',
+                        html: `<div style="background-color: ${markerColor}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+                        iconSize: [16, 16],
+                        iconAnchor: [8, 8]
+                    });
+
+                    const marker = L.marker([lat, lng], { icon: markerIcon });
+
+                    const popupContent = `
+                        <div class="prospect-popup">
+                            <h6>${prospect.name}</h6>
+                            <p class="mb-1"><i class="bi bi-geo-alt me-1"></i>${prospect.endereco}</p>
+                            <p class="mb-1"><i class="bi bi-telephone me-1"></i>${formatPhoneNumber(prospect.telefone)}</p>
+                            ${prospect.rating > 0 ? `
+                                <p class="mb-1">
+                                    <i class="bi bi-star-fill text-warning me-1"></i>
+                                    ${prospect.rating} (${prospect.reviews} avaliações)
+                                </p>
+                            ` : ''}
+                            <div class="d-flex gap-1 mt-2">
+                                <span class="badge ${prospect.hasWhatsApp ? 'bg-success' : 'bg-danger'}">
+                                    ${prospect.hasWhatsApp ? 'WhatsApp' : 'Sem WhatsApp'}
+                                </span>
+                                <span class="badge bg-primary">${prospect.category || 'Outros'}</span>
+                            </div>
+                            ${prospect.hasWhatsApp ? `
+                                <div class="mt-2">
+                                    <a href="https://wa.me/${prospect.telefone.replace(/\D/g, '')}" target="_blank" class="btn btn-success btn-sm">
+                                        <i class="bi bi-whatsapp me-1"></i>Abrir WhatsApp
+                                    </a>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+
+                    marker.bindPopup(popupContent);
+                    marker.addTo(miniMap);
+                    mapMarkers.push(marker);
+                    markersAdded++;
+                }
+            });
+
+            debugLog(`${markersAdded} marcadores adicionados ao mapa`);
+
+            if (mapMarkers.length > 0) {
+                setTimeout(() => {
+                    const group = new L.featureGroup(mapMarkers);
+                    miniMap.fitBounds(group.getBounds().pad(0.1));
+                }, 100);
+            }
+        }
+
+        // Get base coordinates from address (simplified geocoding)
+        function getBaseCoordinatesFromAddress(address) {
+            if (!address) return null;
+
+            const addressLower = address.toLowerCase();
+
+            if (addressLower.includes('salvador') || addressLower.includes('pituba') || addressLower.includes('barra') || addressLower.includes('ondina')) {
+                return { lat: -12.971598, lng: -38.501310 };
+            }
+
+            if (addressLower.includes('são paulo') || addressLower.includes('sp')) {
+                return { lat: -23.550520, lng: -46.633309 };
+            }
+
+            if (addressLower.includes('rio de janeiro') || addressLower.includes('copacabana') || addressLower.includes('ipanema')) {
+                return { lat: -22.906847, lng: -43.172896 };
+            }
+
+            if (addressLower.includes('belo horizonte') || addressLower.includes('mg')) {
+                return { lat: -19.919054, lng: -43.945973 };
+            }
+
+            if (addressLower.includes('brasília') || addressLower.includes('df')) {
+                return { lat: -15.794229, lng: -47.882166 };
+            }
+
+            return { lat: -14.235, lng: -51.9253 };
+        }
+
+        // Center map on search results
+        function centerMapOnResults() {
+            if (!miniMap || mapMarkers.length === 0) return;
+
+            if (mapMarkers.length === 1) {
+                miniMap.setView(mapMarkers[0].getLatLng(), 15);
+            } else {
+                const group = new L.featureGroup(mapMarkers);
+                miniMap.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+
+        // Toggle map view (street/satellite)
+        function toggleMapView() {
+            if (!miniMap) return;
+
+            miniMap.eachLayer(function (layer) {
+                if (layer instanceof L.TileLayer) {
+                    miniMap.removeLayer(layer);
+                }
+            });
+
+            if (currentMapView === 'street') {
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: '© Esri',
+                    maxZoom: 18
+                }).addTo(miniMap);
+                currentMapView = 'satellite';
+                document.getElementById('map-view-icon').className = 'bi bi-map';
+            } else {
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 18
+                }).addTo(miniMap);
+                currentMapView = 'street';
+                document.getElementById('map-view-icon').className = 'bi bi-layers';
+            }
+        }
+
+        // Update filter status display
+        function updateFilterStatus() {
+            const filterStatus = document.getElementById('filter-status');
+            const filterDescription = document.getElementById('filter-description');
+
+            const activeFilters = [];
+
+            if (currentFilters.search && currentFilters.search.trim() !== '') {
+                activeFilters.push(`Busca: "${currentFilters.search}"`);
+            }
+
+            if (currentFilters.whatsapp === 'true') {
+                activeFilters.push('Apenas com WhatsApp');
+            } else if (currentFilters.whatsapp === 'false') {
+                activeFilters.push('Sem WhatsApp');
+            }
+        }
+
+        // Show interval configuration modal
+        function showIntervalConfigModal() {
+            const currentMinInterval = localStorage.getItem('webhook_min_interval') || '30';
+            const currentMaxInterval = localStorage.getItem('webhook_max_interval') || '60';
+
+            const modalHtml = `
+        <div class="modal fade" id="intervalModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-clock me-2"></i>Configurar Intervalos de Envio
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Importante:</strong> Os intervalos ajudam a evitar bloqueios do WhatsApp. Cada prospect será enviado individualmente com um intervalo randômico entre os valores configurados.
+                        </div>
+                        
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Intervalo Mínimo (segundos)</label>
+                                <input type="number" class="form-control" id="min-interval" 
+                                       value="${currentMinInterval}" min="5" max="300">
+                                <div class="form-text">Mínimo: 5 segundos</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold">Intervalo Máximo (segundos)</label>
+                                <input type="number" class="form-control" id="max-interval" 
+                                       value="${currentMaxInterval}" min="10" max="600">
+                                <div class="form-text">Máximo: 600 segundos (10 min)</div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 p-3 bg-warning rounded">
+                            <small class="text-black">
+                                <strong>Exemplo:</strong> Com intervalos de 30-60s, cada envio aguardará um tempo aleatório entre 30 e 60 segundos antes do próximo.
+                            </small>
+                        </div>
+
+                        <div class="mt-3">
+                            <h6>Presets Recomendados:</h6>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <button class="btn btn-outline-primary btn-sm w-100" onclick="setIntervalPreset(15, 30)">
+                                        Rápido<br><small>15-30s</small>
+                                    </button>
+                                </div>
+                                <div class="col-4">
+                                    <button class="btn btn-outline-success btn-sm w-100" onclick="setIntervalPreset(30, 60)">
+                                        Moderado<br><small>30-60s</small>
+                                    </button>
+                                </div>
+                                <div class="col-4">
+                                    <button class="btn btn-outline-warning btn-sm w-100" onclick="setIntervalPreset(60, 120)">
+                                        Seguro<br><small>60-120s</small>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" onclick="saveIntervalConfig()">
+                            <i class="bi bi-check me-1"></i>Salvar Configuração
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            const modal = new bootstrap.Modal(document.getElementById('intervalModal'));
+            modal.show();
+
+            document.getElementById('intervalModal').addEventListener('hidden.bs.modal', function () {
+                this.remove();
+            });
+        }
+
+        // Set interval preset
+        function setIntervalPreset(min, max) {
+            document.getElementById('min-interval').value = min;
+            document.getElementById('max-interval').value = max;
+        }
+
+        // Save interval configuration
+        function saveIntervalConfig() {
+            const minInterval = parseInt(document.getElementById('min-interval').value);
+            const maxInterval = parseInt(document.getElementById('max-interval').value);
+
+            if (minInterval >= maxInterval) {
+                showErrorToast('❌ O intervalo mínimo deve ser menor que o máximo!');
+                return;
+            }
+
+            if (minInterval < 5) {
+                showErrorToast('❌ O intervalo mínimo deve ser pelo menos 5 segundos!');
+                return;
+            }
+
+            localStorage.setItem('webhook_min_interval', minInterval.toString());
+            localStorage.setItem('webhook_max_interval', maxInterval.toString());
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById('intervalModal'));
+            modal.hide();
+
+            showSuccessToast(`✅ Intervalos configurados: ${minInterval}-${maxInterval} segundos`);
+            debugLog('Intervalos salvos:', { min: minInterval, max: maxInterval });
+        }
+
+        // Update interval display
+        function updateIntervalDisplay() {
+            const minInterval = localStorage.getItem('webhook_min_interval') || '30';
+            const maxInterval = localStorage.getItem('webhook_max_interval') || '60';
+            const intervalDisplay = document.getElementById('current-intervals');
+
+            if (intervalDisplay) {
+                intervalDisplay.textContent = `${minInterval}-${maxInterval} segundos`;
+            }
+
+            updateWebhookDisplay(); // Add this line
+        }
+
+        // Update webhook display
+        function updateWebhookDisplay() {
+            const webhookDisplay = document.getElementById('current-webhook-url');
+
+            if (webhookDisplay) {
+                if (WEBHOOK_CONFIG.url) {
+                    // Show only domain for privacy
+                    try {
+                        const url = new URL(WEBHOOK_CONFIG.url);
+                        webhookDisplay.textContent = url.hostname;
+                    } catch {
+                        webhookDisplay.textContent = 'URL configurada';
+                    }
+                } else {
+                    webhookDisplay.textContent = 'Não configurado';
+                }
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function () {
+            init();
+        });
+    </script>
+</body>
+
+</html>
