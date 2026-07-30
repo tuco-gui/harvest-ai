@@ -1,113 +1,72 @@
 # Prospecta IA
 
 Prospecção ativa B2B: busca empresas no Google Maps, valida quem tem WhatsApp, escreve
-uma abordagem personalizada com IA e dispara pelo WhatsApp — tudo orquestrado por um
-único workflow do n8n, com um painel web servido pelo próprio n8n.
+uma abordagem personalizada com IA e dispara pelo WhatsApp. Um único workflow do n8n,
+com o painel web servido pelo próprio n8n.
 
-```
-Painel (HTML)  ──POST /prospecta-busca──►  n8n ──► SerpAPI (Google Maps)
-                                            │      └─► Supabase: prospecta_buscas + prospecta_leads
-                                            │
-               ──POST /prospecta-whatsapp─►  n8n ──► Evolution API (valida números)
-                                            │
-               ──POST /<disparo>──────────►  n8n ──► scrape do site (r.jina.ai)
-                                                   └─► OpenAI (3 mensagens)
-                                                   └─► Evolution API (envia)
-                                                   └─► Supabase: prospecta_mensagens
-```
-
-**Nenhuma chave de API vive no navegador.** O painel só conhece as URLs dos webhooks;
-SerpAPI, Evolution e Supabase ficam nas credenciais do n8n.
+**Tudo se configura pela tela do painel** — chave da SerpAPI, Evolution API e webhook.
+Para revender: importe o workflow no n8n do cliente, abra o painel, preencha a engrenagem.
+Nenhuma chave fica dentro do workflow.
 
 ## Estrutura
 
 | Caminho | O que é |
 |---|---|
 | `painel/index.html` | Fonte da verdade do painel. Editar aqui, nunca dentro do n8n. |
-| `n8n/prospecta-ia.json` | Workflow exportável, com placeholders no lugar das URLs. |
-| `sql/001_schema.sql` | As três tabelas do Supabase. Idempotente. |
-| `scripts/build-workflow.py` | Injeta o painel no workflow e resolve os placeholders. |
+| `n8n/prospecta-ia.json` | Workflow para importar. |
+| `sql/001_schema.sql` | As tabelas do Supabase. Idempotente. |
+| `scripts/build-workflow.py` | Injeta o painel no workflow depois de editar o HTML. |
 | `docs/enriquecimento.md` | Roadmap: de prospecção fria para prospecção quente. |
-| `.env.example` | Variáveis necessárias. Copie para `.env` (que fica fora do git). |
 
-## Setup do zero
+## Setup
 
-### 1. Banco
+1. **Banco** — rode `sql/001_schema.sql` no SQL Editor do Supabase. Em Supabase
+   self-hosted, reinicie o PostgREST depois (ver observação no próprio arquivo).
+2. **n8n** — importe `n8n/prospecta-ia.json`, aponte as credenciais `Supabase` e
+   `OpenAI` e ative o workflow.
+3. **Painel** — abra `<n8n>/webhook/prospecta`, clique na engrenagem e preencha:
+   - Chave da SerpAPI **e** a URL de busca → `<n8n>/webhook/prospecta-busca`
+   - Evolution API: URL base, instância e token (opcional)
+   - URL do webhook de disparo → `<n8n>/webhook/<id do nó Webhook>`
 
-Rode `sql/001_schema.sql` no SQL Editor do Supabase. Cria:
+## Os quatro webhooks
 
-- **`prospecta_buscas`** — uma linha por chamada à SerpAPI. É o extrato de créditos.
-- **`prospecta_leads`** — uma linha por empresa. `place_id` é UNIQUE: o mesmo lugar
-  nunca entra duas vezes, mesmo aparecendo em várias buscas.
-- **`prospecta_mensagens`** — histórico do que a IA gerou e do que foi enviado.
+São portas de entrada independentes do mesmo workflow, cada uma chamada em um momento:
 
-RLS fica ligado sem policy: só a `service_role` (usada pelo n8n) enxerga os dados.
-
-> **Supabase self-hosted:** depois de criar as tabelas, reinicie o PostgREST
-> (`docker restart supabase-rest`). Sem isso o cache de schema fica desatualizado e
-> a tabela entra num estado enganoso — `SELECT` funciona, mas todo `INSERT` devolve
-> `404 {}` sem mensagem de erro. Para confirmar: `GET /rest/v1/` não lista a tabela.
-
-### 2. Credenciais no n8n
-
-Crie estas quatro antes de importar o workflow:
-
-| Nome | Tipo | Conteúdo |
-|---|---|---|
-| `Supabase Figueira` | Supabase API | Host + **service_role key** |
-| `SerpAPI` | Query Auth | Nome `api_key`, valor = sua chave da SerpAPI |
-| `Evolution API` | Header Auth | Nome `apikey`, valor = chave da Evolution |
-| `prospecta` | OpenAI API | Sua chave da OpenAI |
-
-### 3. Workflow
-
-```bash
-cp .env.example .env       # preencha
-python3 scripts/build-workflow.py --local
-```
-
-Isso gera `.local/prospecta-ia.local.json` com as URLs reais já substituídas — importe
-esse arquivo no n8n. (Sem `--local`, o script só regenera o JSON versionado, com
-placeholders `__SUPABASE_URL__`, `__EVOLUTION_URL__`, `__EVOLUTION_INSTANCE__`.)
-
-Depois de importar: reaponte as quatro credenciais nos nós (o n8n marca as que não
-reconhece) e ative o workflow.
-
-### 4. Painel
-
-Abra `<n8n>/webhook/prospecta`, clique na engrenagem e preencha as três URLs:
-
-- **Busca** → `<n8n>/webhook/prospecta-busca`
-- **Validação de WhatsApp** → `<n8n>/webhook/prospecta-whatsapp`
-- **Webhook de disparo** → `<n8n>/webhook/<id do nó Webhook>`
-
-## Editando o painel
-
-`painel/index.html` é a fonte. Depois de mexer:
-
-```bash
-python3 scripts/build-workflow.py --local
-```
-
-e reimporte. Editar o HTML direto no n8n faz o repo e a produção divergirem.
+| Rota | Quando |
+|---|---|
+| `/webhook/prospecta` | abrir o painel (serve o HTML) |
+| `/webhook/prospecta-busca` | clicar em "Buscar" — só repassa a chamada à SerpAPI |
+| `/webhook/<id>` | clicar em "Enviar", um POST por prospect |
 
 ## Detalhes que custam caro quando esquecidos
 
-- **Não chame a SerpAPI do navegador.** A versão anterior do painel fazia isso através de
-  proxies CORS públicos (`api.codetabs.com`, `api.allorigins.win`,
-  `cors-anywhere.herokuapp.com`) — os três saíram do ar, e a busca passou a falhar
-  inteira. De quebra, a chave viajava dentro da URL para um servidor de terceiro.
-  Por isso a busca vive no n8n.
-- **`type=search`**: a documentação lista como obrigatório no `engine=google_maps`, mas
-  na prática o default já é `search` e a chamada funciona sem ele. Mandamos mesmo assim.
-- **Paginação é de 20 em 20** (`start=0,20,40…`). O parâmetro `num` é ignorado nesse engine.
-- **Cada página de busca gasta 1 crédito** da SerpAPI. `prospecta_buscas` registra todas.
-- **Lead sem `place_id` não é gravado** na busca — sem ele não há como deduplicar.
-  Importação por CSV entra sempre como linha nova.
-- O `Prefer: resolution=merge-duplicates` nos nós de gravação é o que transforma o
-  INSERT em upsert. Tirar isso quebra a segunda busca do mesmo termo.
+- **O navegador não chama a SerpAPI direto.** É bloqueio de CORS. O painel original
+  tentava contornar por três proxies públicos (`api.codetabs.com`, `api.allorigins.win`,
+  `cors-anywhere.herokuapp.com`) — os três estão fora do ar, e foi isso que matou a busca.
+  Daí a rota `prospecta-busca`: três nós que só repassam, sem guardar chave nenhuma.
+- **Telefone precisa do DDI 55.** A Evolution API responde `exists: false` para número sem
+  ele — resultado: todo mundo aparecia como "sem WhatsApp" e o disparo não chegava.
+  `normalizarTelefone()` no painel é o único lugar que trata isso; validação, exibição e
+  disparo passam por ela.
+- **Paginação da SerpAPI é de 20 em 20** (`start=0,20,40…`). O parâmetro `num` é ignorado
+  no engine `google_maps`.
+- **Cada página de busca gasta 1 crédito** da SerpAPI.
+- **Dois workflows ativos com o mesmo `path` de webhook não funcionam** — o n8n registra
+  só o primeiro e o outro dá 404. Ao trocar de versão, desative a antiga antes de ativar
+  a nova.
+- **Importação por CSV**: só CSV (no Excel, "Salvar como → CSV UTF-8"). O link
+  "Baixar modelo de planilha" no painel gera o arquivo com os cabeçalhos certos.
+
+## Editando o painel
+
+```bash
+python3 scripts/build-workflow.py
+```
+
+e reimporte o JSON.
 
 ## Licença
 
-Uso interno. O repositório é público para servir de referência — todas as chaves,
-URLs internas e dados de cliente ficam fora dele.
+Uso interno. O repositório é público para servir de referência — nenhuma chave,
+URL interna ou dado de cliente entra nele.

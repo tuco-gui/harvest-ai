@@ -278,6 +278,8 @@
                                 <input type="file" class="form-control" id="csvFile" accept=".csv">
                                 <div class="form-text">
                                     O sistema tentará identificar automaticamente colunas como: <strong>nome, empresa, telefone, celular, whatsapp, site, segmento</strong>.
+                                    <a href="#" onclick="baixarModeloCSV(); return false;">Baixar modelo de planilha</a>.
+                                    Só CSV — no Excel, use "Salvar como &rarr; CSV UTF-8".
                                 </div>
                             </div>
                             <div class="col-md-3">
@@ -553,6 +555,35 @@ if (window.self !== window.top) {
     }
 }
 
+// Função para bypass CORS em iframe
+function createCorsProxy(url) {
+    const proxies = [
+        'https://api.codetabs.com/v1/proxy?quest=',
+        'https://api.allorigins.win/get?url=',
+        'https://corsproxy.io/?',
+        'https://cors-proxy.htmldriven.com/?url='
+    ];
+    
+    return proxies[0] + encodeURIComponent(url);
+}
+
+// Wrapper para fetch que funciona em iframe
+async function safeFetch(url, options = {}) {
+    try {
+        return await fetch(url, options);
+    } catch (error) {
+        if (error.message.includes('CORS') || error.message.includes('blocked')) {
+            console.log('CORS detectado, usando proxy...');
+            return await fetch(createCorsProxy(url), {
+                ...options,
+                method: 'GET' // Proxies geralmente só suportam GET
+            });
+        }
+        throw error;
+    }
+}
+
+      
         // Apply theme immediately to prevent flash
         (function () {
             const savedTheme = localStorage.getItem('prospecta_ia_theme') || 'dark';
@@ -599,14 +630,27 @@ if (window.self !== window.top) {
         let mapMarkers = [];
         let currentMapView = 'street';
 
-        // Backend Configuration
-        // Todas as chaves (SerpAPI, Evolution) vivem no n8n. O painel só conhece URLs.
-        const BACKEND_CONFIG = {
-            searchUrl: '',    // POST {termo, pagina, ll} -> resultados do Google Maps
-            whatsappUrl: ''   // POST {telefones: []}     -> validação de WhatsApp
+        // API Configuration
+        const SERPAPI_CONFIG = {
+            baseUrl: 'https://serpapi.com/search',
+            apiKey: '',
+            engine: 'google_maps',
+            // O navegador não pode chamar a SerpAPI direto (CORS). Os proxies públicos
+            // que ficavam aqui saíram do ar. Esta URL é o webhook do n8n que repassa
+            // a chamada — a chave continua vindo da configuração do painel.
+            proxyUrl: ''
         };
 
-        // Webhook Configuration (disparo das mensagens)
+        // WhatsApp Validation API Configuration
+        const WHATSAPP_API_CONFIG = {
+            baseUrl: '',
+            instance: '',
+            endpoint: '/chat/whatsappNumbers/',
+            apiKey: '',
+            authHeader: 'apikey'
+        };
+
+        // Webhook Configuration
         const WEBHOOK_CONFIG = {
             url: ''
         };
@@ -759,7 +803,7 @@ if (window.self !== window.top) {
                     // Validar WhatsApps automaticamente se possível
                     const phones = extractPhoneNumbers(importedProspects);
                     
-                    if(phones.length > 0 && BACKEND_CONFIG.whatsappUrl) {
+                    if(phones.length > 0 && WHATSAPP_API_CONFIG.apiKey) {
                         btn.innerHTML = 'Validando WhatsApps...';
                         validateWhatsAppNumbers(phones).then(validation => {
                             const processed = processResults(importedProspects, validation);
@@ -801,6 +845,25 @@ if (window.self !== window.top) {
             });
         }
 
+        // Modelo de CSV para importação (mesmos cabeçalhos que o parser reconhece)
+        function baixarModeloCSV() {
+            const linhas = [
+                'nome,telefone,endereco,site,categoria,email',
+                'Clinica Exemplo,5511999998888,"Av. Paulista 1000, Sao Paulo - SP",https://exemplo.com.br,Clinica,contato@exemplo.com.br',
+                'Pet Shop Exemplo,5571988887777,"Rua da Bahia 50, Salvador - BA",,Pet Shop,'
+            ].join('\n');
+
+            // BOM para o Excel abrir acentuação corretamente
+            const blob = new Blob(['\ufeff' + linhas], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'modelo-prospecta.csv';
+            link.click();
+            URL.revokeObjectURL(link.href);
+
+            showSuccessToast('Modelo baixado. O telefone precisa do 55 na frente.');
+        }
+
         function showWelcomeMessage() {
             const container = document.getElementById('prospects-container');
             const emptyState = document.getElementById('empty-state');
@@ -840,12 +903,13 @@ if (window.self !== window.top) {
                 return;
             }
 
-            const isConfigured = BACKEND_CONFIG.searchUrl;
+            const isConfigured = SERPAPI_CONFIG.apiKey && SERPAPI_CONFIG.proxyUrl;
 
             debugLog('Verificando configurações:', {
-                busca: !!BACKEND_CONFIG.searchUrl,
-                whatsapp: !!BACKEND_CONFIG.whatsappUrl,
-                disparo: !!WEBHOOK_CONFIG.url,
+                serpapi: !!SERPAPI_CONFIG.apiKey,
+                whatsapp_base: !!WHATSAPP_API_CONFIG.baseUrl,
+                whatsapp_instance: !!WHATSAPP_API_CONFIG.instance,
+                whatsapp_key: !!WHATSAPP_API_CONFIG.apiKey,
                 isConfigured: isConfigured
             });
 
@@ -860,9 +924,9 @@ if (window.self !== window.top) {
                 searchBtn.disabled = true;
                 searchBtn.classList.remove('gradient-bg', 'text-white');
                 searchBtn.classList.add('btn-secondary');
-                searchBtn.title = 'Configure a URL de busca primeiro! Clique na engrenagem.';
-                searchBtnText.innerHTML = '<i class="bi bi-gear me-2"></i>Configurar';
-                debugLog('Botão de busca desabilitado - URL de busca não configurada');
+                searchBtn.title = 'Configure o SerpAPI primeiro! Clique na engrenagem.';
+                searchBtnText.innerHTML = '<i class="bi bi-gear me-2"></i>Configure SerpAPI';
+                debugLog('Botão de busca desabilitado - SerpAPI não configurado');
             }
         }
 
@@ -929,13 +993,17 @@ if (window.self !== window.top) {
                 return;
             }
 
-            if (!BACKEND_CONFIG.searchUrl) {
-                showErrorToast('❌ Configure a URL de busca primeiro! Clique na engrenagem para configurar.');
+            if (!SERPAPI_CONFIG.apiKey || !SERPAPI_CONFIG.proxyUrl) {
+                showErrorToast('❌ Configure o SerpAPI primeiro! Clique na engrenagem para configurar.');
                 return;
             }
 
-            if (!BACKEND_CONFIG.whatsappUrl) {
-                debugLog('⚠️ Validação de WhatsApp não configurada - será marcado como "não verificado"');
+            const hasEvolutionAPI = WHATSAPP_API_CONFIG.baseUrl &&
+                WHATSAPP_API_CONFIG.instance &&
+                WHATSAPP_API_CONFIG.apiKey;
+
+            if (!hasEvolutionAPI) {
+                debugLog('⚠️ Evolution API não configurada - WhatsApp será marcado como "não verificado"');
             }
 
             const searchTerm = searchInput.value.trim();
@@ -1068,6 +1136,19 @@ if (window.self !== window.top) {
             });
         }
 
+        // Normaliza telefone para o formato que a Evolution API espera: só dígitos, com DDI 55.
+        // Precisa ser a MESMA regra na validação, na exibição e no disparo — quando a validação
+        // perguntava sem o 55 e o disparo mandava com, todo número voltava como "sem WhatsApp".
+        function normalizarTelefone(phone) {
+            if (!phone || phone === 'Telefone não disponível') return null;
+
+            let digits = phone.replace(/\D/g, '');
+            if (digits.length < 10) return null;
+            if (!digits.startsWith('55')) digits = '55' + digits;
+
+            return digits;
+        }
+
         // Extract phone numbers from results
         function extractPhoneNumbers(results) {
             debugLog('Extraindo números de telefone...');
@@ -1085,11 +1166,10 @@ if (window.self !== window.top) {
                     return;
                 }
 
-                const cleanPhone = phoneField.replace(/\D/g, '');
-                debugLog(`   Telefone limpo: "${cleanPhone}"`);
-                debugLog(`   Tamanho: ${cleanPhone.length} dígitos`);
+                const cleanPhone = normalizarTelefone(phoneField);
+                debugLog(`   Telefone normalizado: "${cleanPhone}"`);
 
-                if (cleanPhone.length >= 10) {
+                if (cleanPhone) {
                     if (!phoneSet.has(cleanPhone)) {
                         phoneSet.add(cleanPhone);
                         phoneNumbers.push(cleanPhone);
@@ -1122,22 +1202,33 @@ if (window.self !== window.top) {
                 return {};
             }
 
-            if (!BACKEND_CONFIG.whatsappUrl) {
-                debugLog('⚠️ URL de validação não configurada - retornando validação vazia');
-                showErrorToast('⚠️ URL de validação de WhatsApp não configurada.');
+            const hasEvolutionAPI = WHATSAPP_API_CONFIG.baseUrl &&
+                WHATSAPP_API_CONFIG.instance &&
+                WHATSAPP_API_CONFIG.apiKey;
+
+            if (!hasEvolutionAPI) {
+                debugLog('⚠️ Evolution API não configurada - retornando validação vazia');
+                showErrorToast('⚠️ Evolution API não configurada. WhatsApp não será validado.');
                 return {};
             }
 
-            debugLog('URL de validação (backend):', BACKEND_CONFIG.whatsappUrl);
+            const url = `${WHATSAPP_API_CONFIG.baseUrl}${WHATSAPP_API_CONFIG.endpoint}${WHATSAPP_API_CONFIG.instance}`;
+            debugLog('URL WhatsApp API:', url);
 
-            const requestBody = { telefones: phoneNumbers };
+            const requestBody = { numbers: phoneNumbers };
             debugLog('Request body:', requestBody);
+
+            const headers = {
+                'Content-Type': 'application/json',
+                [WHATSAPP_API_CONFIG.authHeader]: WHATSAPP_API_CONFIG.apiKey
+            };
+            debugLog('Headers (API key oculta):', { ...headers, [WHATSAPP_API_CONFIG.authHeader]: '***' });
 
             try {
                 debugLog('Enviando requisição...');
-                const response = await fetch(BACKEND_CONFIG.whatsappUrl, {
+                const response = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
                     body: JSON.stringify(requestBody)
                 });
 
@@ -1226,7 +1317,7 @@ if (window.self !== window.top) {
                 debugLog(`[${index + 1}] Processando: ${prospect.title || prospect.name}`);
 
                 const originalPhone = prospect.phone || prospect.telefone;
-                const cleanPhone = originalPhone ? originalPhone.replace(/\D/g, '') : null;
+                const cleanPhone = normalizarTelefone(originalPhone);
 
                 debugLog(`   Telefone original: "${originalPhone}"`);
                 debugLog(`   Telefone limpo: "${cleanPhone}"`);
@@ -1303,88 +1394,135 @@ if (window.self !== window.top) {
             return 'Outros';
         }
 
-        // Busca via backend n8n. A chave da SerpAPI fica no servidor — o painel não a conhece.
+        // Call SerpAPI with improved error handling
         async function callSerpAPI(searchTerm, pageNum = 1) {
-            debugLog(`Buscando via backend - Página ${pageNum} - Termo: ${searchTerm}`);
+            debugLog(`Chamando SerpAPI - Página ${pageNum} - Termo: ${searchTerm}`);
 
-            if (!BACKEND_CONFIG.searchUrl) {
-                throw new Error('URL de busca não configurada. Clique na engrenagem.');
-            }
+            const resultsLimitInput = document.getElementById('results-limit');
+            const resultsLimit = resultsLimitInput ? (resultsLimitInput.value || 20) : 20;
 
-            const body = {
-                termo: searchTerm,
-                pagina: pageNum
-            };
+            // A SerpAPI ignora `num` no engine google_maps e pagina de 20 em 20.
+            const startPosition = (pageNum - 1) * 20;
 
-            // Paginação da SerpAPI é de 20 em 20; o backend calcula o start.
-            // Reaproveita as coordenadas da página 1 para as seguintes ficarem na mesma região.
-            if (pageNum > 1 && searchCoordinates && searchCoordinates.lat && searchCoordinates.lng) {
-                const lat = parseFloat(searchCoordinates.lat);
-                const lng = parseFloat(searchCoordinates.lng);
+            const params = new URLSearchParams({
+                engine: SERPAPI_CONFIG.engine,
+                type: 'search',
+                q: searchTerm,
+                api_key: SERPAPI_CONFIG.apiKey,
+                hl: 'pt',
+                gl: 'br'
+            });
 
-                if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-                    body.ll = `@${lat.toFixed(6)},${lng.toFixed(6)},12z`;
-                    debugLog('Usando coordenadas salvas para paginação:', body.ll);
+            if (pageNum > 1) {
+                params.append('start', startPosition.toString());
+
+                if (searchCoordinates && searchCoordinates.lat && searchCoordinates.lng) {
+                    const lat = parseFloat(searchCoordinates.lat);
+                    const lng = parseFloat(searchCoordinates.lng);
+
+                    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                        params.append('ll', `@${lat.toFixed(6)},${lng.toFixed(6)},12z`);
+                        debugLog('Usando coordenadas salvas para paginação:', `@${lat.toFixed(6)},${lng.toFixed(6)},12z`);
+                    }
                 }
             }
 
-            debugLog('Body enviado ao backend:', body);
+            const serpApiUrl = `${SERPAPI_CONFIG.baseUrl}?${params}`;
+            debugLog('URL SerpAPI:', serpApiUrl);
+            debugLog(`Página: ${pageNum}, Start: ${startPosition}, Limite: ${resultsLimit}`);
 
-            const response = await fetch(BACKEND_CONFIG.searchUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-
-            debugLog(`Status da resposta: ${response.status}`);
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Backend de busca respondeu ${response.status}: ${errorText}`);
+            if (!SERPAPI_CONFIG.proxyUrl) {
+                throw new Error('Configure a URL de busca (n8n) na engrenagem. O navegador não pode chamar a SerpAPI direto.');
             }
 
-            const data = await response.json();
-            debugLog('Resposta do backend:', data);
+            {
+                debugLog('Enviando busca pela ponte do n8n:', SERPAPI_CONFIG.proxyUrl);
 
-            if (data.erro) {
-                throw new Error(`SerpAPI: ${data.erro}`);
+                try {
+                    const response = await fetch(SERPAPI_CONFIG.proxyUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(Object.fromEntries(params))
+                    });
+
+                    debugLog(`Status da resposta: ${response.status}`);
+
+                    if (!response.ok) {
+                        throw new Error(`Ponte de busca respondeu ${response.status}`);
+                    }
+
+                    const serpApiData = await response.json();
+
+                    debugLog('Dados SerpAPI processados:', Object.keys(serpApiData));
+
+                    if (serpApiData.error) {
+                        debugLog('Erro SerpAPI:', serpApiData.error);
+                        throw new Error(`SerpAPI Error: ${serpApiData.error}`);
+                    }
+
+                    let coordinates = null;
+                    if (pageNum === 1 && serpApiData.search_parameters) {
+                        if (serpApiData.search_metadata && serpApiData.search_metadata.google_maps_url) {
+                            coordinates = extractCoordinatesFromUrl(serpApiData.search_metadata.google_maps_url);
+                        }
+
+                        if (!coordinates && serpApiData.local_results && serpApiData.local_results[0]) {
+                            const firstResult = serpApiData.local_results[0];
+                            if (firstResult.gps_coordinates) {
+                                coordinates = {
+                                    lat: firstResult.gps_coordinates.latitude,
+                                    lng: firstResult.gps_coordinates.longitude
+                                };
+                            }
+                        }
+                    }
+
+                    if (serpApiData.local_results && Array.isArray(serpApiData.local_results)) {
+                        debugLog(`Encontrados ${serpApiData.local_results.length} resultados locais na página ${pageNum}`);
+
+                        const transformedResults = serpApiData.local_results.map((result, index) => ({
+                            id: Date.now() + index,
+                            name: result.title || 'Nome não disponível',
+                            title: result.title || 'Nome não disponível',
+                            endereco: result.address || 'Endereço não disponível',
+                            address: result.address || 'Endereço não disponível',
+                            telefone: result.phone || 'Telefone não disponível',
+                            phone: result.phone || 'Telefone não disponível',
+                            rating: result.rating || 0,
+                            reviews: result.reviews || 0,
+                            website: result.website || null,
+                            types: result.type ? (Array.isArray(result.type) ? result.type.join(', ') : result.type) : 'Categoria não disponível',
+                            type: result.type || 'Categoria não disponível',
+                            place_id: result.place_id || null,
+                            gps_coordinates: result.gps_coordinates || null,
+                            source: 'API'
+                        }));
+
+                        const hasMore = serpApiData.local_results.length === parseInt(resultsLimit);
+
+                        return {
+                            results: transformedResults,
+                            coordinates: coordinates,
+                            hasMore: hasMore,
+                            totalResults: serpApiData.search_information?.total_results || null
+                        };
+                    } else {
+                        debugLog('Nenhum local_results encontrado na resposta');
+                        debugLog('Estrutura da resposta SerpAPI:', Object.keys(serpApiData));
+
+                        return {
+                            results: [],
+                            coordinates: coordinates,
+                            hasMore: false,
+                            totalResults: 0
+                        };
+                    }
+
+                } catch (error) {
+                    debugLog('Erro na busca:', error.message);
+                    throw error;
+                }
             }
-
-            const localResults = Array.isArray(data.local_results) ? data.local_results : [];
-            debugLog(`Encontrados ${localResults.length} resultados locais na página ${pageNum}`);
-
-            const transformedResults = localResults.map((result, index) => ({
-                id: `${pageNum}-${index}-${result.place_id || result.title}`,
-                name: result.title || 'Nome não disponível',
-                title: result.title || 'Nome não disponível',
-                endereco: result.address || 'Endereço não disponível',
-                address: result.address || 'Endereço não disponível',
-                telefone: result.phone || 'Telefone não disponível',
-                phone: result.phone || 'Telefone não disponível',
-                rating: result.rating || 0,
-                reviews: result.reviews || 0,
-                website: result.website || null,
-                types: result.type ? (Array.isArray(result.type) ? result.type.join(', ') : result.type) : 'Categoria não disponível',
-                type: result.type || 'Categoria não disponível',
-                place_id: result.place_id || null,
-                gps_coordinates: result.gps_coordinates || null,
-                source: 'API'
-            }));
-
-            let coordinates = data.coordinates || null;
-            if (!coordinates && localResults[0] && localResults[0].gps_coordinates) {
-                coordinates = {
-                    lat: localResults[0].gps_coordinates.latitude,
-                    lng: localResults[0].gps_coordinates.longitude
-                };
-            }
-
-            return {
-                results: transformedResults,
-                coordinates: coordinates,
-                hasMore: localResults.length >= 20,
-                totalResults: data.total_resultados || localResults.length
-            };
         }
 
         // Extract coordinates from Google Maps URL
@@ -1891,18 +2029,10 @@ if (window.self !== window.top) {
                     webhookSendingState.currentIndex = i;
 
                     // Clean and format phone number
-                    let cleanPhone = '';
-                    if (prospect.telefone && prospect.telefone !== 'Telefone não disponível') {
-                        cleanPhone = prospect.telefone.replace(/\D/g, '');
-
-                        if (cleanPhone.length >= 10 && !cleanPhone.startsWith('55')) {
-                            cleanPhone = '55' + cleanPhone;
-                        }
-                    }
+                    const cleanPhone = normalizarTelefone(prospect.telefone) || '';
 
                     // Prepare individual prospect data
                     const webhookData = {
-                        place_id: prospect.place_id || null,
                         nome_empresa: prospect.name,
                         telefone: cleanPhone || 'Não informado',
                         telefone_original: prospect.telefone || 'Não informado',
@@ -1931,7 +2061,12 @@ if (window.self !== window.top) {
                                 prospect_number: i + 1,
                                 total_prospects: prospects.length,
                                 timestamp: new Date().toISOString(),
-                                source: 'Prospecta IA'
+                                source: 'Prospecta IA',
+                                evolution_config: {
+                                    url: WHATSAPP_API_CONFIG.baseUrl || 'Não configurado',
+                                    instancia: WHATSAPP_API_CONFIG.instance || 'Não configurado',
+                                    apikey: WHATSAPP_API_CONFIG.apiKey || 'Não configurado'
+                                }
                             })
                         });
 
@@ -2223,27 +2358,34 @@ if (window.self !== window.top) {
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="alert alert-success">
-                            <i class="bi bi-shield-check me-2"></i>
-                            <strong>Nenhuma chave fica no navegador.</strong> As chaves da SerpAPI e da Evolution API
-                            vivem nas credenciais do n8n. O painel só precisa saber as URLs abaixo.
-                        </div>
-
                         <div class="card mb-4">
                             <div class="card-header">
                                 <h6 class="mb-0">
-                                    <i class="bi bi-search me-2"></i>Endpoint de Busca
+                                    <i class="bi bi-search me-2"></i>Configuração SerpAPI
                                     <span class="badge bg-warning ms-2">Obrigatório</span>
                                 </h6>
                             </div>
                             <div class="card-body">
                                 <div class="mb-3">
-                                    <label class="form-label fw-semibold">URL de busca (n8n)</label>
-                                    <input type="url" class="form-control" id="backend-search-url"
-                                            value="${BACKEND_CONFIG.searchUrl}"
+                                    <label class="form-label fw-semibold">API Key SerpAPI</label>
+                                    <input type="password" class="form-control" id="serpapi-key" 
+                                            value="${SERPAPI_CONFIG.apiKey}" 
+                                            placeholder="Sua chave da SerpAPI">
+                                    <div class="form-text">
+                                        Obtenha sua chave em: <a href="https://serpapi.com" target="_blank">serpapi.com</a>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm mb-3" onclick="togglePasswordVisibility('serpapi-key')">
+                                    <i class="bi bi-eye"></i> Mostrar/Ocultar Chave
+                                </button>
+                                <div class="mb-0">
+                                    <label class="form-label fw-semibold">URL de Busca (ponte n8n)</label>
+                                    <input type="url" class="form-control" id="serpapi-proxy-url"
+                                            value="${SERPAPI_CONFIG.proxyUrl}"
                                             placeholder="https://seu-n8n.com/webhook/prospecta-busca">
                                     <div class="form-text">
-                                        Recebe <code>{termo, pagina, ll}</code> e devolve os resultados do Google Maps.
+                                        O navegador não pode chamar a SerpAPI direto (bloqueio CORS).
+                                        Esta URL é o webhook <code>prospecta-busca</code> do seu n8n, que só repassa a chamada.
                                     </div>
                                 </div>
                             </div>
@@ -2252,24 +2394,36 @@ if (window.self !== window.top) {
                         <div class="card mb-4">
                             <div class="card-header">
                                 <h6 class="mb-0">
-                                    <i class="bi bi-whatsapp me-2"></i>Endpoint de Validação de WhatsApp
+                                    <i class="bi bi-whatsapp me-2"></i>Configuração WhatsApp API
                                     <span class="badge bg-secondary ms-2">Opcional</span>
                                 </h6>
                             </div>
                             <div class="card-body">
                                 <div class="alert alert-info">
                                     <i class="bi bi-info-circle me-2"></i>
-                                    <strong>Configuração opcional:</strong> sem ela os números aparecem como "Não Verificado".
+                                    <strong>Configuração opcional:</strong> Sem a Evolution API, os números de WhatsApp aparecerão como "Não Verificado".
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label fw-semibold">URL de validação (n8n)</label>
-                                    <input type="url" class="form-control" id="backend-whatsapp-url"
-                                            value="${BACKEND_CONFIG.whatsappUrl}"
-                                            placeholder="https://seu-n8n.com/webhook/prospecta-whatsapp">
-                                    <div class="form-text">
-                                        Recebe <code>{telefones: []}</code> e devolve <code>[{number, exists, jid}]</code>.
-                                    </div>
+                                    <label class="form-label fw-semibold">URL Base da API WhatsApp</label>
+                                    <input type="text" class="form-control" id="whatsapp-base-url" 
+                                            value="${WHATSAPP_API_CONFIG.baseUrl}" 
+                                            placeholder="https://evolutionapi.seudominio.com.br">
                                 </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Nome da Instância</label>
+                                    <input type="text" class="form-control" id="whatsapp-instance" 
+                                            value="${WHATSAPP_API_CONFIG.instance}" 
+                                            placeholder="Nome da Instância">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">API Key / Token</label>
+                                    <input type="password" class="form-control" id="whatsapp-api-key" 
+                                            value="${WHATSAPP_API_CONFIG.apiKey}" 
+                                            placeholder="Seu token de autenticação">
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm mb-3" onclick="togglePasswordVisibility('whatsapp-api-key')">
+                                    <i class="bi bi-eye"></i> Mostrar/Ocultar Token
+                                </button>
                             </div>
                         </div>
 
@@ -2309,17 +2463,17 @@ if (window.self !== window.top) {
                             </div>
                             <div class="card-body">
                                 <div class="row g-2">
-                                    <div class="col-4">
+                                    <div class="col-3">
                                         <button type="button" class="btn btn-outline-success w-100" onclick="testSerpAPI()">
-                                            <i class="bi bi-search me-1"></i>Testar Busca
+                                            <i class="bi bi-search me-1"></i>Testar SerpAPI
                                         </button>
                                     </div>
-                                    <div class="col-4">
+                                    <div class="col-3">
                                         <button type="button" class="btn btn-outline-success w-100" onclick="testWhatsAppAPI()">
                                             <i class="bi bi-whatsapp me-1"></i>Testar WhatsApp
                                         </button>
                                     </div>
-                                    <div class="col-4">
+                                    <div class="col-3">
                                         <button type="button" class="btn btn-outline-success w-100" onclick="testWebhook()">
                                             <i class="bi bi-send me-1"></i>Testar Webhook
                                         </button>
@@ -2364,7 +2518,12 @@ if (window.self !== window.top) {
                 prospect_number: 1,
                 total_prospects: 10,
                 timestamp: "2025-01-07T12:00:00Z",
-                source: "Prospecta IA"
+                source: "Prospecta IA",
+                evolution_config: {
+                    url: "https://evolutionapi.exemplo.com.br",
+                    instancia: "minha_instancia",
+                    apikey: "sua_api_key_aqui"
+                }
             };
 
             const modalHtml = `
@@ -2410,11 +2569,19 @@ if (window.self !== window.top) {
 
         // Save all configurations
         function saveAllConfigs() {
-            const searchUrl = document.getElementById('backend-search-url').value.trim();
-            const whatsappUrl = document.getElementById('backend-whatsapp-url').value.trim();
+            const serpApiKey = document.getElementById('serpapi-key').value.trim();
+            const serpApiProxyUrl = document.getElementById('serpapi-proxy-url').value.trim();
+            const baseUrl = document.getElementById('whatsapp-base-url').value.trim();
+            const instance = document.getElementById('whatsapp-instance').value.trim();
+            const whatsappApiKey = document.getElementById('whatsapp-api-key').value.trim();
             const webhookUrl = document.getElementById('webhook-url').value.trim();
 
-            if (!searchUrl) {
+            if (!serpApiKey) {
+                showErrorToast('❌ Por favor, preencha a API Key do SerpAPI (obrigatório).');
+                return;
+            }
+
+            if (!serpApiProxyUrl) {
                 showErrorToast('❌ Por favor, preencha a URL de busca (obrigatório).');
                 return;
             }
@@ -2424,18 +2591,18 @@ if (window.self !== window.top) {
                 return;
             }
 
-            for (const [label, value] of [['busca', searchUrl], ['validação de WhatsApp', whatsappUrl], ['webhook', webhookUrl]]) {
-                if (!value) continue;
-                try {
-                    new URL(value);
-                } catch {
-                    showErrorToast(`❌ URL de ${label} inválida. Use um formato como: https://exemplo.com/webhook`);
-                    return;
-                }
+            // Validate webhook URL
+            try {
+                new URL(webhookUrl);
+            } catch {
+                showErrorToast('❌ URL do webhook inválida. Use um formato como: https://exemplo.com/webhook');
+                return;
             }
 
-            if (!whatsappUrl) {
-                const proceed = confirm('⚠️ URL de validação de WhatsApp não configurada.\n\nSem ela, não será possível validar números.\n\nDeseja continuar mesmo assim?');
+            const hasWhatsAppConfig = baseUrl && instance && whatsappApiKey;
+
+            if (!hasWhatsAppConfig) {
+                const proceed = confirm('⚠️ WhatsApp API não foi configurada completamente.\n\nSem ela, não será possível validar números de WhatsApp.\n\nDeseja continuar mesmo assim?');
 
                 if (!proceed) {
                     return;
@@ -2443,13 +2610,22 @@ if (window.self !== window.top) {
             }
 
             // Save configurations
-            BACKEND_CONFIG.searchUrl = searchUrl;
-            BACKEND_CONFIG.whatsappUrl = whatsappUrl;
+            SERPAPI_CONFIG.apiKey = serpApiKey;
+            SERPAPI_CONFIG.proxyUrl = serpApiProxyUrl;
+            WHATSAPP_API_CONFIG.baseUrl = baseUrl;
+            WHATSAPP_API_CONFIG.instance = instance;
+            WHATSAPP_API_CONFIG.apiKey = whatsappApiKey;
             WEBHOOK_CONFIG.url = webhookUrl;
 
-            localStorage.setItem('backend_config', JSON.stringify({
-                searchUrl: searchUrl,
-                whatsappUrl: whatsappUrl
+            localStorage.setItem('serpapi_config', JSON.stringify({
+                apiKey: serpApiKey,
+                proxyUrl: serpApiProxyUrl
+            }));
+
+            localStorage.setItem('whatsapp_config', JSON.stringify({
+                baseUrl: baseUrl,
+                instance: instance,
+                apiKey: whatsappApiKey
             }));
 
             localStorage.setItem('webhook_config', JSON.stringify({
@@ -2462,32 +2638,20 @@ if (window.self !== window.top) {
             const modal = bootstrap.Modal.getInstance(document.getElementById('configModal'));
             modal.hide();
 
-            if (whatsappUrl) {
+            if (hasWhatsAppConfig) {
                 showSuccessToast('✅ Todas as configurações foram salvas com sucesso!');
             } else {
-                showSuccessToast('✅ Busca e Webhook configurados! Validação de WhatsApp não configurada.');
+                showSuccessToast('✅ SerpAPI e Webhook configurados! WhatsApp API opcional não configurada.');
             }
 
             debugLog('Configurações salvas', {
-                busca: true,
-                whatsapp: !!whatsappUrl,
+                serpapi: true,
+                whatsapp: hasWhatsAppConfig,
                 webhook: !!webhookUrl
             });
         }
 
-        // Feedback visual compartilhado pelos botões de teste
-        function testButtonResult(btn, originalText, ok, message) {
-            btn.innerHTML = `<i class="bi bi-${ok ? 'check' : 'x'}-circle me-1"></i>${ok ? '✅' : '❌'} ${message}`;
-            btn.className = `btn btn-${ok ? 'success' : 'danger'} w-100`;
-
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.className = 'btn btn-outline-success w-100';
-                btn.disabled = false;
-            }, 4000);
-        }
-
-        // Testa o endpoint de busca do n8n (que por sua vez chama a SerpAPI)
+        // Test SerpAPI
         async function testSerpAPI() {
             const testBtn = event.target;
             const originalText = testBtn.innerHTML;
@@ -2496,44 +2660,117 @@ if (window.self !== window.top) {
                 testBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testando...';
                 testBtn.disabled = true;
 
-                const searchUrl = document.getElementById('backend-search-url').value.trim();
-                if (!searchUrl) {
-                    throw new Error('Informe a URL de busca');
+                const serpApiKey = document.getElementById('serpapi-key').value.trim();
+                if (!serpApiKey) {
+                    throw new Error('Por favor, informe a API Key');
                 }
 
-                debugLog('Testando endpoint de busca:', searchUrl);
+                const params = {
+                    engine: 'google_maps',
+                    type: 'search',
+                    q: 'restaurante São Paulo',
+                    api_key: serpApiKey,
+                    hl: 'pt',
+                    gl: 'br'
+                };
+                debugLog('Testando SerpAPI pela ponte do n8n');
 
-                const response = await fetch(searchUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ termo: 'restaurante São Paulo', pagina: 1 })
-                });
+                let testResult = null;
 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                try {
+                    const response = await testSerpAPIWithFetch(params);
+                    testResult = response;
+                } catch (error) {
+                    debugLog('Método fetch falhou:', error.message);
+
+                    try {
+                        testResult = await testSerpAPIKeyOnly(serpApiKey);
+                    } catch (error2) {
+                        throw new Error(`Falha nos testes: ${error2.message}`);
+                    }
                 }
 
-                const data = await response.json();
-                debugLog('Resposta do teste de busca:', data);
-
-                if (data.erro) {
-                    throw new Error(data.erro);
+                if (testResult && testResult.success) {
+                    testBtn.innerHTML = `<i class="bi bi-check-circle me-1"></i>✅ ${testResult.message}`;
+                    testBtn.className = 'btn btn-success w-100';
+                    debugLog('Teste SerpAPI bem-sucedido');
+                } else {
+                    testBtn.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>⚠️ API Key válida';
+                    testBtn.className = 'btn btn-warning w-100';
+                    debugLog('API Key válida mas teste limitado');
                 }
 
-                const total = Array.isArray(data.local_results) ? data.local_results.length : 0;
-                testButtonResult(testBtn, originalText, total > 0, total > 0 ? `${total} resultados` : 'Zero resultados');
+                setTimeout(() => {
+                    testBtn.innerHTML = originalText;
+                    testBtn.className = 'btn btn-outline-success w-100';
+                    testBtn.disabled = false;
+                }, 4000);
 
             } catch (error) {
-                debugLog('Erro no teste de busca:', error);
-                const msg = error.message.includes('Failed to fetch')
-                    ? 'Sem conexão com o n8n'
-                    : error.message;
-                testButtonResult(testBtn, originalText, false, msg);
-                showErrorToast(`Erro no teste de busca: ${msg}`);
+                debugLog('Erro no teste SerpAPI:', error);
+                testBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i>❌ Erro';
+                testBtn.className = 'btn btn-danger w-100';
+
+                setTimeout(() => {
+                    testBtn.innerHTML = originalText;
+                    testBtn.className = 'btn btn-outline-success w-100';
+                    testBtn.disabled = false;
+                }, 4000);
+
+                let errorMessage = error.message;
+                if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
+                    errorMessage = 'Não consegui falar com a ponte do n8n. Confira a URL de busca.';
+                } else if (error.message.includes('Invalid API key')) {
+                    errorMessage = 'API Key inválida. Verifique sua chave no painel SerpAPI.';
+                } else if (error.message.includes('credits')) {
+                    errorMessage = 'Créditos insuficientes na conta SerpAPI.';
+                } else if (error.message.includes('Network')) {
+                    errorMessage = 'Problema de rede. Verifique sua conexão.';
+                }
+
+                alert(`Teste SerpAPI: ${errorMessage}`);
             }
         }
 
-        // Testa o endpoint de validação de WhatsApp do n8n
+        // Testa a busca pela ponte do n8n
+        async function testSerpAPIWithFetch(params) {
+            if (!SERPAPI_CONFIG.proxyUrl) {
+                throw new Error('Configure a URL de busca (n8n) primeiro');
+            }
+
+            const response = await fetch(SERPAPI_CONFIG.proxyUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const serpApiData = await response.json();
+
+            if (serpApiData.error) {
+                throw new Error(`SerpAPI: ${serpApiData.error}`);
+            }
+
+            const total = serpApiData.local_results ? serpApiData.local_results.length : 0;
+            return { success: total > 0, message: `SerpAPI OK (${total} resultados)`, data: serpApiData };
+        }
+
+        // Test only API key validity (simplified)
+        async function testSerpAPIKeyOnly(apiKey) {
+            if (!apiKey || apiKey.length < 32) {
+                throw new Error('Formato de API Key inválido');
+            }
+
+            return {
+                success: false,
+                message: 'Formato válido - teste limitado por CORS'
+            };
+        }
+
+        // Test WhatsApp API
         async function testWhatsAppAPI() {
             const testBtn = event.target;
             const originalText = testBtn.innerHTML;
@@ -2542,35 +2779,86 @@ if (window.self !== window.top) {
                 testBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testando...';
                 testBtn.disabled = true;
 
-                const whatsappUrl = document.getElementById('backend-whatsapp-url').value.trim();
-                if (!whatsappUrl) {
-                    throw new Error('Informe a URL de validação');
+                const baseUrl = document.getElementById('whatsapp-base-url').value.trim();
+                const instance = document.getElementById('whatsapp-instance').value.trim();
+                const apiKey = document.getElementById('whatsapp-api-key').value.trim();
+
+                if (!baseUrl || !instance || !apiKey) {
+                    throw new Error('Por favor, preencha todos os campos obrigatórios');
                 }
 
-                debugLog('Testando endpoint de validação:', whatsappUrl);
+                const url = `${baseUrl}/chat/whatsappNumbers/${instance}`;
 
-                const response = await fetch(whatsappUrl, {
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'apikey': apiKey
+                };
+
+                debugLog('Testando WhatsApp API:', { url, headers: { ...headers, apikey: '***' } });
+
+                const response = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telefones: ['5571999999999'] })
+                    headers: headers,
+                    body: JSON.stringify({
+                        numbers: ['5571999999999']
+                    })
                 });
 
+                debugLog(`Status da resposta WhatsApp test: ${response.status}`);
+
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                    const errorText = await response.text();
+                    debugLog('Erro HTTP WhatsApp test:', { status: response.status, error: errorText });
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
                 const result = await response.json();
-                debugLog('Resposta do teste de validação:', result);
+                debugLog('Resposta do teste WhatsApp:', result);
 
-                const ok = Array.isArray(result) && result.length > 0 && 'exists' in result[0];
-                testButtonResult(testBtn, originalText, ok, ok ? 'API funcionando!' : 'Resposta inesperada');
+                if (Array.isArray(result) && result.length > 0 && result[0].hasOwnProperty('exists')) {
+                    const testResult = result[0];
+                    const hasWhatsApp = testResult.exists === true;
+                    const message = `API funcionando! Teste: ${hasWhatsApp ? 'WhatsApp detectado' : 'Sem WhatsApp'}`;
+
+                    testBtn.innerHTML = `<i class="bi bi-check-circle me-1"></i>✅ ${message}`;
+                    testBtn.className = 'btn btn-success w-100';
+                    debugLog('Teste WhatsApp bem-sucedido');
+                } else {
+                    testBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>✅ API OK';
+                    testBtn.className = 'btn btn-success w-100';
+                    debugLog('API WhatsApp respondendo corretamente');
+                }
+
+                setTimeout(() => {
+                    testBtn.innerHTML = originalText;
+                    testBtn.className = 'btn btn-outline-success w-100';
+                    testBtn.disabled = false;
+                }, 4000);
 
             } catch (error) {
-                debugLog('Erro no teste de validação:', error);
-                const msg = error.message.includes('Failed to fetch')
-                    ? 'Sem conexão com o n8n'
-                    : error.message;
-                testButtonResult(testBtn, originalText, false, msg);
+                debugLog('Erro no teste WhatsApp:', error);
+
+                let errorMessage = error.message;
+                if (error.message.includes('Failed to fetch')) {
+                    errorMessage = 'Erro de conexão - Verifique URL';
+                } else if (error.message.includes('401')) {
+                    errorMessage = 'API Key inválida';
+                } else if (error.message.includes('404')) {
+                    errorMessage = 'Instância não encontrada';
+                } else if (error.message.includes('500')) {
+                    errorMessage = 'Erro interno da API';
+                } else if (error.message.includes('preencha todos')) {
+                    errorMessage = 'Campos obrigatórios vazios';
+                }
+
+                testBtn.innerHTML = `<i class="bi bi-x-circle me-1"></i>❌ ${errorMessage}`;
+                testBtn.className = 'btn btn-danger w-100';
+
+                setTimeout(() => {
+                    testBtn.innerHTML = originalText;
+                    testBtn.className = 'btn btn-outline-success w-100';
+                    testBtn.disabled = false;
+                }, 4000);
             }
         }
 
@@ -2620,7 +2908,12 @@ if (window.self !== window.top) {
                     total_prospects: 1,
                     timestamp: new Date().toISOString(),
                     source: 'Prospecta IA - Teste',
-                    test: true
+                    test: true,
+                    evolution_config: {
+                        url: WHATSAPP_API_CONFIG.baseUrl || 'Não configurado',
+                        instancia: WHATSAPP_API_CONFIG.instance || 'Não configurado',
+                        apikey: WHATSAPP_API_CONFIG.apiKey || 'Não configurado'
+                    }
                 };
 
                 const response = await fetch(webhookUrl, {
@@ -2697,29 +2990,42 @@ if (window.self !== window.top) {
 
         // Load all configurations from localStorage
         function loadAllConfigs() {
-            const savedBackendConfig = localStorage.getItem('backend_config');
-            if (savedBackendConfig) {
+            const savedSerpApiConfig = localStorage.getItem('serpapi_config');
+            if (savedSerpApiConfig) {
                 try {
-                    const config = JSON.parse(savedBackendConfig);
-                    BACKEND_CONFIG.searchUrl = config.searchUrl || BACKEND_CONFIG.searchUrl;
-                    BACKEND_CONFIG.whatsappUrl = config.whatsappUrl || BACKEND_CONFIG.whatsappUrl;
-                    debugLog('Configuração do backend carregada');
+                    const config = JSON.parse(savedSerpApiConfig);
+                    SERPAPI_CONFIG.apiKey = config.apiKey || SERPAPI_CONFIG.apiKey;
+                    SERPAPI_CONFIG.proxyUrl = config.proxyUrl || SERPAPI_CONFIG.proxyUrl;
+                    debugLog('Configuração SerpAPI carregada');
                 } catch (error) {
-                    debugLog('Erro ao carregar configuração do backend:', error);
+                    debugLog('Erro ao carregar configuração SerpAPI:', error);
                 }
             }
 
-            // Limpa chaves antigas que ficavam guardadas no navegador
-            localStorage.removeItem('serpapi_config');
-            localStorage.removeItem('whatsapp_config');
+            const savedWhatsAppConfig = localStorage.getItem('whatsapp_config');
+            if (savedWhatsAppConfig) {
+                try {
+                    const config = JSON.parse(savedWhatsAppConfig);
+                    WHATSAPP_API_CONFIG.baseUrl = config.baseUrl || WHATSAPP_API_CONFIG.baseUrl;
+                    WHATSAPP_API_CONFIG.instance = config.instance || WHATSAPP_API_CONFIG.instance;
+                    WHATSAPP_API_CONFIG.apiKey = config.apiKey || WHATSAPP_API_CONFIG.apiKey;
+                    debugLog('Configuração WhatsApp carregada');
+                } catch (error) {
+                    debugLog('Erro ao carregar configuração WhatsApp:', error);
+                }
+            }
 
             // Load webhook configuration
             loadWebhookConfig();
 
             debugLog('Configurações atuais:', {
-                busca: BACKEND_CONFIG.searchUrl || 'Não configurado',
-                whatsapp: BACKEND_CONFIG.whatsappUrl || 'Não configurado',
-                webhook: WEBHOOK_CONFIG.url || 'Não configurado',
+                serpapi: { hasApiKey: !!SERPAPI_CONFIG.apiKey },
+                whatsapp: {
+                    hasBaseUrl: !!WHATSAPP_API_CONFIG.baseUrl,
+                    hasInstance: !!WHATSAPP_API_CONFIG.instance,
+                    hasApiKey: !!WHATSAPP_API_CONFIG.apiKey
+                },
+                webhook: { url: WEBHOOK_CONFIG.url || 'Não configurado' },
                 theme: localStorage.getItem('prospecta_ia_theme') || 'dark'
             });
 
