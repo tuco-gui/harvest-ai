@@ -93,8 +93,13 @@ e reimporte. Editar o HTML direto no n8n faz o repo e a produção divergirem.
 
 ## Detalhes que custam caro quando esquecidos
 
-- **`type=search` é obrigatório** na SerpAPI com `engine=google_maps`. Sem ele a API
-  devolve erro e a busca volta vazia sem dizer por quê.
+- **Não chame a SerpAPI do navegador.** A versão anterior do painel fazia isso através de
+  proxies CORS públicos (`api.codetabs.com`, `api.allorigins.win`,
+  `cors-anywhere.herokuapp.com`) — os três saíram do ar, e a busca passou a falhar
+  inteira. De quebra, a chave viajava dentro da URL para um servidor de terceiro.
+  Por isso a busca vive no n8n.
+- **`type=search`**: a documentação lista como obrigatório no `engine=google_maps`, mas
+  na prática o default já é `search` e a chamada funciona sem ele. Mandamos mesmo assim.
 - **Paginação é de 20 em 20** (`start=0,20,40…`). O parâmetro `num` é ignorado nesse engine.
 - **Cada página de busca gasta 1 crédito** da SerpAPI. `prospecta_buscas` registra todas.
 - **Lead sem `place_id` não é gravado** na busca — sem ele não há como deduplicar.

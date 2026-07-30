@@ -799,7 +799,7 @@
     },
     {
       "parameters": {
-        "content": "## Busca (SerpAPI)\\nA chave fica na credencial **SerpAPI** (Query Auth, parâmetro `api_key`).\\n`type=search` é obrigatório; paginação de 20 em 20.",
+        "content": "## Busca (SerpAPI)\\nA chave fica na credencial **SerpAPI** (Query Auth, parâmetro `api_key`).\\nPaginação de 20 em 20 — `num` é ignorado neste engine.\\n\\nNão mover esta chamada para o painel: os proxies CORS públicos que a versão antiga usava saíram do ar e derrubaram a busca.",
         "height": 260,
         "width": 460,
         "color": 4
