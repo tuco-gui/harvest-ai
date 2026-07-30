@@ -97,3 +97,28 @@ create index if not exists prospecta_mensagens_lead_idx on public.prospecta_mens
 alter table public.prospecta_buscas    enable row level security;
 alter table public.prospecta_leads     enable row level security;
 alter table public.prospecta_mensagens enable row level security;
+
+-- GRANTs explícitos para a service_role (o role que o n8n usa).
+-- Normalmente os ALTER DEFAULT PRIVILEGES do Supabase já cobrem isso; explicitar
+-- deixa o script auto-contido e é idempotente.
+-- anon e authenticated não recebem nada de propósito: o painel não fala com o banco.
+grant usage on schema public to service_role;
+
+grant all privileges on public.prospecta_buscas    to service_role;
+grant all privileges on public.prospecta_leads     to service_role;
+grant all privileges on public.prospecta_mensagens to service_role;
+
+grant usage, select on sequence public.prospecta_buscas_id_seq    to service_role;
+grant usage, select on sequence public.prospecta_leads_id_seq     to service_role;
+grant usage, select on sequence public.prospecta_mensagens_id_seq to service_role;
+
+-- Pede ao PostgREST para recarregar o cache de schema.
+--
+-- ATENÇÃO — em Supabase self-hosted isso pode não bastar. Se o container do
+-- PostgREST não estiver ouvindo o canal, a tabela nova fica num estado
+-- traiçoeiro: SELECT funciona normalmente, mas todo INSERT/UPDATE/DELETE
+-- devolve `404 {}` — sem mensagem de erro, como se a tabela não existisse.
+-- Sintoma de confirmação: GET /rest/v1/ (OpenAPI) não lista a tabela.
+-- Solução: reiniciar o serviço rest:
+--     docker restart supabase-rest        # ou: docker compose restart rest
+notify pgrst, 'reload schema';

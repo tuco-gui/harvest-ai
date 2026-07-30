@@ -43,6 +43,11 @@ Rode `sql/001_schema.sql` no SQL Editor do Supabase. Cria:
 
 RLS fica ligado sem policy: só a `service_role` (usada pelo n8n) enxerga os dados.
 
+> **Supabase self-hosted:** depois de criar as tabelas, reinicie o PostgREST
+> (`docker restart supabase-rest`). Sem isso o cache de schema fica desatualizado e
+> a tabela entra num estado enganoso — `SELECT` funciona, mas todo `INSERT` devolve
+> `404 {}` sem mensagem de erro. Para confirmar: `GET /rest/v1/` não lista a tabela.
+
 ### 2. Credenciais no n8n
 
 Crie estas quatro antes de importar o workflow:
