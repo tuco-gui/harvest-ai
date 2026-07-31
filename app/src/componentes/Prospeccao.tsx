@@ -21,14 +21,14 @@ type Lead = {
 };
 
 type Estado = 'parado' | 'correndo' | 'pausado';
+type PainelExtra = 'mapa' | 'planilha' | 'manual' | null;
 
 const ZOOM_DO_RAIO: Record<number, number> = { 1: 14, 5: 12, 10: 11, 25: 10 };
 const CENTRO_PADRAO: [number, number] = [-15.79, -47.88];
 
-const INTERVALO_MIN = 30;
-const INTERVALO_MAX = 60;
-
-export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean }) {
+export default function Prospeccao({
+  podeConfigurar, intervaloMin = 30, intervaloMax = 60,
+}: { podeConfigurar: boolean; intervaloMin?: number; intervaloMax?: number }) {
   const [termo, setTermo] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
@@ -36,6 +36,7 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
   const [erro, setErro] = useState<string | null>(null);
   const [jaBuscou, setJaBuscou] = useState(false);
   const [vista, setVista] = useState<'lista' | 'mapa'>('lista');
+  const [painelExtra, setPainelExtra] = useState<PainelExtra>(null);
   const [regiao, setRegiao] = useState<{ lat: number; lng: number; km: number } | null>(null);
   const mapaRef = useRef<any>(null);
   const camadas = useRef<any[]>([]);
@@ -52,6 +53,7 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
     [leads, escolhidos],
   );
   const comZap = leads.filter((l) => l.tem_whatsapp === true).length;
+  const mostrarMapa = painelExtra === 'mapa' || (leads.length > 0 && vista === 'mapa');
 
   async function buscar(e?: React.FormEvent) {
     e?.preventDefault();
@@ -79,8 +81,10 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
       } else {
         setLeads(dados.leads ?? []);
         setEscolhidos(new Set());
+        setVista(regiao ? 'mapa' : 'lista');
       }
       setJaBuscou(true);
+      setPainelExtra(null);
     } catch {
       setErro('Sem conexão com o servidor.');
     } finally {
@@ -101,12 +105,21 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
   const soZap = () =>
     setEscolhidos(new Set(leads.filter((l) => l.tem_whatsapp === true).map(chave)));
 
+  function limparLista() {
+    if (leads.length && !confirm('Limpar a lista atual? O que já foi disparado continua registrado.')) return;
+    setLeads([]);
+    setEscolhidos(new Set());
+    setJaBuscou(false);
+    setErro(null);
+    setVista('lista');
+  }
+
   /* ------------------------------------------------------- disparo */
   // O laço vive aqui, no navegador: parar é simplesmente não chamar de novo.
   const parada = useRef<{ parar: boolean; pausado: boolean }>({ parar: false, pausado: false });
 
   function proximoIntervalo() {
-    return Math.floor(Math.random() * (INTERVALO_MAX - INTERVALO_MIN + 1)) + INTERVALO_MIN;
+    return Math.floor(Math.random() * (intervaloMax - intervaloMin + 1)) + intervaloMin;
   }
   const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -188,7 +201,7 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
       'Pet Shop Exemplo,5571988887777,"Rua da Bahia 50, Salvador - BA",,Pet Shop,,,',
     ].join('\n');
     // BOM para o Excel abrir a acentuação certa
-    const url = URL.createObjectURL(new Blob(['\ufeff' + linhas], { type: 'text/csv;charset=utf-8;' }));
+    const url = URL.createObjectURL(new Blob(['﻿' + linhas], { type: 'text/csv;charset=utf-8;' }));
     const a = document.createElement('a');
     a.href = url; a.download = 'modelo-harvest.csv'; a.click();
     URL.revokeObjectURL(url);
@@ -200,6 +213,17 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
     if (d.length < 10) return null;
     if (!d.startsWith('55')) d = '55' + d;
     return d;
+  }
+
+  async function validarLeva(telefones: (string | null)[]): Promise<Record<string, boolean>> {
+    try {
+      const r = await fetch('/api/validar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefones }),
+      });
+      if (r.ok) return (await r.json()).validacao ?? {};
+    } catch { /* sem validação os leads ficam como não verificados */ }
+    return {};
   }
 
   async function importar(e: React.ChangeEvent<HTMLInputElement>) {
@@ -251,26 +275,78 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
           } as Lead;
         }).filter((l) => l.telefone);
 
-        // valida o WhatsApp da leva de uma vez só
-        let validacao: Record<string, boolean> = {};
-        try {
-          const r = await fetch('/api/validar', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ telefones: importados.map((l) => l.telefone) }),
-          });
-          if (r.ok) validacao = (await r.json()).validacao ?? {};
-        } catch { /* sem validação os leads ficam como não verificados */ }
+        const validacao = await validarLeva(importados.map((l) => l.telefone));
 
         setLeads(importados.map((l) => ({ ...l, tem_whatsapp: l.telefone ? (validacao[l.telefone] ?? null) : null })));
         setEscolhidos(new Set());
         setJaBuscou(true);
         setVista('lista');
+        setPainelExtra(null);
         setImportando(false);
         if (!importados.length) setErro('Nenhuma linha com telefone válido. Confira a coluna de telefone.');
       },
       error: () => { setImportando(false); setErro('Não consegui ler o arquivo. Salve como CSV UTF-8.'); },
     });
     e.target.value = '';
+  }
+
+  /* -------------------------------------------------- entrada manual */
+  const [manualTexto, setManualTexto] = useState('');
+  const [adicionandoManual, setAdicionandoManual] = useState(false);
+
+  async function adicionarManual() {
+    const linhas = manualTexto.split('\n').map((l) => l.trim()).filter(Boolean);
+    const candidatos = linhas.map((linha) => {
+      const partes = linha.split(',').map((p) => p.trim());
+      const [nomeBruto, telBruto] = partes.length > 1 ? partes : ['', partes[0]];
+      return { empresa: nomeBruto || 'Contato manual', telOriginal: telBruto, telefone: normalizar(telBruto) };
+    }).filter((c) => c.telefone);
+
+    if (!candidatos.length) { setErro('Nenhum telefone válido. Um por linha, com DDD.'); return; }
+
+    setAdicionandoManual(true);
+    setErro(null);
+    const validacao = await validarLeva(candidatos.map((c) => c.telefone));
+
+    const novos: Lead[] = candidatos.map((c) => ({
+      place_id: null, empresa: c.empresa, telefone: c.telefone, telefone_original: c.telOriginal,
+      endereco: null, especialidades: 'Adicionado manualmente', rating: null, reviews: null,
+      site: null, latitude: null, longitude: null,
+      tem_whatsapp: c.telefone ? (validacao[c.telefone] ?? null) : null, dados_extras: null,
+    }));
+
+    setLeads((antes) => {
+      const existentes = new Set(antes.map((l) => l.telefone));
+      return [...antes, ...novos.filter((n) => !existentes.has(n.telefone))];
+    });
+    setJaBuscou(true);
+    setVista('lista');
+    setManualTexto('');
+    setAdicionandoManual(false);
+    setPainelExtra(null);
+  }
+
+  /* ---------------------------------------------------------- o CEP */
+  const [cepTexto, setCepTexto] = useState('');
+  const [localizandoCep, setLocalizandoCep] = useState(false);
+
+  async function localizarCep() {
+    const limpo = cepTexto.replace(/\D/g, '');
+    if (limpo.length !== 8) { setErro('CEP precisa ter 8 dígitos.'); return; }
+
+    setLocalizandoCep(true);
+    setErro(null);
+    try {
+      const r = await fetch(`/api/cep?cep=${limpo}`);
+      const d = await r.json();
+      if (!r.ok) { setErro(d.erro ?? 'CEP não encontrado.'); return; }
+      setRegiao((antes) => ({ lat: d.lat, lng: d.lng, km: antes?.km ?? 5 }));
+      mapaRef.current?.setView([d.lat, d.lng], 13);
+    } catch {
+      setErro('Não consegui localizar agora.');
+    } finally {
+      setLocalizandoCep(false);
+    }
   }
 
   /* --------------------------------------------------------- o mapa */
@@ -281,15 +357,15 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
   };
 
   useEffect(() => {
-    if (vista !== 'mapa') return;
+    if (!mostrarMapa) return;
     const L = typeof window !== 'undefined' ? window.L : null;
     if (!L) return;
 
     if (!mapaRef.current) {
       const centro = leads.find((l) => l.latitude && l.longitude);
       mapaRef.current = L.map('mapa').setView(
-        centro ? [centro.latitude, centro.longitude] : CENTRO_PADRAO,
-        centro ? 13 : 4,
+        centro ? [centro.latitude, centro.longitude] : (regiao ? [regiao.lat, regiao.lng] : CENTRO_PADRAO),
+        centro ? 13 : regiao ? 12 : 4,
       );
       L.tileLayer(
         `https://{s}.basemaps.cartocdn.com/${ehEscuro() ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`,
@@ -300,13 +376,13 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
       );
     }
     setTimeout(() => mapaRef.current?.invalidateSize(), 60);
-  }, [vista, leads]);
+  }, [mostrarMapa, leads]);
 
   // redesenha pontos e círculo quando os leads ou a região mudam
   useEffect(() => {
     const L = typeof window !== 'undefined' ? window.L : null;
     const mapa = mapaRef.current;
-    if (!L || !mapa || vista !== 'mapa') return;
+    if (!L || !mapa || !mostrarMapa) return;
 
     camadas.current.forEach((c) => mapa.removeLayer(c));
     camadas.current = [];
@@ -332,10 +408,10 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
       }).addTo(mapa);
       camadas.current.push(pino, circulo);
     }
-  }, [leads, regiao, vista]);
+  }, [leads, regiao, mostrarMapa]);
 
   const naFila = selecionados.slice(enviados);
-  const minutos = Math.max(1, Math.round((naFila.length * (INTERVALO_MIN + INTERVALO_MAX)) / 2 / 60));
+  const minutos = Math.max(1, Math.round((naFila.length * (intervaloMin + intervaloMax)) / 2 / 60));
   const disparando = estado !== 'parado';
 
   return (
@@ -364,20 +440,81 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
           busca consome um crédito.
         </p>
 
-        <div className="importar">
-          <input type="file" accept=".csv,text/csv" onChange={importar} disabled={importando}
-                 aria-label="Arquivo CSV com a lista" />
-          <p className="ajuda">
-            {importando
-              ? 'Lendo a planilha e conferindo os WhatsApps…'
-              : <>Ou importe sua lista. Reconhece colunas como nome, telefone, endereço, site e
-                  categoria; o resto vira contexto para a IA.{' '}
-                  <a href="#" onClick={(e) => { e.preventDefault(); baixarModelo(); }}>Baixar modelo</a>.
-                  Só CSV — no Excel, salve como CSV UTF-8.</>}
-          </p>
+        <div className="modos" style={{ marginTop: 4 }}>
+          <button type="button" aria-pressed={painelExtra === 'mapa'}
+                  onClick={() => setPainelExtra((p) => (p === 'mapa' ? null : 'mapa'))}>
+            Localizar no mapa
+          </button>
+          <button type="button" aria-pressed={painelExtra === 'planilha'}
+                  onClick={() => setPainelExtra((p) => (p === 'planilha' ? null : 'planilha'))}>
+            Importar planilha
+          </button>
+          <button type="button" aria-pressed={painelExtra === 'manual'}
+                  onClick={() => setPainelExtra((p) => (p === 'manual' ? null : 'manual'))}>
+            Adicionar manualmente
+          </button>
         </div>
 
-        {regiao && (
+        {painelExtra === 'planilha' && (
+          <div className="importar" style={{ marginTop: 14 }}>
+            <input type="file" accept=".csv,text/csv" onChange={importar} disabled={importando}
+                   aria-label="Arquivo CSV com a lista" />
+            <p className="ajuda">
+              {importando
+                ? 'Lendo a planilha e conferindo os WhatsApps…'
+                : <>Reconhece colunas como nome, telefone, endereço, site e categoria; o resto vira
+                    contexto para a IA. <a href="#" onClick={(e) => { e.preventDefault(); baixarModelo(); }}>Baixar modelo</a>.
+                    Só CSV — no Excel, salve como CSV UTF-8.</>}
+            </p>
+          </div>
+        )}
+
+        {painelExtra === 'manual' && (
+          <div className="cartaocfg" style={{ marginTop: 14 }}>
+            <div className="grupo">
+              <label className="label" htmlFor="manual">Um contato por linha</label>
+              <textarea id="manual" rows={5} value={manualTexto} onChange={(e) => setManualTexto(e.target.value)}
+                        placeholder={'11999998888\nMaria, 11988887777'} />
+              <p className="ajuda">Só o telefone, ou "nome, telefone". DDD sempre.</p>
+            </div>
+            <button className="salvar" type="button" disabled={adicionandoManual || !manualTexto.trim()}
+                    onClick={adicionarManual}>
+              {adicionandoManual ? 'Adicionando…' : 'Adicionar à lista'}
+            </button>
+          </div>
+        )}
+
+        {mostrarMapa && (
+          <div style={{ marginTop: 14 }}>
+            <div className="raios" role="group" aria-label="Raio da busca">
+              {[1, 5, 10, 25].map((km) => (
+                <button key={km} type="button"
+                        aria-pressed={(regiao?.km ?? 5) === km}
+                        onClick={() => setRegiao((r) => (r ? { ...r, km } : { lat: CENTRO_PADRAO[0], lng: CENTRO_PADRAO[1], km }))}>
+                  {km} km
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10 }}>
+              <div className="grupo" style={{ marginBottom: 0, maxWidth: 200 }}>
+                <label className="label" htmlFor="cep">Ou informe um CEP</label>
+                <input id="cep" value={cepTexto} onChange={(e) => setCepTexto(e.target.value)}
+                       placeholder="18600-000" />
+              </div>
+              <button type="button" className="salvar" disabled={localizandoCep || !cepTexto.trim()}
+                      onClick={localizarCep}>
+                {localizandoCep ? 'Localizando…' : 'Localizar'}
+              </button>
+            </div>
+            <div id="mapa" />
+            <p className="mapa-ajuda">
+              Clique no mapa para marcar de onde buscar, escolha o raio, e digite o ramo ali em cima
+              para buscar. Pontos verdes são empresas com WhatsApp.
+            </p>
+          </div>
+        )}
+
+        {regiao && !mostrarMapa && (
           <div className="regiao">
             <span>Buscando em <b>{regiao.km} km</b> ao redor do ponto marcado</span>
             <button onClick={() => setRegiao(null)} aria-label="Remover região">×</button>
@@ -410,6 +547,8 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
                 <button type="button" onClick={nenhuma}>Limpar seleção</button>
                 <div className="sep" />
                 <button type="button" onClick={soZap}>Só com WhatsApp</button>
+                <div className="sep" />
+                <button type="button" onClick={limparLista}>Limpar lista</button>
               </div>
               <div className="modos">
                 <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>Lista</button>
@@ -461,22 +600,6 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
                 );
               })}
             </ul>
-            <div hidden={vista !== 'mapa'}>
-              <div className="raios" role="group" aria-label="Raio da busca">
-                {[1, 5, 10, 25].map((km) => (
-                  <button key={km} type="button"
-                          aria-pressed={(regiao?.km ?? 5) === km}
-                          onClick={() => setRegiao((r) => (r ? { ...r, km } : r))}>
-                    {km} km
-                  </button>
-                ))}
-              </div>
-              <div id="mapa" />
-              <p className="mapa-ajuda">
-                Clique no mapa para marcar de onde buscar e busque de novo. Pontos verdes são
-                empresas com WhatsApp.
-              </p>
-            </div>
           </>
         )}
 
@@ -486,7 +609,8 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
 
         {!jaBuscou && !erro && (
           <p className="vazio">
-            Busque um ramo e uma cidade para começar.
+            Busque um ramo e uma cidade para começar — ou localize no mapa, importe uma planilha, ou
+            adicione números manualmente, ali em cima.
             {podeConfigurar && ' As chaves ficam em Configurações.'}
           </p>
         )}
@@ -499,7 +623,7 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
           <span className="label">
             {disparando ? `Disparando ${Math.min(enviados + 1, selecionados.length)} de ${selecionados.length}` : 'Fila'}
           </span>
-          {!disparando && <span className="label">{INTERVALO_MIN}–{INTERVALO_MAX}s</span>}
+          {!disparando && <span className="label">{intervaloMin}–{intervaloMax}s</span>}
         </div>
 
         <div className="relogio">
@@ -513,7 +637,7 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
         </div>
 
         <div className="pulso">
-          <i style={{ width: disparando ? `${(restam / INTERVALO_MAX) * 100}%` : '0%' }} />
+          <i style={{ width: disparando ? `${(restam / intervaloMax) * 100}%` : '0%' }} />
         </div>
 
         <ul className="fila">

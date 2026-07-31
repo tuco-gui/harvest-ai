@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 type Conta = { id: string; nome: string; slug: string; ativo: boolean; criado_em: string };
 type Perfil = { id: string; nome: string | null; email: string | null; papel: string; conta_id: string | null };
+type Smtp = { host: string; porta: number; usuario: string; remetente: string; temSenha: boolean };
 
 const NOME_PAPEL: Record<string, string> = {
   super_admin: 'Super admin',
@@ -13,8 +14,8 @@ const NOME_PAPEL: Record<string, string> = {
 };
 
 export default function Contas({
-  contas, perfis, contaAtiva, meuId,
-}: { contas: Conta[]; perfis: Perfil[]; contaAtiva: string | null; meuId: string }) {
+  contas, perfis, contaAtiva, meuId, smtp,
+}: { contas: Conta[]; perfis: Perfil[]; contaAtiva: string | null; meuId: string; smtp: Smtp }) {
   const router = useRouter();
 
   const [nomeConta, setNomeConta] = useState('');
@@ -27,7 +28,16 @@ export default function Contas({
   const [criandoUsuario, setCriandoUsuario] = useState(false);
 
   const [aviso, setAviso] = useState<string | null>(null);
-  const [senhaNova, setSenhaNova] = useState<{ email: string; senha: string } | null>(null);
+  const [senhaNova, setSenhaNova] = useState<{ email: string; senha: string; emailEnviado?: boolean } | null>(null);
+
+  const [smtpHost, setSmtpHost] = useState(smtp.host);
+  const [smtpPorta, setSmtpPorta] = useState(smtp.porta);
+  const [smtpUsuario, setSmtpUsuario] = useState(smtp.usuario);
+  const [smtpSenha, setSmtpSenha] = useState('');
+  const [smtpRemetente, setSmtpRemetente] = useState(smtp.remetente);
+  const [salvandoSmtp, setSalvandoSmtp] = useState(false);
+  const [testandoSmtp, setTestandoSmtp] = useState(false);
+  const [recadoSmtp, setRecadoSmtp] = useState<string | null>(null);
 
   async function criarConta(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +50,34 @@ export default function Contas({
     setCriandoConta(false);
     if (!r.ok) { setAviso(d.erro); return; }
     setNomeConta('');
+    router.refresh();
+  }
+
+  async function editarConta(c: Conta) {
+    const novo = prompt('Novo nome da empresa:', c.nome);
+    if (!novo || !novo.trim() || novo.trim() === c.nome) return;
+    setAviso(null);
+    const r = await fetch('/api/contas', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: c.id, nome: novo.trim() }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setAviso(d.erro); return; }
+    router.refresh();
+  }
+
+  async function excluirConta(c: Conta) {
+    const nUsuarios = perfis.filter((p) => p.conta_id === c.id).length;
+    if (!confirm(
+      `Excluir ${c.nome}? Isso apaga ${nUsuarios} usuário(s), leads, mensagens e configurações dessa conta. Não tem como desfazer.`,
+    )) return;
+    setAviso(null);
+    const r = await fetch('/api/contas', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: c.id }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setAviso(d.erro); return; }
     router.refresh();
   }
 
@@ -60,7 +98,7 @@ export default function Contas({
     setCriandoUsuario(false);
     if (!r.ok) { setAviso(d.erro); return; }
 
-    setSenhaNova({ email: d.email, senha: d.senha });
+    setSenhaNova({ email: d.email, senha: d.senha, emailEnviado: d.emailEnviado });
     setNome(''); setEmail('');
     router.refresh();
   }
@@ -85,7 +123,7 @@ export default function Contas({
     });
     const d = await r.json();
     if (!r.ok) { setAviso(d.erro); return; }
-    setSenhaNova({ email: d.email, senha: d.senha });
+    setSenhaNova({ email: d.email, senha: d.senha, emailEnviado: d.emailEnviado });
   }
 
   async function trabalharEm(id: string) {
@@ -94,6 +132,30 @@ export default function Contas({
       body: JSON.stringify({ conta_id: id }),
     });
     router.refresh();
+  }
+
+  async function salvarSmtp(e: React.FormEvent) {
+    e.preventDefault();
+    setRecadoSmtp(null); setSalvandoSmtp(true);
+    const r = await fetch('/api/sistema/smtp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        smtp_host: smtpHost, smtp_porta: smtpPorta, smtp_usuario: smtpUsuario,
+        smtp_senha: smtpSenha || undefined, smtp_remetente: smtpRemetente,
+      }),
+    });
+    const d = await r.json();
+    setSalvandoSmtp(false);
+    setRecadoSmtp(r.ok ? 'Configuração salva.' : d.erro);
+    if (r.ok) { setSmtpSenha(''); router.refresh(); }
+  }
+
+  async function testarSmtp() {
+    setRecadoSmtp(null); setTestandoSmtp(true);
+    const r = await fetch('/api/sistema/smtp', { method: 'PUT' });
+    const d = await r.json();
+    setTestandoSmtp(false);
+    setRecadoSmtp(r.ok ? d.recado : d.erro);
   }
 
   const equipe = perfis.filter((p) => p.papel === 'super_admin');
@@ -130,6 +192,8 @@ export default function Contas({
                     {contaAtiva !== c.id && (
                       <button onClick={() => trabalharEm(c.id)}>Trabalhar nesta conta</button>
                     )}
+                    <button onClick={() => editarConta(c)}>Editar</button>
+                    <button onClick={() => excluirConta(c)}>Excluir</button>
                   </td>
                 </tr>
               );
@@ -157,10 +221,10 @@ export default function Contas({
       <section className="secao">
         <h2>Usuários</h2>
         <p className="resumo-secao">
-          O operador busca e dispara. O administrador também mexe em chaves e mensagens.
-          Não há envio de e-mail configurado ainda: ao criar um usuário ou gerar uma senha nova,
-          passe os dados para a pessoa por fora (WhatsApp, por exemplo). Ela troca a senha depois,
-          pelo próprio perfil.
+          O operador busca e dispara. O administrador também mexe em chaves e mensagens.{' '}
+          {smtp.temSenha
+            ? 'Com o SMTP configurado abaixo, o acesso e as senhas novas já saem por e-mail automaticamente.'
+            : 'Sem SMTP configurado ainda: ao criar um usuário ou gerar uma senha nova, passe os dados por fora (WhatsApp, por exemplo). A senha inicial é sempre "NomeDaEmpresa1234" — a pessoa troca no primeiro login.'}
         </p>
 
         {contas.map((c) => {
@@ -211,7 +275,9 @@ export default function Contas({
           <div className="senha-nova" style={{ marginTop: 22 }}>
             Passe estes dados para <b>{senhaNova.email}</b>: <code>{senhaNova.senha}</code>
             <br />
-            Esta senha aparece uma vez só e não fica guardada. Anote agora.
+            {senhaNova.emailEnviado
+              ? 'Também mandei por e-mail para essa pessoa.'
+              : 'Esta senha aparece uma vez só e não fica guardada. Anote agora.'}
           </div>
         )}
 
@@ -252,6 +318,54 @@ export default function Contas({
         </form>
 
         {aviso && <p className="erro" style={{ marginTop: 16 }}>{aviso}</p>}
+      </section>
+
+      <section className="secao">
+        <h2>E-mail do sistema (SMTP)</h2>
+        <p className="resumo-secao">
+          Um servidor de e-mail só, para o Harvest AI inteiro — não é por conta de cliente. Assim
+          que estiver salvo e testado, convites e senhas novas passam a sair por e-mail sozinhos.
+        </p>
+        <form className="cartaocfg" onSubmit={salvarSmtp}>
+          <div className="linha-form">
+            <div className="grupo">
+              <label className="label" htmlFor="sh">Host</label>
+              <input id="sh" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)}
+                     placeholder="smtp.seudominio.com.br" />
+            </div>
+            <div className="grupo" style={{ maxWidth: 120 }}>
+              <label className="label" htmlFor="sp">Porta</label>
+              <input id="sp" type="number" value={smtpPorta}
+                     onChange={(e) => setSmtpPorta(Number(e.target.value))} />
+            </div>
+            <div className="grupo">
+              <label className="label" htmlFor="su">Usuário</label>
+              <input id="su" value={smtpUsuario} onChange={(e) => setSmtpUsuario(e.target.value)} />
+            </div>
+          </div>
+          <div className="linha-form">
+            <div className="grupo">
+              <label className="label" htmlFor="ss">Senha</label>
+              <input id="ss" type="password" value={smtpSenha} onChange={(e) => setSmtpSenha(e.target.value)}
+                     placeholder={smtp.temSenha ? '•••••••• já cadastrada' : 'cole a senha aqui'} />
+            </div>
+            <div className="grupo">
+              <label className="label" htmlFor="sr">Remetente (opcional)</label>
+              <input id="sr" value={smtpRemetente} onChange={(e) => setSmtpRemetente(e.target.value)}
+                     placeholder="Harvest AI <naoresponda@figueiramarketing.com.br>" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="salvar" disabled={salvandoSmtp}>
+              {salvandoSmtp ? 'Salvando…' : 'Salvar SMTP'}
+            </button>
+            <button type="button" className="salvar" disabled={testandoSmtp || !smtp.temSenha}
+                    onClick={testarSmtp} style={{ background: 'transparent', border: '1px solid var(--rule-2)', color: 'var(--ink)' }}>
+              {testandoSmtp ? 'Testando…' : 'Enviar teste para mim'}
+            </button>
+          </div>
+          {recadoSmtp && <p className="ajuda" style={{ marginTop: 10 }}>{recadoSmtp}</p>}
+        </form>
       </section>
     </div>
   );

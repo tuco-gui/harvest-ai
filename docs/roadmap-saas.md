@@ -7,9 +7,10 @@ O painel que está em produção hoje (`/webhook/prospecta`) **continua no ar e
 intocado** durante todo o percurso. A migração acontece só no fim, quando o
 novo estiver validado.
 
-> **Onde estamos (31/07/2026):** Fases 0 a 5 entregues e em produção em
-> `harvest.figueiramarketing.com.br`. O que falta está na seção
-> **O que vem agora**, no fim deste documento — comece por lá.
+> **Onde estamos (31/07/2026):** Fases 0 a 5 e 8b entregues. Falta um restart
+> do serviço `rest` no Supabase para a leva mais recente (Fase 8b) funcionar
+> de verdade em produção — ver o aviso no topo do `ESTADO.md`. O que falta de
+> feature está na seção **O que vem agora**, no fim deste documento.
 
 ---
 
@@ -226,11 +227,36 @@ webhook pertence a qual conta.
 
 ---
 
-### Fase 8 — Os pendentes menores
+### ✅ Fase 8b — Perfil, senha provisória, SMTP, contas e prospecção por modos
+
+Entregue em 31/07/2026, fora de ordem porque resolvia dor imediata (usuário
+convidado sem conseguir entrar, sem jeito de excluir uma conta de teste).
+
+- Senha provisória previsível (`NomeDaEmpresa1234`) em vez de aleatória, com
+  troca obrigatória no primeiro login — mínimo 8, maiúscula, minúscula,
+  número, caractere especial
+- SMTP configurável pela tela (Contas → só super admin), com teste; convite e
+  reset de senha saem por e-mail sozinhos quando configurado
+- Perfil (`/perfil`): foto, nome, telefone, e-mail, senha — para qualquer papel
+- Contas: editar (renomear) e excluir, com os usuários do Auth removidos junto
+- Prospecção: mapa disponível **antes** da busca (clique ou CEP via ViaCEP +
+  Nominatim), aba de importar planilha, aba de adicionar contato manualmente,
+  botão "Limpar lista"
+- Corrigido: o intervalo de envio configurado agora é o que o disparo usa de
+  verdade (antes ficava sempre em 30–60s fixo, ignorando o preset escolhido)
+
+**Não fiz**, por ficar fora do pedido direto: um dropdown de verdade no menu
+"Prospecção" do topo (virou abas dentro da página — mesmo resultado, menos
+mexida) e recuperação de senha 100% self-service por link (o "gerar nova
+senha" do admin já cobre o caso, e um link de recuperação é mais fácil de
+montar agora que o SMTP existe, se quiser depois).
+
+---
+
+### Fase 9 — Os pendentes menores
 
 - **Paginação da busca** — só traz 20; a rota já aceita `pagina`, falta o botão. **P**
 - **Consumo por conta** — `prospecta_buscas` já registra tudo, falta a tela. **P**
-- **Esqueci minha senha** — depende de SMTP no GoTrue. **P**
 - **Enriquecimento** — ver `docs/enriquecimento.md`. **G**
 
 ---
@@ -243,12 +269,14 @@ cliente isso estoura em dias. Duas saídas: cada cliente traz a própria chave
 buscas. Isso é decisão comercial e **continua em aberto** — precisa estar
 resolvida antes do segundo cliente.
 
-**PostgREST self-hosted.** Toda tabela nova exige reiniciar o serviço `rest`,
-senão `SELECT` funciona e `INSERT` devolve 404 mudo. Já documentado em
-`sql/001_schema.sql`.
+**PostgREST self-hosted.** Toda tabela ou coluna nova exige reiniciar o
+serviço `rest` de verdade — `SELECT` funciona na hora, `INSERT`/`PATCH`
+continua 404/PGRST204 até o restart, mesmo com `NOTIFY`. Já aconteceu duas
+vezes. Reinicie o `rest` **antes** de testar qualquer escrita depois de rodar
+uma migração nova.
 
-**SMTP.** Sem ele não há recuperação de senha self-service. Contornável na
-Fase 1, mas vai incomodar quando houver vários operadores.
+**SMTP.** ✅ Resolvido — configurável pela tela (Contas → super admin), na
+Fase 8b. Falta só ligar num provedor de verdade quando você tiver a conta.
 
 **Onde ficam as chaves dos clientes.** Guardadas em `conta_credenciais` com RLS
 estrita e legíveis pela `service_role` do n8n. Isso protege de acesso por outro
@@ -259,8 +287,10 @@ e fica para depois — vale registrar que hoje não teremos.
 
 ## Por onde continuar
 
-Fase 6. É a única coisa entre o produto de hoje e uma entrega em que o cliente
-não depende de ninguém da Figueira para começar a usar.
+Fase 6 (conectar WhatsApp por QR). É a única coisa entre o produto de hoje e
+uma entrega em que o cliente não depende de ninguém da Figueira para começar
+a usar. Antes disso, reinicie o serviço `rest` — ver aviso no topo do
+`ESTADO.md`.
 
 Quem for continuar este trabalho: o estado atual, as credenciais e as
 armadilhas já conhecidas estão em `ESTADO.md`, na raiz do projeto — fora do

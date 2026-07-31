@@ -1,10 +1,15 @@
 import { redirect } from 'next/navigation';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import Topo from '@/componentes/Topo';
+import DefinirSenha from '@/componentes/DefinirSenha';
 
 export default async function LayoutApp({ children }: { children: React.ReactNode }) {
   const perfil = await perfilAtual();
   if (!perfil) redirect('/entrar');
+
+  // Senha provisória ("NomeDaEmpresa1234") não navega em lugar nenhum até
+  // virar uma senha de verdade — nem o super admin escapa disso.
+  if (perfil.senha_provisoria) return <DefinirSenha email={perfil.email ?? ''} />;
 
   const admin = supabaseAdmin();
   const ehSuper = perfil.papel === 'super_admin';

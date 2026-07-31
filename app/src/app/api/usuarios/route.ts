@@ -1,20 +1,37 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+import { senhaProvisoria } from '@/lib/senha';
+import { enviarEmail } from '@/lib/email';
 
 const PAPEIS = ['super_admin', 'admin', 'operador'] as const;
 type Papel = (typeof PAPEIS)[number];
 
-/** Senha inicial legível: o admin copia e passa ao usuário. */
-function senhaInicial() {
-  const abc = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = crypto.getRandomValues(new Uint8Array(14));
-  return Array.from(bytes, (b) => abc[b % abc.length]).join('');
+async function nomeDaConta(admin: ReturnType<typeof supabaseAdmin>, conta: string | null) {
+  if (!conta) return 'Figueira';
+  const { data } = await admin.from('contas').select('nome').eq('id', conta).maybeSingle();
+  return data?.nome ?? 'Harvest';
+}
+
+function textoConvite(email: string, senha: string) {
+  return (
+    `Seu acesso ao Harvest AI foi criado.\n\n` +
+    `Link: https://harvest.figueiramarketing.com.br/entrar\n` +
+    `E-mail: ${email}\n` +
+    `Senha provisória: ${senha}\n\n` +
+    `No primeiro login o sistema vai pedir para você trocar essa senha por uma só sua.`
+  );
 }
 
 /**
  * Cria usuário. Duas permissões distintas:
  *  - super admin cria qualquer um, em qualquer conta, inclusive da agência
  *  - admin de conta cria só dentro da própria conta, e não cria super admin
+ *
+ * A senha nasce previsível ("NomeDaEmpresa1234") em vez de aleatória: sem
+ * SMTP não dá para confiar que a pessoa vai ver a senha só uma vez na tela,
+ * então ela precisa ser algo que dê para repassar de cabeça. senha_provisoria
+ * fica true, e o layout barra qualquer navegação até ela trocar por uma senha
+ * de verdade — é o que torna essa previsibilidade segura.
  */
 export async function POST(req: Request) {
   const perfil = await perfilAtual();
@@ -43,13 +60,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Escolha a conta do usuário.' }, { status: 400 });
   }
 
-  const senha = senhaInicial();
   const admin = supabaseAdmin();
+  const senha = senhaProvisoria(await nomeDaConta(admin, conta));
 
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password: senha,
-    email_confirm: true, // sem SMTP, o convite por e-mail não sairia
+    email_confirm: true, // sem confirmação por e-mail, o login já libera na hora
     user_metadata: { nome, papel, conta_id: conta ?? '' },
   });
 
@@ -61,8 +78,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // A senha só aparece aqui, uma vez. Não fica guardada em lugar nenhum.
-  return NextResponse.json({ id: data.user?.id, email, senha });
+  await admin.from('perfis').update({ senha_provisoria: true }).eq('id', data.user!.id);
+
+  const emailEnviado = await enviarEmail(email, 'Seu acesso ao Harvest AI', textoConvite(email, senha));
+
+  // A senha aparece aqui de qualquer forma — o e-mail é um extra, não uma garantia.
+  return NextResponse.json({ id: data.user?.id, email, senha, emailEnviado });
 }
 
 /**
@@ -88,11 +109,15 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ erro: 'Esse usuário não é da sua conta.' }, { status: 403 });
   }
 
-  const senha = senhaInicial();
+  const senha = senhaProvisoria(await nomeDaConta(admin, alvo.conta_id));
   const { error } = await admin.auth.admin.updateUserById(id, { password: senha });
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
-  return NextResponse.json({ email: alvo.email, senha });
+  await admin.from('perfis').update({ senha_provisoria: true }).eq('id', id);
+
+  const emailEnviado = await enviarEmail(alvo.email!, 'Sua senha no Harvest AI foi redefinida', textoConvite(alvo.email!, senha));
+
+  return NextResponse.json({ email: alvo.email, senha, emailEnviado });
 }
 
 /** Remove usuário. O perfil cai junto por cascade. */

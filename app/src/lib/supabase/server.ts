@@ -43,6 +43,8 @@ export type Perfil = {
   email: string | null;
   papel: 'super_admin' | 'admin' | 'operador';
   avatar_url: string | null;
+  telefone: string | null;
+  senha_provisoria: boolean;
 };
 
 /** Cookie que guarda em qual conta o super admin está trabalhando. */
@@ -56,7 +58,7 @@ export async function perfilAtual(): Promise<Perfil | null> {
 
   const { data } = await sb
     .from('perfis')
-    .select('id, conta_id, nome, email, papel, avatar_url')
+    .select('id, conta_id, nome, email, papel, avatar_url, telefone, senha_provisoria')
     .eq('id', user.id)
     .single();
 

@@ -2,9 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
-import { supabaseNoNavegador } from '@/lib/supabase/browser';
 
-type Props = { nome: string | null; email: string | null; avatarUrl: string | null };
+type Props = {
+  nome: string | null;
+  email: string | null;
+  telefone: string | null;
+  avatarUrl: string | null;
+};
 
 export default function Perfil(p: Props) {
   const router = useRouter();
@@ -12,6 +16,11 @@ export default function Perfil(p: Props) {
 
   const [avatarUrl, setAvatarUrl] = useState(p.avatarUrl);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
+
+  const [nome, setNome] = useState(p.nome ?? '');
+  const [email, setEmail] = useState(p.email ?? '');
+  const [telefone, setTelefone] = useState(p.telefone ?? '');
+  const [salvandoDados, setSalvandoDados] = useState(false);
 
   const [senha, setSenha] = useState('');
   const [confirmar, setConfirmar] = useState('');
@@ -38,16 +47,33 @@ export default function Perfil(p: Props) {
     router.refresh(); // o avatar do topo também precisa atualizar
   }
 
+  async function salvarDados(e: React.FormEvent) {
+    e.preventDefault();
+    setAviso(null); setSalvandoDados(true);
+    const r = await fetch('/api/perfil', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, email, telefone }),
+    });
+    const d = await r.json();
+    setSalvandoDados(false);
+    if (!r.ok) { setAviso(d.erro); return; }
+    setAviso('Dados atualizados.');
+    router.refresh();
+  }
+
   async function trocarSenha(e: React.FormEvent) {
     e.preventDefault();
     setAviso(null);
-    if (senha.length < 8) { setAviso('A senha precisa ter pelo menos 8 caracteres.'); return; }
     if (senha !== confirmar) { setAviso('As senhas não conferem.'); return; }
 
     setSalvandoSenha(true);
-    const { error } = await supabaseNoNavegador().auth.updateUser({ password: senha });
+    const r = await fetch('/api/perfil/senha', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ senha }),
+    });
+    const d = await r.json();
     setSalvandoSenha(false);
-    if (error) { setAviso('Não consegui trocar a senha. Tente de novo.'); return; }
+    if (!r.ok) { setAviso(d.erro); return; }
     setSenha(''); setConfirmar('');
     setAviso('Senha alterada.');
   }
@@ -82,8 +108,30 @@ export default function Perfil(p: Props) {
       </section>
 
       <section className="secao">
+        <h2>Seus dados</h2>
+        <form className="cartaocfg" onSubmit={salvarDados}>
+          <div className="grupo">
+            <label className="label" htmlFor="nome">Nome</label>
+            <input id="nome" value={nome} onChange={(e) => setNome(e.target.value)} />
+          </div>
+          <div className="grupo">
+            <label className="label" htmlFor="email">E-mail</label>
+            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="grupo">
+            <label className="label" htmlFor="telefone">Telefone</label>
+            <input id="telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)}
+                   placeholder="11999998888" />
+          </div>
+          <button className="salvar" disabled={salvandoDados}>
+            {salvandoDados ? 'Salvando…' : 'Salvar dados'}
+          </button>
+        </form>
+      </section>
+
+      <section className="secao">
         <h2>Trocar senha</h2>
-        <p className="resumo-secao">Vale para o seu próximo login.</p>
+        <p className="resumo-secao">Mínimo 8 caracteres, com maiúscula, minúscula, número e caractere especial.</p>
         <form className="cartaocfg" onSubmit={trocarSenha}>
           <div className="grupo">
             <label className="label" htmlFor="senha">Nova senha</label>

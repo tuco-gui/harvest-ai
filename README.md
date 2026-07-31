@@ -101,11 +101,15 @@ Detalhes em `docs/deploy.md`.
 
 ## O que já funciona
 
-Login com sessão e guarda de rota · três papéis · painel de contas e usuários ·
-busca no Google Maps com validação de WhatsApp · importação de CSV · mapa com
-pino de região · disparo real com pausar e parar · mensagem fixa, rodízio ou
-IA · presets de intervalo · testes de conexão que não gastam crédito · tema
-claro e escuro.
+Login com sessão e guarda de rota · três papéis · painel de contas e usuários
+(criar, renomear, excluir) · senha provisória com troca obrigatória no
+primeiro login · SMTP configurável pela tela, com convite e reset de senha por
+e-mail · perfil com foto, nome, telefone e e-mail editáveis · busca no Google
+Maps com validação de WhatsApp · mapa com localização por clique ou CEP,
+disponível antes da busca · importação de CSV · adicionar contato manualmente
+· disparo real com pausar e parar · mensagem fixa, rodízio ou IA · presets de
+intervalo, aplicados de verdade no disparo · testes de conexão que não gastam
+crédito · tema claro e escuro.
 
 ## O que falta
 
@@ -122,10 +126,11 @@ claro e escuro.
 3. **Paginação da busca.** Só traz a primeira página de 20. A rota já aceita
    `pagina`; falta o botão.
 4. **Enriquecimento** — ver `docs/enriquecimento.md`.
-5. **"Esqueci minha senha"** — depende de SMTP no GoTrue. Hoje o super admin
-   redefine.
-6. **Consumo por conta** — `prospecta_buscas` já registra cada busca; falta a
+5. **Consumo por conta** — `prospecta_buscas` já registra cada busca; falta a
    tela.
+6. **"Esqueci minha senha" self-service** — hoje quem esqueceu pede pro admin
+   clicar em "Gerar nova senha" em Contas; com SMTP configurado dá pra
+   trocar por um link de recuperação de verdade.
 
 ## Detalhes que custam caro quando esquecidos
 
