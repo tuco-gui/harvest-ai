@@ -1,0 +1,165 @@
+import { NextResponse } from 'next/server';
+import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+
+/**
+ * Ponte de busca. O navegador manda só o termo — a chave da SerpAPI fica aqui.
+ *
+ * A conta vem SEMPRE da sessão verificada, nunca do corpo da requisição.
+ * É isso que impede alguém de trocar o conta_id e usar o crédito de outro.
+ */
+export async function POST(req: Request) {
+  const perfil = await perfilAtual();
+  if (!perfil) {
+    return NextResponse.json({ erro: 'Sessão expirada. Entre de novo.' }, { status: 401 });
+  }
+  if (!perfil.conta_id) {
+    return NextResponse.json(
+      { erro: 'Sua conta de super admin não tem carteira de créditos. Entre por uma conta de cliente.' },
+      { status: 400 },
+    );
+  }
+
+  const { termo, pagina = 1, ll } = await req.json().catch(() => ({}) as Record<string, unknown>);
+  if (typeof termo !== 'string' || !termo.trim()) {
+    return NextResponse.json({ erro: 'Digite o ramo e a cidade.' }, { status: 400 });
+  }
+
+  const admin = supabaseAdmin();
+  const { data: cred } = await admin
+    .from('conta_credenciais')
+    .select('serpapi_key, evolution_url, evolution_instancia, evolution_key')
+    .eq('conta_id', perfil.conta_id)
+    .single();
+
+  if (!cred?.serpapi_key) {
+    return NextResponse.json(
+      { erro: 'Falta a chave da SerpAPI. Peça ao administrador da conta para cadastrar em Configurações.' },
+      { status: 400 },
+    );
+  }
+
+  const ponte = process.env.N8N_WEBHOOK_BUSCA;
+  if (!ponte) {
+    return NextResponse.json({ erro: 'Ponte de busca não configurada no servidor.' }, { status: 500 });
+  }
+
+  // A SerpAPI ignora `num` no engine google_maps e pagina de 20 em 20.
+  const params: Record<string, string> = {
+    engine: 'google_maps',
+    type: 'search',
+    q: termo.trim(),
+    api_key: cred.serpapi_key,
+    hl: 'pt',
+    gl: 'br',
+  };
+  if (Number(pagina) > 1) params.start = String((Number(pagina) - 1) * 20);
+  if (typeof ll === 'string' && ll) params.ll = ll;
+
+  let bruto: { local_results?: unknown[]; error?: string };
+  try {
+    // uma segunda tentativa: o n8n devolve 5xx passageiro de vez em quando
+    let resposta: Response | undefined;
+    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+      resposta = await fetch(ponte, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (resposta.ok || resposta.status < 500 || tentativa === 2) break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    if (!resposta!.ok) {
+      return NextResponse.json({ erro: `A ponte de busca respondeu ${resposta!.status}.` }, { status: 502 });
+    }
+    bruto = await resposta!.json();
+  } catch {
+    return NextResponse.json({ erro: 'Não consegui falar com a ponte de busca.' }, { status: 502 });
+  }
+
+  if (bruto.error) {
+    const chaveRuim = /invalid api key/i.test(bruto.error);
+    return NextResponse.json(
+      { erro: chaveRuim ? 'A chave da SerpAPI foi recusada. Confira em Configurações.' : bruto.error },
+      { status: 400 },
+    );
+  }
+
+  const achados = Array.isArray(bruto.local_results) ? bruto.local_results : [];
+
+  const leads = achados.map((x: any) => ({
+    place_id: x.place_id ?? null,
+    empresa: x.title ?? 'Nome não disponível',
+    telefone: normalizarTelefone(x.phone),
+    telefone_original: x.phone ?? null,
+    endereco: x.address ?? null,
+    especialidades: Array.isArray(x.type) ? x.type.join(', ') : (x.type ?? null),
+    rating: x.rating ?? null,
+    reviews: x.reviews ?? null,
+    site: x.website ?? null,
+    latitude: x.gps_coordinates?.latitude ?? null,
+    longitude: x.gps_coordinates?.longitude ?? null,
+  }));
+
+  // Guarda os leads da conta. on_conflict=place_id evita duplicar entre buscas.
+  const comId = leads.filter((l) => l.place_id);
+  if (comId.length) {
+    await admin
+      .from('prospecta_leads')
+      .upsert(comId.map((l) => ({ ...l, conta_id: perfil.conta_id, origem: 'serpapi' })), {
+        onConflict: 'place_id',
+        ignoreDuplicates: false,
+      });
+  }
+
+  await admin.from('prospecta_buscas').insert({
+    conta_id: perfil.conta_id,
+    termo: termo.trim(),
+    ll: typeof ll === 'string' ? ll : null,
+    pagina: Number(pagina) || 1,
+    total_resultados: achados.length,
+    novos_leads: comId.length,
+    origem: 'app',
+  });
+
+  const podeValidar = cred.evolution_url && cred.evolution_instancia && cred.evolution_key;
+  const zap = podeValidar ? await validarWhatsApp(cred, leads.map((l) => l.telefone)) : {};
+
+  return NextResponse.json({
+    leads: leads.map((l) => ({ ...l, tem_whatsapp: l.telefone ? (zap[l.telefone] ?? null) : null })),
+    validou: podeValidar,
+  });
+}
+
+/** Só dígitos, com DDI 55. A Evolution responde exists:false sem o 55. */
+function normalizarTelefone(bruto?: string | null): string | null {
+  if (!bruto) return null;
+  let d = bruto.replace(/\D/g, '');
+  if (d.length < 10) return null;
+  if (!d.startsWith('55')) d = '55' + d;
+  return d;
+}
+
+async function validarWhatsApp(
+  cred: { evolution_url: string | null; evolution_instancia: string | null; evolution_key: string | null },
+  numeros: (string | null)[],
+): Promise<Record<string, boolean>> {
+  const lista = [...new Set(numeros.filter((n): n is string => !!n))];
+  if (!lista.length) return {};
+
+  try {
+    const base = cred.evolution_url!.replace(/\/+$/, '');
+    const r = await fetch(`${base}/chat/whatsappNumbers/${cred.evolution_instancia}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: cred.evolution_key! },
+      body: JSON.stringify({ numbers: lista }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!r.ok) return {};
+    const dados = await r.json();
+    if (!Array.isArray(dados)) return {};
+    return Object.fromEntries(dados.map((i: any) => [String(i.number), i.exists === true]));
+  } catch {
+    return {}; // validação é opcional: sem ela os leads vêm como "não verificado"
+  }
+}

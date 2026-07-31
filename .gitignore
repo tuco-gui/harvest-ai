@@ -3,3 +3,8 @@
 *.local.json
 .DS_Store
 infra/supabase-stack.yml
+infra/harvest-stack.yml
+app/.env.local
+app/node_modules/
+app/.next/
+app/tsconfig.tsbuildinfo
