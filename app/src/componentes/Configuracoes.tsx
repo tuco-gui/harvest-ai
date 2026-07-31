@@ -16,7 +16,7 @@ type Props = {
 };
 
 export default function Configuracoes(p: Props) {
-  const [aba, setAba] = useState<'conexoes' | 'envios'>('conexoes');
+  const [aba, setAba] = useState<'conexoes' | 'mensagens' | 'tempo'>('conexoes');
 
   const [serpapi, setSerpapi] = useState('');
   const [evoUrl, setEvoUrl] = useState(p.evolutionUrl);
@@ -32,6 +32,19 @@ export default function Configuracoes(p: Props) {
 
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [testando, setTestando] = useState<string | null>(null);
+  const [testes, setTestes] = useState<Record<string, { ok: boolean; recado: string }>>({});
+
+  async function testar(qual: string) {
+    setTestando(qual);
+    const r = await fetch('/api/testar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qual }),
+    });
+    const d = await r.json();
+    setTestes((t) => ({ ...t, [qual]: { ok: r.ok, recado: r.ok ? d.recado : d.erro } }));
+    setTestando(null);
+  }
 
   function lerMensagens(bruto: string) {
     return bruto.split(/^\s*---\s*$/m).map((m) => m.trim()).filter(Boolean);
@@ -78,7 +91,8 @@ export default function Configuracoes(p: Props) {
     <div className="pagina">
       <div className="modos" style={{ marginBottom: 28 }}>
         <button aria-pressed={aba === 'conexoes'} onClick={() => setAba('conexoes')}>Conexões</button>
-        <button aria-pressed={aba === 'envios'} onClick={() => setAba('envios')}>Mensagens e Envios</button>
+        <button aria-pressed={aba === 'mensagens'} onClick={() => setAba('mensagens')}>Mensagens</button>
+        <button aria-pressed={aba === 'tempo'} onClick={() => setAba('tempo')}>Tempo de envio</button>
       </div>
 
       {aba === 'conexoes' && (
@@ -134,10 +148,38 @@ export default function Configuracoes(p: Props) {
               </div>
             </div>
           </section>
+
+          <section className="secao">
+            <h2>Testar as conexões</h2>
+            <p className="resumo-secao">
+              Nenhum destes testes gasta crédito nem envia mensagem. Salve antes de testar.
+            </p>
+            <div className="cartaocfg">
+              <div className="testes">
+                {[
+                  ['serpapi', 'Testar busca'],
+                  ['whatsapp', 'Testar WhatsApp'],
+                  ['openai', 'Testar IA'],
+                ].map(([qual, rotulo]) => (
+                  <button key={qual} type="button" className="btn-teste"
+                          data-r={testes[qual]?.ok === undefined ? undefined : testes[qual].ok ? 'ok' : 'erro'}
+                          disabled={testando === qual}
+                          onClick={() => testar(qual)}>
+                    {testando === qual ? 'Testando…' : rotulo}
+                  </button>
+                ))}
+              </div>
+              {Object.entries(testes).map(([qual, r]) => (
+                <p key={qual} className="resultado-teste" style={{ marginTop: 10 }}>
+                  <b>{qual === 'serpapi' ? 'Busca' : qual === 'whatsapp' ? 'WhatsApp' : 'IA'}:</b> {r.recado}
+                </p>
+              ))}
+            </div>
+          </section>
         </>
       )}
 
-      {aba === 'envios' && (
+      {aba === 'mensagens' && (
         <>
           <section className="secao">
             <h2>O que será enviado</h2>
@@ -190,28 +232,52 @@ export default function Configuracoes(p: Props) {
               </div>
             </section>
           )}
+        </>
+      )}
 
-          <section className="secao">
-            <h2>Intervalo entre envios</h2>
-            <p className="resumo-secao">
-              Disparar rápido demais é o caminho mais curto para o WhatsApp bloquear o número.
-            </p>
-            <div className="cartaocfg">
-              <div style={{ display: 'flex', gap: 16 }}>
-                <div className="grupo" style={{ flex: 1 }}>
-                  <label className="label" htmlFor="min">Mínimo (segundos)</label>
-                  <input id="min" type="number" min={5} max={300} value={min}
-                         onChange={(e) => setMin(Number(e.target.value))} />
-                </div>
-                <div className="grupo" style={{ flex: 1 }}>
-                  <label className="label" htmlFor="max">Máximo (segundos)</label>
-                  <input id="max" type="number" min={10} max={600} value={max}
-                         onChange={(e) => setMax(Number(e.target.value))} />
-                </div>
+      {aba === 'tempo' && (
+        <section className="secao">
+          <h2>Intervalo entre envios</h2>
+          <p className="resumo-secao">
+            Disparar rápido demais é o caminho mais curto para o WhatsApp bloquear o número. O
+            sistema espera um tempo aleatório entre os dois valores a cada envio — o intervalo
+            variável parece mais humano do que um relógio certinho.
+          </p>
+          <div className="cartaocfg">
+            <div style={{ display: 'flex', gap: 16 }}>
+              <div className="grupo" style={{ flex: 1 }}>
+                <label className="label" htmlFor="min">Mínimo (segundos)</label>
+                <input id="min" type="number" min={5} max={300} value={min}
+                       onChange={(e) => setMin(Number(e.target.value))} />
+              </div>
+              <div className="grupo" style={{ flex: 1 }}>
+                <label className="label" htmlFor="max">Máximo (segundos)</label>
+                <input id="max" type="number" min={10} max={600} value={max}
+                       onChange={(e) => setMax(Number(e.target.value))} />
               </div>
             </div>
-          </section>
-        </>
+
+            <div className="presets">
+              {[
+                [15, 30, 'Rápido', 'Para listas curtas e número já aquecido'],
+                [30, 60, 'Moderado', 'O equilíbrio do dia a dia'],
+                [60, 120, 'Seguro', 'Número novo ou lista grande'],
+              ].map(([a, b, titulo, quando]) => (
+                <button key={titulo as string} type="button" className="preset"
+                        aria-pressed={min === a && max === b}
+                        onClick={() => { setMin(a as number); setMax(b as number); }}>
+                  <b>{titulo}</b>
+                  <span>{a}–{b}s · {quando}</span>
+                </button>
+              ))}
+            </div>
+
+            <p className="ajuda" style={{ marginTop: 14 }}>
+              Com {min}–{max}s, uma lista de 20 leads leva cerca de{' '}
+              <b>{Math.round((20 * (min + max)) / 2 / 60)} minutos</b> para sair inteira.
+            </p>
+          </div>
+        </section>
       )}
 
       <button className="salvar" onClick={salvar} disabled={salvando}>

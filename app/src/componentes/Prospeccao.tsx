@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-declare global { interface Window { L: any } }
+declare global { interface Window { L: any; Papa: any } }
 
 type Lead = {
   place_id: string | null;
@@ -17,6 +17,7 @@ type Lead = {
   latitude: number | null;
   longitude: number | null;
   tem_whatsapp: boolean | null;
+  dados_extras?: Record<string, string> | null;
 };
 
 type Estado = 'parado' | 'correndo' | 'pausado';
@@ -177,6 +178,101 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
     setRecado(`Disparo interrompido. ${enviados} ${enviados === 1 ? 'saiu' : 'saíram'}.`);
   }
 
+  /* --------------------------------------------------- importar lista */
+  const [importando, setImportando] = useState(false);
+
+  function baixarModelo() {
+    const linhas = [
+      'nome,telefone,endereco,site,categoria,email,ultimo_pedido,valor_ultimo_pedido',
+      'Clinica Exemplo,5511999998888,"Av. Paulista 1000, Sao Paulo - SP",https://exemplo.com.br,Clinica,contato@exemplo.com.br,2026-05-12,1450',
+      'Pet Shop Exemplo,5571988887777,"Rua da Bahia 50, Salvador - BA",,Pet Shop,,,',
+    ].join('\n');
+    // BOM para o Excel abrir a acentuação certa
+    const url = URL.createObjectURL(new Blob(['\ufeff' + linhas], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'modelo-harvest.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function normalizar(bruto: string | null | undefined): string | null {
+    if (!bruto) return null;
+    let d = String(bruto).replace(/\D/g, '');
+    if (d.length < 10) return null;
+    if (!d.startsWith('55')) d = '55' + d;
+    return d;
+  }
+
+  async function importar(e: React.ChangeEvent<HTMLInputElement>) {
+    const arquivo = e.target.files?.[0];
+    if (!arquivo) return;
+    if (!window.Papa) { setErro('Ainda carregando o leitor de planilha. Tente de novo em um instante.'); return; }
+
+    setImportando(true);
+    setErro(null);
+
+    window.Papa.parse(arquivo, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (saida: any) => {
+        const linhas: Record<string, string>[] = saida.data ?? [];
+        // nomes de coluna que a gente reconhece; o resto vira contexto para a IA
+        const MAPA: Record<string, string[]> = {
+          empresa: ['nome', 'name', 'empresa', 'company', 'cliente', 'razao social'],
+          telefone: ['telefone', 'phone', 'celular', 'whatsapp', 'tel', 'contato', 'fone'],
+          endereco: ['endereco', 'endereço', 'address', 'local', 'cidade'],
+          site: ['site', 'website', 'url'],
+          especialidades: ['categoria', 'category', 'segmento', 'nicho', 'ramo', 'tipo'],
+        };
+        const pegar = (linha: Record<string, string>, chaves: string[]) => {
+          const k = Object.keys(linha).find((c) => chaves.includes(c.toLowerCase().trim()));
+          return k ? linha[k] : '';
+        };
+        const usadas = Object.values(MAPA).flat().concat(['email', 'e-mail', 'mail']);
+
+        const importados: Lead[] = linhas.map((linha) => {
+          const extras: Record<string, string> = {};
+          Object.keys(linha).forEach((c) => {
+            const k = c.toLowerCase().trim();
+            if (!usadas.includes(k) && linha[c]) extras[c.trim()] = linha[c];
+          });
+          const tel = pegar(linha, MAPA.telefone);
+          return {
+            place_id: null,
+            empresa: pegar(linha, MAPA.empresa) || 'Sem nome',
+            telefone: normalizar(tel),
+            telefone_original: tel || null,
+            endereco: pegar(linha, MAPA.endereco) || null,
+            especialidades: pegar(linha, MAPA.especialidades) || 'Importado da planilha',
+            rating: null, reviews: null,
+            site: pegar(linha, MAPA.site) || null,
+            latitude: null, longitude: null,
+            tem_whatsapp: null,
+            dados_extras: Object.keys(extras).length ? extras : null,
+          } as Lead;
+        }).filter((l) => l.telefone);
+
+        // valida o WhatsApp da leva de uma vez só
+        let validacao: Record<string, boolean> = {};
+        try {
+          const r = await fetch('/api/validar', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefones: importados.map((l) => l.telefone) }),
+          });
+          if (r.ok) validacao = (await r.json()).validacao ?? {};
+        } catch { /* sem validação os leads ficam como não verificados */ }
+
+        setLeads(importados.map((l) => ({ ...l, tem_whatsapp: l.telefone ? (validacao[l.telefone] ?? null) : null })));
+        setEscolhidos(new Set());
+        setJaBuscou(true);
+        setVista('lista');
+        setImportando(false);
+        if (!importados.length) setErro('Nenhuma linha com telefone válido. Confira a coluna de telefone.');
+      },
+      error: () => { setImportando(false); setErro('Não consegui ler o arquivo. Salve como CSV UTF-8.'); },
+    });
+    e.target.value = '';
+  }
+
   /* --------------------------------------------------------- o mapa */
   const ehEscuro = () => {
     if (typeof document === 'undefined') return false;
@@ -267,6 +363,19 @@ export default function Prospeccao({ podeConfigurar }: { podeConfigurar: boolean
           Ramo e cidade. <b>joalheria em botucatu</b>, <b>pet shop em salvador</b>. Cada página de
           busca consome um crédito.
         </p>
+
+        <div className="importar">
+          <input type="file" accept=".csv,text/csv" onChange={importar} disabled={importando}
+                 aria-label="Arquivo CSV com a lista" />
+          <p className="ajuda">
+            {importando
+              ? 'Lendo a planilha e conferindo os WhatsApps…'
+              : <>Ou importe sua lista. Reconhece colunas como nome, telefone, endereço, site e
+                  categoria; o resto vira contexto para a IA.{' '}
+                  <a href="#" onClick={(e) => { e.preventDefault(); baixarModelo(); }}>Baixar modelo</a>.
+                  Só CSV — no Excel, salve como CSV UTF-8.</>}
+          </p>
+        </div>
 
         {regiao && (
           <div className="regiao">
