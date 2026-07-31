@@ -2,3 +2,4 @@
 .local/
 *.local.json
 .DS_Store
+infra/supabase-stack.yml
