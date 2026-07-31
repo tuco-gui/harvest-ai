@@ -25,8 +25,9 @@ export default async function Pagina() {
     return (
       <div className="pagina">
         <h2 style={{ fontFamily: 'var(--display)', fontWeight: 800 }}>Configurações</h2>
-        <p style={{ color: 'var(--ink-3)', fontSize: 13 }}>
-          Você está como super admin, sem conta vinculada. Escolha uma conta de cliente para configurar.
+        <p style={{ color: 'var(--ink-3)', fontSize: 13, maxWidth: 460 }}>
+          Configurações são por conta de cliente. Escolha uma no seletor ao lado do logo, ou vá em
+          Contas para criar a primeira.
         </p>
       </div>
     );

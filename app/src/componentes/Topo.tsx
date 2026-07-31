@@ -2,13 +2,46 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { supabaseNoNavegador } from '@/lib/supabase/browser';
 
-type Props = { conta: string; iniciais: string; papel: string };
+type Conta = { id: string; nome: string };
 
-export default function Topo({ conta, iniciais, papel }: Props) {
+type Props = {
+  nome: string;
+  email: string;
+  papel: string;
+  iniciais: string;
+  contaNome: string;
+  contas: Conta[];       // só o super admin recebe a lista cheia
+  ehSuperAdmin: boolean;
+};
+
+const NOME_PAPEL: Record<string, string> = {
+  super_admin: 'Super admin',
+  admin: 'Administrador',
+  operador: 'Operador',
+};
+
+export default function Topo(p: Props) {
   const caminho = usePathname();
   const router = useRouter();
+  const [menu, setMenu] = useState<null | 'perfil' | 'contas'>(null);
+  const caixa = useRef<HTMLElement>(null);
+
+  // fecha ao clicar fora ou apertar Esc — senão o menu fica preso na tela
+  useEffect(() => {
+    function fora(e: MouseEvent) {
+      if (caixa.current && !caixa.current.contains(e.target as Node)) setMenu(null);
+    }
+    function esc(e: KeyboardEvent) { if (e.key === 'Escape') setMenu(null); }
+    document.addEventListener('mousedown', fora);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', fora);
+      document.removeEventListener('keydown', esc);
+    };
+  }, []);
 
   function trocarTema() {
     const raiz = document.documentElement;
@@ -19,6 +52,16 @@ export default function Topo({ conta, iniciais, papel }: Props) {
     localStorage.setItem('harvest_tema', raiz.dataset.tema);
   }
 
+  async function trocarConta(id: string | null) {
+    await fetch('/api/conta-ativa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conta_id: id }),
+    });
+    setMenu(null);
+    router.refresh();
+  }
+
   async function sair() {
     await supabaseNoNavegador().auth.signOut();
     router.replace('/entrar');
@@ -26,15 +69,52 @@ export default function Topo({ conta, iniciais, papel }: Props) {
   }
 
   return (
-    <header className="topo">
+    <header className="topo" ref={caixa}>
       <Link href="/" className="marca">HARVEST<em>.</em>AI</Link>
-      <span className="conta">{conta}</span>
+
+      {p.ehSuperAdmin ? (
+        <div className="menu-raiz">
+          <button
+            className="conta"
+            onClick={() => setMenu(menu === 'contas' ? null : 'contas')}
+            aria-expanded={menu === 'contas'}
+          >
+            {p.contaNome}
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.4" />
+            </svg>
+          </button>
+          {menu === 'contas' && (
+            <div className="menu">
+              <span className="menu-titulo">Trabalhar na conta</span>
+              {p.contas.map((c) => (
+                <button key={c.id} className="menu-item" onClick={() => trocarConta(c.id)}>
+                  {c.nome}
+                </button>
+              ))}
+              {!p.contas.length && <span className="menu-vazio">Nenhuma conta cadastrada</span>}
+              <div className="menu-risco" />
+              <button className="menu-item" onClick={() => trocarConta(null)}>Sair da conta</button>
+              <Link href="/contas" className="menu-item" onClick={() => setMenu(null)}>
+                Gerenciar contas
+              </Link>
+            </div>
+          )}
+        </div>
+      ) : (
+        <span className="conta">{p.contaNome}</span>
+      )}
 
       <nav className="nav">
         <Link href="/" aria-current={caminho === '/' ? 'page' : undefined}>Prospecção</Link>
         <Link href="/configuracoes" aria-current={caminho.startsWith('/configuracoes') ? 'page' : undefined}>
           Configurações
         </Link>
+        {p.ehSuperAdmin && (
+          <Link href="/contas" aria-current={caminho.startsWith('/contas') ? 'page' : undefined}>
+            Contas
+          </Link>
+        )}
       </nav>
 
       <button className="tema" onClick={trocarTema} aria-label="Alternar tema claro e escuro">
@@ -48,7 +128,27 @@ export default function Topo({ conta, iniciais, papel }: Props) {
         </svg>
       </button>
 
-      <button className="eu" onClick={sair} title={`${papel} — sair`}>{iniciais}</button>
+      {/* Antes o clique aqui deslogava direto. Um menu evita que um toque
+          errado derrube a sessão no meio do trabalho. */}
+      <div className="menu-raiz">
+        <button
+          className="eu"
+          onClick={() => setMenu(menu === 'perfil' ? null : 'perfil')}
+          aria-expanded={menu === 'perfil'}
+          aria-label="Sua conta"
+        >
+          {p.iniciais}
+        </button>
+        {menu === 'perfil' && (
+          <div className="menu menu-dir">
+            <span className="menu-titulo">{p.nome || p.email}</span>
+            <span className="menu-vazio">{p.email}</span>
+            <span className="menu-vazio">{NOME_PAPEL[p.papel] ?? p.papel}</span>
+            <div className="menu-risco" />
+            <button className="menu-item" onClick={sair}>Sair</button>
+          </div>
+        )}
+      </div>
     </header>
   );
 }

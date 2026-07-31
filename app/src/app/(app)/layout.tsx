@@ -6,10 +6,17 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   const perfil = await perfilAtual();
   if (!perfil) redirect('/entrar');
 
-  let conta = 'Figueira Marketing';
+  const admin = supabaseAdmin();
+  const ehSuper = perfil.papel === 'super_admin';
+
+  const { data: contas } = ehSuper
+    ? await admin.from('contas').select('id, nome').eq('ativo', true).order('nome')
+    : { data: [] };
+
+  let contaNome = ehSuper ? 'Nenhuma conta' : 'Figueira Marketing';
   if (perfil.conta_id) {
-    const { data } = await supabaseAdmin().from('contas').select('nome').eq('id', perfil.conta_id).single();
-    if (data?.nome) conta = data.nome;
+    const { data } = await admin.from('contas').select('nome').eq('id', perfil.conta_id).single();
+    if (data?.nome) contaNome = data.nome;
   }
 
   const iniciais = (perfil.nome ?? perfil.email ?? '?')
@@ -17,7 +24,15 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
 
   return (
     <>
-      <Topo conta={conta} iniciais={iniciais} papel={perfil.papel} />
+      <Topo
+        nome={perfil.nome ?? ''}
+        email={perfil.email ?? ''}
+        papel={perfil.papel}
+        iniciais={iniciais}
+        contaNome={contaNome}
+        contas={contas ?? []}
+        ehSuperAdmin={ehSuper}
+      />
       {children}
     </>
   );

@@ -37,11 +37,15 @@ export function supabaseAdmin() {
 
 export type Perfil = {
   id: string;
-  conta_id: string | null;
+  conta_id: string | null;      // conta em que ele está trabalhando agora
+  conta_propria: string | null; // a conta a que ele pertence de fato
   nome: string | null;
   email: string | null;
   papel: 'super_admin' | 'admin' | 'operador';
 };
+
+/** Cookie que guarda em qual conta o super admin está trabalhando. */
+export const COOKIE_CONTA = 'harvest_conta';
 
 /** Quem está pedindo, e de qual conta. Base de toda decisão de acesso. */
 export async function perfilAtual(): Promise<Perfil | null> {
@@ -55,5 +59,23 @@ export async function perfilAtual(): Promise<Perfil | null> {
     .eq('id', user.id)
     .single();
 
-  return (data as Perfil) ?? null;
+  if (!data) return null;
+
+  const perfil: Perfil = { ...(data as any), conta_propria: (data as any).conta_id };
+
+  // O super admin não pertence a conta nenhuma, então escolhe uma para
+  // trabalhar. Vem de cookie, e é validada contra o banco — cookie forjado
+  // com um id inexistente simplesmente não assume conta nenhuma.
+  if (perfil.papel === 'super_admin') {
+    const escolhida = (await cookies()).get(COOKIE_CONTA)?.value;
+    if (escolhida) {
+      const { data: existe } = await supabaseAdmin()
+        .from('contas').select('id').eq('id', escolhida).maybeSingle();
+      perfil.conta_id = existe ? escolhida : null;
+    } else {
+      perfil.conta_id = null;
+    }
+  }
+
+  return perfil;
 }
