@@ -7,6 +7,10 @@ O painel que está em produção hoje (`/webhook/prospecta`) **continua no ar e
 intocado** durante todo o percurso. A migração acontece só no fim, quando o
 novo estiver validado.
 
+> **Onde estamos (31/07/2026):** Fases 0 a 5 entregues e em produção em
+> `harvest.figueiramarketing.com.br`. O que falta está na seção
+> **O que vem agora**, no fim deste documento — comece por lá.
+
 ---
 
 ## Por que esta ordem
@@ -46,6 +50,12 @@ nunca mais vê uma chave.
 **Stack:** Next.js na Vercel (mesmo caminho do dashboard da Ortega), Supabase
 para auth e dados, n8n mantido como motor de automação.
 
+> **Como ficou:** o app subiu no **VPS**, não na Vercel — o plano gratuito da
+> Vercel não servia e o VPS já tinha Traefik e Swarm. A imagem é construída no
+> GitHub Actions e publicada no ghcr.io, porque compilar Next.js no VPS estoura
+> a memória. O n8n ficou só como ponte da SerpAPI: o disparo vai direto do
+> Next.js para a Evolution, um sistema em vez de dois.
+
 ---
 
 ## Papéis
@@ -63,7 +73,7 @@ no dia a dia não alcança nada que quebre.
 
 ## Fases
 
-### Fase 0 — Trancar a porta (hoje, ~20 min)
+### ✅ Fase 0 — Trancar a porta (hoje, ~20 min)
 
 Antes de qualquer código: proteger o painel atual com Basic Auth no n8n, para
 que ele deixe de ser público enquanto o resto é construído.
@@ -73,7 +83,7 @@ que ele deixe de ser público enquanto o resto é construído.
 
 ---
 
-### Fase 1 — Fundação: banco e autenticação
+### ✅ Fase 1 — Fundação: banco e autenticação
 
 **Pré-requisito no VPS:** habilitar login por e-mail no GoTrue
 (`GOTRUE_EXTERNAL_EMAIL_ENABLED=true`) e desligar o cadastro público
@@ -100,7 +110,7 @@ seu usuário super admin criado.
 
 ---
 
-### Fase 2 — Aplicação Next.js com a cara da Figueira
+### ✅ Fase 2 — Aplicação Next.js com a cara da Figueira
 
 Login, e as telas que já existem hoje reconstruídas: busca no Maps, importação
 de CSV, lista de leads, disparo, configurações.
@@ -108,6 +118,10 @@ de CSV, lista de leads, disparo, configurações.
 Design seguindo os tokens da marca: Montserrat e Inter, fundo `#111111`,
 superfície `#1A1A1A`, vermelho `#C4191F` como identidade e **verde `#1A7A4A`
 para os botões de ação** — nunca vermelho em CTA, que é regra da marca.
+
+> **Correção:** o padrão virou o claro (`#F5F5F5`), que é o que o brand board
+> define para documento; o escuro é o modo de post e slide. Ficaram os dois,
+> com um botão que começa seguindo o tema do sistema.
 
 O menu de configurações que discutimos entra aqui já resolvido: seções de
 Conexões, Mensagens e Envios, e Usuários, cada uma visível conforme o papel.
@@ -118,7 +132,7 @@ painel atual faz.
 
 ---
 
-### Fase 3 — Painel de super admin
+### ✅ Fase 3 — Painel de super admin
 
 Sua área: criar conta de cliente, criar os usuários dela, definir papéis,
 ativar e desativar, e ver consumo por conta (buscas SerpAPI, disparos).
@@ -128,7 +142,7 @@ ativar e desativar, e ver consumo por conta (buscas SerpAPI, disparos).
 
 ---
 
-### Fase 4 — n8n multi-conta
+### ✅ Fase 4 — n8n multi-conta
 
 Novo workflow, sem os webhooks de painel. Recebe `conta_id`, busca as
 credenciais daquela conta no Supabase e usa. Um workflow atende todos os
@@ -142,7 +156,7 @@ banco.
 
 ---
 
-### Fase 5 — Domínio e virada
+### ✅ Fase 5 — Domínio e virada
 
 Domínio próprio (ex.: `harvest.figueiramarketing.com.br`), migração dos dados
 que já existem, e desligamento do painel antigo.
@@ -152,13 +166,72 @@ que já existem, e desligamento do painel antigo.
 
 ---
 
-### Fase 6 — Agente de resposta
+---
 
-Só depois de tudo acima. Webhook recebendo `messages.upsert` da Evolution,
-memória em `prospecta_mensagens`, nó AI Agent, e transferência para humano com
-resumo da conversa.
+## O que vem agora
+
+### Fase 6 — Conectar o número de WhatsApp pela tela
+
+Hoje a conexão do WhatsApp é o único ponto do produto que não se resolve
+sozinho: alguém da Figueira precisa criar a instância na Evolution por fora e
+mandar ao cliente três campos técnicos — endereço, instância e token. Isso é o
+que impede a entrega ser autônoma.
+
+Como deve ficar, na aba **Conexões**:
+
+1. Botão **Conectar número de WhatsApp**
+2. O cliente dá um **nome à conexão** ("Comercial", "Loja Centro") — a palavra
+   *instância* não aparece na tela em momento nenhum
+3. Aparece o **QR Code**, ele lê pelo celular
+4. A tela passa a mostrar **Conectado** com o número, e um botão de desconectar
+
+Por trás, na API da Evolution:
+
+| Passo | Chamada |
+|---|---|
+| Criar | `POST /instance/create` com `instanceName` e `integration: WHATSAPP-BAILEYS` |
+| Pegar o QR | `GET /instance/connect/{nome}` — devolve `base64` do QR |
+| Saber se conectou | `GET /instance/connectionState/{nome}` — `open` = conectado |
+| Desconectar | `DELETE /instance/logout/{nome}` |
+
+Detalhes que decidem se isso funciona ou vira suporte:
+
+- O nome da instância na Evolution **não pode ser o que o cliente digitou** —
+  dois clientes escolhem "Comercial" no mesmo dia. Use `{slug-da-conta}-{n}` e
+  guarde o apelido bonito à parte, numa tabela `conta_conexoes`
+  (`conta_id`, `apelido`, `instancia`, `numero`, `status`).
+- O QR **expira em ~40 segundos**. A tela precisa buscar de novo sozinha, com
+  um botão de gerar outro, senão vira chamado.
+- A chave de admin da Evolution (`AUTHENTICATION_API_KEY`) fica no servidor,
+  como variável de ambiente. Ela cria instâncias — **nunca** pode chegar ao
+  navegador nem ficar em `conta_credenciais`.
+- Enquanto isso não existe, seguimos na instância `Guilherme014`, que é a do
+  Guilherme.
+
+**Entrega:** o cliente conecta o próprio WhatsApp sem falar com ninguém.
+**Tamanho:** M
+
+---
+
+### Fase 7 — Agente de resposta
+
+Webhook recebendo `messages.upsert` da Evolution, memória em
+`prospecta_mensagens` (a tabela já existe e já é preenchida no disparo), nó AI
+Agent, e transferência para humano com resumo da conversa.
+
+Depende da Fase 6: sem conexão gerenciada pelo app, não há como saber qual
+webhook pertence a qual conta.
 
 **Tamanho:** G
+
+---
+
+### Fase 8 — Os pendentes menores
+
+- **Paginação da busca** — só traz 20; a rota já aceita `pagina`, falta o botão. **P**
+- **Consumo por conta** — `prospecta_buscas` já registra tudo, falta a tela. **P**
+- **Esqueci minha senha** — depende de SMTP no GoTrue. **P**
+- **Enriquecimento** — ver `docs/enriquecimento.md`. **G**
 
 ---
 
@@ -167,7 +240,8 @@ resumo da conversa.
 **SerpAPI no plano gratuito.** 250 buscas/mês na conta atual. Com mais de um
 cliente isso estoura em dias. Duas saídas: cada cliente traz a própria chave
 (cadastrada na conta dele), ou a Figueira assina um plano pago e revende as
-buscas. Isso é decisão comercial e precisa estar resolvida antes da Fase 5.
+buscas. Isso é decisão comercial e **continua em aberto** — precisa estar
+resolvida antes do segundo cliente.
 
 **PostgREST self-hosted.** Toda tabela nova exige reiniciar o serviço `rest`,
 senão `SELECT` funciona e `INSERT` devolve 404 mudo. Já documentado em
@@ -183,9 +257,11 @@ e fica para depois — vale registrar que hoje não teremos.
 
 ---
 
-## O que eu recomendo aprovar agora
+## Por onde continuar
 
-Fase 0 e Fase 1. São as que destravam tudo e são pequenas o bastante para você
-ver resultado rápido. Ao fim da Fase 1 você já tem banco multi-conta com RLS
-provada, e aí decidimos juntos o nível de detalhe da Fase 2 antes de eu
-escrever tela.
+Fase 6. É a única coisa entre o produto de hoje e uma entrega em que o cliente
+não depende de ninguém da Figueira para começar a usar.
+
+Quem for continuar este trabalho: o estado atual, as credenciais e as
+armadilhas já conhecidas estão em `ESTADO.md`, na raiz do projeto — fora do
+git, na máquina do Guilherme.

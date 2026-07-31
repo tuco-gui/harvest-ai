@@ -8,3 +8,4 @@ app/.env.local
 app/node_modules/
 app/.next/
 app/tsconfig.tsbuildinfo
+ESTADO.md
