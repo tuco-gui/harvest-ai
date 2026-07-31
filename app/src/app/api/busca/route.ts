@@ -19,10 +19,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const { termo, pagina = 1, ll } = await req.json().catch(() => ({}) as Record<string, unknown>);
+  const { termo, pagina = 1, ll, regiao } = await req.json().catch(() => ({}) as Record<string, unknown>);
   if (typeof termo !== 'string' || !termo.trim()) {
     return NextResponse.json({ erro: 'Digite o ramo e a cidade.' }, { status: 400 });
   }
+  const raio = regiao as { lat: number; lng: number; km: number } | undefined;
 
   const admin = supabaseAdmin();
   const { data: cred } = await admin
@@ -101,6 +102,24 @@ export async function POST(req: Request) {
     longitude: x.gps_coordinates?.longitude ?? null,
   }));
 
+  // O `ll`+zoom da SerpAPI é só uma dica de onde centralizar — o Google não
+  // filtra de verdade pelo raio, então calculamos a distância real e ordenamos
+  // por ela. Não descartamos quem está fora: só avisamos, porque às vezes é
+  // isso mesmo que existe na região.
+  let avisoRegiao: string | null = null;
+  const distancias = new Map<number, number | null>();
+  if (raio) {
+    leads.forEach((l, i) => {
+      distancias.set(i, l.latitude && l.longitude ? distanciaKm(raio.lat, raio.lng, l.latitude, l.longitude) : null);
+    });
+    const dentro = [...distancias.values()].filter((d) => d !== null && d <= raio.km).length;
+    if (dentro === 0 && leads.length > 0) {
+      avisoRegiao = `Nenhuma empresa encontrada dentro de ${raio.km} km. Os resultados abaixo são os mais próximos — recomendamos abrir o raio.`;
+    } else if (dentro < 3 && dentro < leads.length) {
+      avisoRegiao = `Só ${dentro} ${dentro === 1 ? 'empresa está' : 'empresas estão'} dentro de ${raio.km} km. Recomendamos abrir o raio para achar mais.`;
+    }
+  }
+
   // Guarda os leads da conta. on_conflict=place_id evita duplicar entre buscas.
   const comId = leads.filter((l) => l.place_id);
   if (comId.length) {
@@ -125,10 +144,30 @@ export async function POST(req: Request) {
   const podeValidar = cred.evolution_url && cred.evolution_instancia && cred.evolution_key;
   const zap = podeValidar ? await validarWhatsApp(cred, leads.map((l) => l.telefone)) : {};
 
+  const comExtras = leads.map((l, i) => ({
+    ...l,
+    tem_whatsapp: l.telefone ? (zap[l.telefone] ?? null) : null,
+    distancia_km: raio ? (distancias.get(i) ?? null) : null,
+    dentro_do_raio: raio ? (distancias.get(i) !== null && distancias.get(i)! <= raio.km) : null,
+  }));
+  if (raio) comExtras.sort((a, b) => (a.distancia_km ?? Infinity) - (b.distancia_km ?? Infinity));
+
   return NextResponse.json({
-    leads: leads.map((l) => ({ ...l, tem_whatsapp: l.telefone ? (zap[l.telefone] ?? null) : null })),
+    leads: comExtras,
+    avisoRegiao,
     validou: podeValidar,
   });
+}
+
+/** Distância em linha reta entre dois pontos, em km (fórmula de Haversine). */
+function distanciaKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 /** Só dígitos, com DDI 55. A Evolution responde exists:false sem o 55. */

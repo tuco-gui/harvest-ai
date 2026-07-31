@@ -18,13 +18,28 @@ type Lead = {
   longitude: number | null;
   tem_whatsapp: boolean | null;
   dados_extras?: Record<string, string> | null;
+  distancia_km?: number | null;
+  dentro_do_raio?: boolean | null;
 };
 
 type Estado = 'parado' | 'correndo' | 'pausado';
 type PainelExtra = 'mapa' | 'planilha' | 'manual' | null;
 
-const ZOOM_DO_RAIO: Record<number, number> = { 1: 14, 5: 12, 10: 11, 25: 10 };
 const CENTRO_PADRAO: [number, number] = [-15.79, -47.88];
+const RAIOS_PRESET = [1, 5, 10, 25];
+
+/** O zoom do `ll=@lat,lng,ZOOMz` é só uma dica pro Google de onde olhar — a
+ *  distância real é filtrada depois, no servidor. Por isso a fórmula é
+ *  aproximada, não precisa bater exato com o raio escolhido. */
+function zoomParaRaio(km: number): number {
+  if (km <= 1) return 14;
+  if (km <= 3) return 13;
+  if (km <= 5) return 12;
+  if (km <= 10) return 11;
+  if (km <= 20) return 10;
+  if (km <= 40) return 9;
+  return 8;
+}
 
 export default function Prospeccao({
   podeConfigurar, intervaloMin = 30, intervaloMax = 60,
@@ -46,6 +61,8 @@ export default function Prospeccao({
   const [enviados, setEnviados] = useState(0);
   const [falhas, setFalhas] = useState(0);
   const [recado, setRecado] = useState<string | null>(null);
+  const [avisoRegiao, setAvisoRegiao] = useState<string | null>(null);
+  const [raioCustom, setRaioCustom] = useState('');
 
   const chave = (l: Lead, i: number) => l.place_id ?? `${l.empresa}-${i}`;
   const selecionados = useMemo(
@@ -61,16 +78,20 @@ export default function Prospeccao({
 
     setBuscando(true);
     setErro(null);
+    setAvisoRegiao(null);
 
     try {
       const r = await fetch('/api/busca', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // raio em km -> zoom que a SerpAPI espera em ll=@lat,lng,ZOOMz
         body: JSON.stringify({
           termo,
           pagina: 1,
-          ll: regiao ? `@${regiao.lat.toFixed(6)},${regiao.lng.toFixed(6)},${ZOOM_DO_RAIO[regiao.km]}z` : undefined,
+          // raio em km -> zoom que a SerpAPI espera em ll=@lat,lng,ZOOMz (só uma
+          // dica de onde olhar); `regiao` é o que o servidor usa pra filtrar de
+          // verdade pela distância real.
+          ll: regiao ? `@${regiao.lat.toFixed(6)},${regiao.lng.toFixed(6)},${zoomParaRaio(regiao.km)}z` : undefined,
+          regiao: regiao ?? undefined,
         }),
       });
       const dados = await r.json();
@@ -82,6 +103,7 @@ export default function Prospeccao({
         setLeads(dados.leads ?? []);
         setEscolhidos(new Set());
         setVista(regiao ? 'mapa' : 'lista');
+        setAvisoRegiao(dados.avisoRegiao ?? null);
       }
       setJaBuscou(true);
       setPainelExtra(null);
@@ -111,7 +133,15 @@ export default function Prospeccao({
     setEscolhidos(new Set());
     setJaBuscou(false);
     setErro(null);
+    setAvisoRegiao(null);
     setVista('lista');
+  }
+
+  function aplicarRaioCustom() {
+    const km = Number(raioCustom);
+    if (!km || km <= 0) return;
+    setRegiao((r) => (r ? { ...r, km } : { lat: CENTRO_PADRAO[0], lng: CENTRO_PADRAO[1], km }));
+    setRaioCustom('');
   }
 
   /* ------------------------------------------------------- disparo */
@@ -363,7 +393,9 @@ export default function Prospeccao({
 
     if (!mapaRef.current) {
       const centro = leads.find((l) => l.latitude && l.longitude);
-      mapaRef.current = L.map('mapa').setView(
+      // scrollWheelZoom desligado: com ele ligado, rolar a página com o mouse
+      // em cima do mapa trava a rolagem e some no zoom sem querer.
+      mapaRef.current = L.map('mapa', { scrollWheelZoom: false }).setView(
         centro ? [centro.latitude, centro.longitude] : (regiao ? [regiao.lat, regiao.lng] : CENTRO_PADRAO),
         centro ? 13 : regiao ? 12 : 4,
       );
@@ -485,32 +517,66 @@ export default function Prospeccao({
         )}
 
         {mostrarMapa && (
-          <div style={{ marginTop: 14 }}>
-            <div className="raios" role="group" aria-label="Raio da busca">
-              {[1, 5, 10, 25].map((km) => (
-                <button key={km} type="button"
-                        aria-pressed={(regiao?.km ?? 5) === km}
-                        onClick={() => setRegiao((r) => (r ? { ...r, km } : { lat: CENTRO_PADRAO[0], lng: CENTRO_PADRAO[1], km }))}>
-                  {km} km
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 10 }}>
-              <div className="grupo" style={{ marginBottom: 0, maxWidth: 200 }}>
-                <label className="label" htmlFor="cep">Ou informe um CEP</label>
-                <input id="cep" value={cepTexto} onChange={(e) => setCepTexto(e.target.value)}
-                       placeholder="18600-000" />
+          <div className="mapa-bloco">
+            <div className="mapa-controles">
+              <div className="raios" role="group" aria-label="Raio da busca">
+                {RAIOS_PRESET.map((km) => (
+                  <button key={km} type="button"
+                          aria-pressed={(regiao?.km ?? 5) === km}
+                          onClick={() => setRegiao((r) => (r ? { ...r, km } : { lat: CENTRO_PADRAO[0], lng: CENTRO_PADRAO[1], km }))}>
+                    {km} km
+                  </button>
+                ))}
               </div>
-              <button type="button" className="salvar" disabled={localizandoCep || !cepTexto.trim()}
-                      onClick={localizarCep}>
-                {localizandoCep ? 'Localizando…' : 'Localizar'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
+                <div className="grupo" style={{ marginBottom: 0, maxWidth: 100 }}>
+                  <label className="label" htmlFor="raio-custom">Ou digite o raio</label>
+                  <input id="raio-custom" type="number" min={1} max={300} value={raioCustom}
+                         onChange={(e) => setRaioCustom(e.target.value)}
+                         placeholder={`${regiao?.km ?? 5} km`} />
+                </div>
+                <button type="button" className="salvar" disabled={!raioCustom} onClick={aplicarRaioCustom}>
+                  Definir
+                </button>
+              </div>
+              <div className="grupo" style={{ marginBottom: 0 }}>
+                <label className="label" htmlFor="cep">Ou informe um CEP</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input id="cep" value={cepTexto} onChange={(e) => setCepTexto(e.target.value)}
+                         placeholder="18600-000" />
+                  <button type="button" className="salvar" disabled={localizandoCep || !cepTexto.trim()}
+                          onClick={localizarCep}>
+                    {localizandoCep ? '…' : 'Ir'}
+                  </button>
+                </div>
+              </div>
+
+              {leads.length > 0 && (
+                <div className="funil-mini">
+                  <span><b>{leads.length}</b> encontradas</span>
+                  <span><b>{comZap}</b> com WhatsApp</span>
+                  <span><b>{escolhidos.size}</b> selecionadas</span>
+                  <div className="acoes acoes-mini">
+                    <button type="button" onClick={todas}>Selecionar todas</button>
+                    <button type="button" onClick={nenhuma}>Limpar seleção</button>
+                    <button type="button" onClick={soZap}>Só com WhatsApp</button>
+                    <button type="button" onClick={limparLista}>Limpar lista</button>
+                  </div>
+                  <div className="modos" style={{ marginTop: 10 }}>
+                    <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>Lista</button>
+                    <button type="button" aria-pressed={vista === 'mapa'} onClick={() => setVista('mapa')}>Mapa</button>
+                  </div>
+                </div>
+              )}
             </div>
-            <div id="mapa" />
-            <p className="mapa-ajuda">
-              Clique no mapa para marcar de onde buscar, escolha o raio, e digite o ramo ali em cima
-              para buscar. Pontos verdes são empresas com WhatsApp.
-            </p>
+
+            <div className="mapa-lado">
+              <div id="mapa" />
+              <p className="mapa-ajuda">
+                Clique no mapa para marcar de onde buscar, escolha o raio, e digite o ramo ali em cima
+                para buscar. Pontos verdes são empresas com WhatsApp.
+              </p>
+            </div>
           </div>
         )}
 
@@ -521,9 +587,11 @@ export default function Prospeccao({
           </div>
         )}
 
+        {avisoRegiao && <p className="aviso-suave">{avisoRegiao}</p>}
+
         {erro && <p className="erro">{erro}</p>}
 
-        {leads.length > 0 && (
+        {leads.length > 0 && !mostrarMapa && (
           <>
             <section className="funil" aria-label="Resultado da busca">
               <div className="etapa">
@@ -555,9 +623,12 @@ export default function Prospeccao({
                 <button type="button" aria-pressed={vista === 'mapa'} onClick={() => setVista('mapa')}>Mapa</button>
               </div>
             </div>
+          </>
+        )}
 
-            <ul className="lista" role="listbox" aria-multiselectable hidden={vista !== 'lista'}>
-              {leads.map((l, i) => {
+        {leads.length > 0 && (
+          <ul className="lista" role="listbox" aria-multiselectable hidden={vista !== 'lista'}>
+            {leads.map((l, i) => {
                 const k = chave(l, i);
                 const marcado = escolhidos.has(k);
                 return (
@@ -568,6 +639,7 @@ export default function Prospeccao({
                     tabIndex={0}
                     aria-selected={marcado}
                     data-zap={l.tem_whatsapp === true ? 'sim' : 'nao'}
+                    data-fora-raio={l.dentro_do_raio === false ? '1' : undefined}
                     onClick={() => alternar(k)}
                     onKeyDown={(e) => {
                       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); alternar(k); }
@@ -581,6 +653,7 @@ export default function Prospeccao({
                     <span className="quem">
                       <span className="nome">{l.empresa}</span>
                       <span className="onde">{l.endereco ?? 'Endereço não informado'}</span>
+                      {l.especialidades && <span className="selo selo-ramo">{l.especialidades}</span>}
                     </span>
                     <span className="nota">
                       {l.rating ? (
@@ -593,14 +666,15 @@ export default function Prospeccao({
                       )}
                     </span>
                     <span className="zap">
-                      <span className="ponto" />
-                      {l.telefone_original ?? 'sem telefone'}
+                      <span className="selo" data-zap-selo={l.tem_whatsapp === true ? 'sim' : l.tem_whatsapp === false ? 'nao' : 'incerto'}>
+                        {l.tem_whatsapp === true ? 'WhatsApp' : l.tem_whatsapp === false ? 'Sem WhatsApp' : 'Não verificado'}
+                      </span>
+                      <span className="zap-numero">{l.telefone_original ?? 'sem telefone'}</span>
                     </span>
                   </li>
                 );
               })}
-            </ul>
-          </>
+          </ul>
         )}
 
         {jaBuscou && !leads.length && !erro && (

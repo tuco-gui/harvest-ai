@@ -107,7 +107,35 @@ Coisas que evitam queimar o número do WhatsApp:
 
 ---
 
-## 6. Controle de custo
+## 6. Sócio e telefone do proprietário via CNPJ
+
+**Pedido do Guilherme (31/07/2026):** em vez de falar só com "a empresa", falar com o dono.
+Cruzar CNPJ e trazer nome e telefone dos sócios é mais valioso que qualquer outro dado da
+lista hoje — muda a mensagem de "olá, empresa" para "olá, [nome]".
+
+**Por que não é simples:** o Google Maps (SerpAPI `google_maps`) **não devolve CNPJ**. Não
+tem esse campo. Para chegar no CNPJ a partir de um resultado de Maps, o caminho seria:
+
+1. Casar `empresa` (nome) + `endereco`/cidade contra uma base de CNPJ por razão social —
+   correspondência aproximada (fuzzy), sujeita a erro: nome fantasia raramente bate com
+   razão social ("Bellaminy Bijuterias" no Maps pode ser "M. F. DE SOUZA COMÉRCIO LTDA" no
+   CNPJ). Falso positivo aqui é grave: manda mensagem pro sócio errado.
+2. Ou casar pelo telefone, se a base de CNPJ tiver telefone cadastrado (nem sempre tem, e
+   quando tem, muitas vezes é telefone fixo antigo, não o WhatsApp que já validamos).
+
+**Fontes possíveis:** BrasilAPI (`brasilapi.com.br`, gratuita, mas exige o CNPJ já em mãos —
+não busca por nome) e bases pagas de enriquecimento (Speedio, Econodata, Data2CRM) que
+fazem esse casamento por nome+telefone já prontas — custam por consulta ou por assinatura.
+
+**Decisão que falta:** vale pagar por uma base de enriquecimento pronta (mais confiável,
+mais caro) ou tentar o casamento por conta própria (mais barato, mais falso positivo)?
+Isso é decisão comercial — depende de quanto cada lead vale para o cliente que está
+pagando pelo Harvest AI. Não construí nada disso ainda; fica para quando essa decisão
+estiver tomada.
+
+---
+
+## 7. Controle de custo
 
 `prospecta_buscas` já registra termo, página, total de resultados e quantos leads novos
 saíram. Com isso dá para:
