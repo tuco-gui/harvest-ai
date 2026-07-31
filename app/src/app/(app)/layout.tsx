@@ -29,6 +29,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
         email={perfil.email ?? ''}
         papel={perfil.papel}
         iniciais={iniciais}
+        avatarUrl={perfil.avatar_url}
         contaNome={contaNome}
         contas={contas ?? []}
         ehSuperAdmin={ehSuper}

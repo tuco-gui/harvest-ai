@@ -65,6 +65,36 @@ export async function POST(req: Request) {
   return NextResponse.json({ id: data.user?.id, email, senha });
 }
 
+/**
+ * Gera uma senha nova para um usuário já existente. Cobre dois casos: ele
+ * nunca recebeu a senha inicial (sem SMTP não há e-mail de convite) ou
+ * esqueceu — sem SMTP também não há "esqueci minha senha" self-service.
+ * Mesma regra de alcance do DELETE: admin só na própria conta.
+ */
+export async function PATCH(req: Request) {
+  const perfil = await perfilAtual();
+  if (!perfil || perfil.papel === 'operador') {
+    return NextResponse.json({ erro: 'Sem permissão.' }, { status: 403 });
+  }
+
+  const { id } = await req.json().catch(() => ({}) as any);
+  if (!id) return NextResponse.json({ erro: 'Falta o usuário.' }, { status: 400 });
+
+  const admin = supabaseAdmin();
+
+  const { data: alvo } = await admin.from('perfis').select('email, conta_id').eq('id', id).single();
+  if (!alvo) return NextResponse.json({ erro: 'Usuário não encontrado.' }, { status: 404 });
+  if (perfil.papel !== 'super_admin' && alvo.conta_id !== perfil.conta_propria) {
+    return NextResponse.json({ erro: 'Esse usuário não é da sua conta.' }, { status: 403 });
+  }
+
+  const senha = senhaInicial();
+  const { error } = await admin.auth.admin.updateUserById(id, { password: senha });
+  if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+
+  return NextResponse.json({ email: alvo.email, senha });
+}
+
 /** Remove usuário. O perfil cai junto por cascade. */
 export async function DELETE(req: Request) {
   const perfil = await perfilAtual();

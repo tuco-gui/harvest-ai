@@ -12,6 +12,7 @@ type Props = {
   email: string;
   papel: string;
   iniciais: string;
+  avatarUrl: string | null;
   contaNome: string;
   contas: Conta[];       // só o super admin recebe a lista cheia
   ehSuperAdmin: boolean;
@@ -137,7 +138,13 @@ export default function Topo(p: Props) {
           aria-expanded={menu === 'perfil'}
           aria-label="Sua conta"
         >
-          {p.iniciais}
+          {p.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.avatarUrl} alt="" width={28} height={28}
+                 style={{ borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+          ) : (
+            p.iniciais
+          )}
         </button>
         {menu === 'perfil' && (
           <div className="menu menu-dir">
@@ -145,6 +152,9 @@ export default function Topo(p: Props) {
             <span className="menu-vazio">{p.email}</span>
             <span className="menu-vazio">{NOME_PAPEL[p.papel] ?? p.papel}</span>
             <div className="menu-risco" />
+            <Link href="/perfil" className="menu-item" onClick={() => setMenu(null)}>
+              Editar perfil
+            </Link>
             <button className="menu-item" onClick={sair}>Sair</button>
           </div>
         )}

@@ -76,6 +76,18 @@ export default function Contas({
     router.refresh();
   }
 
+  async function gerarSenha(u: Perfil) {
+    if (!confirm(`Gerar uma senha nova para ${u.email}? A senha atual dele para de funcionar.`)) return;
+    setAviso(null); setSenhaNova(null);
+    const r = await fetch('/api/usuarios', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: u.id }),
+    });
+    const d = await r.json();
+    if (!r.ok) { setAviso(d.erro); return; }
+    setSenhaNova({ email: d.email, senha: d.senha });
+  }
+
   async function trabalharEm(id: string) {
     await fetch('/api/conta-ativa', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -146,6 +158,9 @@ export default function Contas({
         <h2>Usuários</h2>
         <p className="resumo-secao">
           O operador busca e dispara. O administrador também mexe em chaves e mensagens.
+          Não há envio de e-mail configurado ainda: ao criar um usuário ou gerar uma senha nova,
+          passe os dados para a pessoa por fora (WhatsApp, por exemplo). Ela troca a senha depois,
+          pelo próprio perfil.
         </p>
 
         {contas.map((c) => {
@@ -160,7 +175,10 @@ export default function Contas({
                       <td>{u.nome || '—'}</td>
                       <td style={{ color: 'var(--ink-2)' }}>{u.email}</td>
                       <td><span className="selo" data-papel={u.papel}>{NOME_PAPEL[u.papel]}</span></td>
-                      <td className="acao"><button onClick={() => remover(u)}>Remover</button></td>
+                      <td className="acao">
+                        <button onClick={() => gerarSenha(u)}>Gerar nova senha</button>
+                        <button onClick={() => remover(u)}>Remover</button>
+                      </td>
                     </tr>
                   ))}
                   {!doCliente.length && (
@@ -181,12 +199,21 @@ export default function Contas({
                 <td style={{ color: 'var(--ink-2)' }}>{u.email}</td>
                 <td><span className="selo" data-papel={u.papel}>{NOME_PAPEL[u.papel]}</span></td>
                 <td className="acao">
+                  <button onClick={() => gerarSenha(u)}>Gerar nova senha</button>
                   {u.id !== meuId && <button onClick={() => remover(u)}>Remover</button>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        {senhaNova && (
+          <div className="senha-nova" style={{ marginTop: 22 }}>
+            Passe estes dados para <b>{senhaNova.email}</b>: <code>{senhaNova.senha}</code>
+            <br />
+            Esta senha aparece uma vez só e não fica guardada. Anote agora.
+          </div>
+        )}
 
         <form className="cartaocfg" style={{ marginTop: 22 }} onSubmit={criarUsuario}>
           <div className="linha-form">
@@ -222,15 +249,6 @@ export default function Contas({
               {criandoUsuario ? 'Criando…' : 'Criar usuário'}
             </button>
           </div>
-
-          {senhaNova && (
-            <div className="senha-nova">
-              Usuário criado. Passe estes dados para <b>{senhaNova.email}</b>:{' '}
-              <code>{senhaNova.senha}</code>
-              <br />
-              Esta senha aparece uma vez só e não fica guardada. Anote agora.
-            </div>
-          )}
         </form>
 
         {aviso && <p className="erro" style={{ marginTop: 16 }}>{aviso}</p>}
