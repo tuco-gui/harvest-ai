@@ -1,0 +1,44 @@
+name: Publicar imagem
+
+# Constrói o app e publica no ghcr.io. O build NÃO pode acontecer no VPS:
+# compilar Next.js pede 1,5–3 GB de RAM em pico e lá sobram ~3,9 GB.
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/imagem.yml']
+  workflow_dispatch:
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir e publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          # As NEXT_PUBLIC_* vão embutidas no bundle do navegador, então
+          # precisam existir na hora de compilar, não só de rodar.
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
