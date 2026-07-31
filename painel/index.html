@@ -504,12 +504,6 @@
                                 </button>
                             </div>
 
-                            <div class="col-12">
-                                <button class="btn btn-outline-secondary btn-lg w-100"
-                                    onclick="showIntervalConfigModal()">
-                                    <i class="bi bi-clock me-2"></i>Configurar Intervalos
-                                </button>
-                            </div>
                         </div>
                     </div>
 
@@ -913,20 +907,11 @@ async function safeFetch(url, options = {}) {
                 emptyState.innerHTML = `
                     <div class="text-center py-5">
                         <i class="bi bi-robot fs-1 text-primary mb-3"></i>
-                        <h4 class="text-primary mb-3">Bem-vindo ao Prospecta IA!</h4>
-                        <p class="text-muted mb-4">
-                            Encontre leads qualificados e envie automaticamente para sua IA.<br>
-                            Busque empresas, valide WhatsApp e envie dados via webhook.
+                        <h4 class="text-primary mb-3">Bem-vindo ao Harvest AI</h4>
+                        <p class="text-muted mb-0">
+                            Encontre leads qualificados e fale com eles automaticamente.<br>
+                            Busque no Google Maps ou importe sua lista, valide o WhatsApp e dispare.
                         </p>
-                        <div class="alert alert-info d-inline-block">
-                            <i class="bi bi-gear me-2"></i>
-                            <strong>Primeiro passo:</strong> Configure suas APIs clicando no ícone da engrenagem <i class="bi bi-gear"></i> no canto superior direito.
-                        </div>
-                        <div class="mt-4">
-                            <button class="btn btn-primary me-2" onclick="showConfigModal()">
-                                <i class="bi bi-gear me-2"></i>Configurar APIs
-                            </button>
-                        </div>
                     </div>
                 `;
             }
@@ -2409,7 +2394,7 @@ async function safeFetch(url, options = {}) {
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">
-                            <i class="bi bi-gear me-2"></i>Configurações das APIs
+                            <i class="bi bi-gear me-2"></i>Configurações
                         </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
@@ -2417,12 +2402,12 @@ async function safeFetch(url, options = {}) {
                         <ul class="nav nav-tabs mb-4" role="tablist">
                             <li class="nav-item">
                                 <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#aba-apis" type="button">
-                                    <i class="bi bi-plug me-1"></i>APIs
+                                    <i class="bi bi-plug me-1"></i>Conexões
                                 </button>
                             </li>
                             <li class="nav-item">
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#aba-envios" type="button">
-                                    <i class="bi bi-chat-dots me-1"></i>Envios
+                                    <i class="bi bi-chat-dots me-1"></i>Mensagens e Envios
                                 </button>
                             </li>
                         </ul>
@@ -2583,6 +2568,46 @@ async function safeFetch(url, options = {}) {
                                 </div>
                             </div>
 
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-clock me-2"></i>Intervalo entre envios</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="alert alert-warning">
+                                        <i class="bi bi-exclamation-triangle me-2"></i>
+                                        Disparar rápido demais é o caminho mais curto para o WhatsApp bloquear o número.
+                                        O sistema espera um tempo aleatório entre os dois valores a cada envio.
+                                    </div>
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-6">
+                                            <label class="form-label fw-semibold">Mínimo (segundos)</label>
+                                            <input type="number" class="form-control" id="min-interval" min="5" max="300">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label fw-semibold">Máximo (segundos)</label>
+                                            <input type="number" class="form-control" id="max-interval" min="10" max="600">
+                                        </div>
+                                    </div>
+                                    <div class="row g-2">
+                                        <div class="col-4">
+                                            <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="setIntervalPreset(15, 30)">
+                                                Rápido<br><small>15-30s</small>
+                                            </button>
+                                        </div>
+                                        <div class="col-4">
+                                            <button type="button" class="btn btn-outline-success btn-sm w-100" onclick="setIntervalPreset(30, 60)">
+                                                Moderado<br><small>30-60s</small>
+                                            </button>
+                                        </div>
+                                        <div class="col-4">
+                                            <button type="button" class="btn btn-outline-warning btn-sm w-100" onclick="setIntervalPreset(60, 120)">
+                                                Seguro<br><small>60-120s</small>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="card" id="card-contexto">
                                 <div class="card-header">
                                     <h6 class="mb-0"><i class="bi bi-robot me-2"></i>Contexto para a IA</h6>
@@ -2645,6 +2670,8 @@ async function safeFetch(url, options = {}) {
             document.getElementById(`modo-${ENVIO_CONFIG.modo}`).checked = true;
             document.getElementById('envio-mensagens').value = ENVIO_CONFIG.mensagens.join('\n---\n');
             document.getElementById('envio-contexto').value = ENVIO_CONFIG.contexto;
+            document.getElementById('min-interval').value = localStorage.getItem('webhook_min_interval') || '30';
+            document.getElementById('max-interval').value = localStorage.getItem('webhook_max_interval') || '60';
             document.getElementById('envio-mensagens').addEventListener('input', atualizarContadorMensagens);
             atualizarCamposEnvio();
 
@@ -2821,6 +2848,17 @@ async function safeFetch(url, options = {}) {
             ENVIO_CONFIG.contexto = contexto;
 
             localStorage.setItem('envio_config', JSON.stringify(ENVIO_CONFIG));
+
+            const minIntervalo = parseInt(document.getElementById('min-interval').value);
+            const maxIntervalo = parseInt(document.getElementById('max-interval').value);
+
+            if (isNaN(minIntervalo) || isNaN(maxIntervalo) || minIntervalo < 5 || minIntervalo >= maxIntervalo) {
+                showErrorToast('❌ Intervalo inválido: o mínimo precisa ser pelo menos 5s e menor que o máximo.');
+                return;
+            }
+
+            localStorage.setItem('webhook_min_interval', minIntervalo.toString());
+            localStorage.setItem('webhook_max_interval', maxIntervalo.toString());
 
             updateSearchButtonState();
             updateWebhookButtons();
@@ -3436,118 +3474,10 @@ async function safeFetch(url, options = {}) {
             }
         }
 
-        // Show interval configuration modal
-        function showIntervalConfigModal() {
-            const currentMinInterval = localStorage.getItem('webhook_min_interval') || '30';
-            const currentMaxInterval = localStorage.getItem('webhook_max_interval') || '60';
-
-            const modalHtml = `
-        <div class="modal fade" id="intervalModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="bi bi-clock me-2"></i>Configurar Intervalos de Envio
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle me-2"></i>
-                            <strong>Importante:</strong> Os intervalos ajudam a evitar bloqueios do WhatsApp. Cada prospect será enviado individualmente com um intervalo randômico entre os valores configurados.
-                        </div>
-                        
-                        <div class="row g-3">
-                            <div class="col-6">
-                                <label class="form-label fw-semibold">Intervalo Mínimo (segundos)</label>
-                                <input type="number" class="form-control" id="min-interval" 
-                                       value="${currentMinInterval}" min="5" max="300">
-                                <div class="form-text">Mínimo: 5 segundos</div>
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label fw-semibold">Intervalo Máximo (segundos)</label>
-                                <input type="number" class="form-control" id="max-interval" 
-                                       value="${currentMaxInterval}" min="10" max="600">
-                                <div class="form-text">Máximo: 600 segundos (10 min)</div>
-                            </div>
-                        </div>
-
-                        <div class="mt-3 p-3 bg-warning rounded">
-                            <small class="text-black">
-                                <strong>Exemplo:</strong> Com intervalos de 30-60s, cada envio aguardará um tempo aleatório entre 30 e 60 segundos antes do próximo.
-                            </small>
-                        </div>
-
-                        <div class="mt-3">
-                            <h6>Presets Recomendados:</h6>
-                            <div class="row g-2">
-                                <div class="col-4">
-                                    <button class="btn btn-outline-primary btn-sm w-100" onclick="setIntervalPreset(15, 30)">
-                                        Rápido<br><small>15-30s</small>
-                                    </button>
-                                </div>
-                                <div class="col-4">
-                                    <button class="btn btn-outline-success btn-sm w-100" onclick="setIntervalPreset(30, 60)">
-                                        Moderado<br><small>30-60s</small>
-                                    </button>
-                                </div>
-                                <div class="col-4">
-                                    <button class="btn btn-outline-warning btn-sm w-100" onclick="setIntervalPreset(60, 120)">
-                                        Seguro<br><small>60-120s</small>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="button" class="btn btn-primary" onclick="saveIntervalConfig()">
-                            <i class="bi bi-check me-1"></i>Salvar Configuração
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal(document.getElementById('intervalModal'));
-            modal.show();
-
-            document.getElementById('intervalModal').addEventListener('hidden.bs.modal', function () {
-                this.remove();
-            });
-        }
-
         // Set interval preset
         function setIntervalPreset(min, max) {
             document.getElementById('min-interval').value = min;
             document.getElementById('max-interval').value = max;
-        }
-
-        // Save interval configuration
-        function saveIntervalConfig() {
-            const minInterval = parseInt(document.getElementById('min-interval').value);
-            const maxInterval = parseInt(document.getElementById('max-interval').value);
-
-            if (minInterval >= maxInterval) {
-                showErrorToast('❌ O intervalo mínimo deve ser menor que o máximo!');
-                return;
-            }
-
-            if (minInterval < 5) {
-                showErrorToast('❌ O intervalo mínimo deve ser pelo menos 5 segundos!');
-                return;
-            }
-
-            localStorage.setItem('webhook_min_interval', minInterval.toString());
-            localStorage.setItem('webhook_max_interval', maxInterval.toString());
-
-            const modal = bootstrap.Modal.getInstance(document.getElementById('intervalModal'));
-            modal.hide();
-
-            showSuccessToast(`✅ Intervalos configurados: ${minInterval}-${maxInterval} segundos`);
-            debugLog('Intervalos salvos:', { min: minInterval, max: maxInterval });
         }
 
         // Update interval display
