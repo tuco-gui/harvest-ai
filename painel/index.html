@@ -655,6 +655,28 @@ async function safeFetch(url, options = {}) {
             url: ''
         };
 
+        // Configuração de Envios: o que vai ser mandado para cada lead.
+        //  fixa    -> sempre a mesma mensagem
+        //  rodizio -> alterna entre as mensagens cadastradas, uma por lead
+        //  ia      -> a IA escreve, usando o contexto e os dados do lead
+        const ENVIO_CONFIG = {
+            modo: 'ia',
+            mensagens: [],
+            contexto: ''
+        };
+
+        // Escolhe a mensagem deste lead conforme o modo. Devolve null no modo IA,
+        // que é o sinal para o n8n seguir pelo caminho da OpenAI.
+        function mensagemDoLead(indice) {
+            if (ENVIO_CONFIG.modo === 'ia') return null;
+            if (!ENVIO_CONFIG.mensagens.length) return null;
+
+            if (ENVIO_CONFIG.modo === 'rodizio') {
+                return ENVIO_CONFIG.mensagens[indice % ENVIO_CONFIG.mensagens.length];
+            }
+            return ENVIO_CONFIG.mensagens[0];
+        }
+
         // Debug logging function
         function debugLog(message, data = null) {
             if (!debugMode) return;
@@ -779,7 +801,23 @@ async function safeFetch(url, options = {}) {
                         const category = getField(['categoria', 'category', 'segmento', 'nicho', 'tipo', 'type']);
                         const email = getField(['email', 'e-mail', 'mail']);
 
+                        // Tudo que não foi mapeado acima vira contexto para a IA:
+                        // último pedido, valor, produtos comprados, o que o cliente puser.
+                        const jaUsadas = ['nome','name','empresa','company','business','cliente',
+                            'telefone','phone','celular','mobile','whatsapp','tel','contato',
+                            'endereço','endereco','address','local','cidade','city',
+                            'site','website','url','web','categoria','category','segmento',
+                            'nicho','tipo','type','email','e-mail','mail'];
+                        const extras = {};
+                        Object.keys(row).forEach(k => {
+                            const chave = k.toLowerCase().trim();
+                            if (!jaUsadas.includes(chave) && row[k] !== '' && row[k] != null) {
+                                extras[k.trim()] = row[k];
+                            }
+                        });
+
                         return {
+                            dados_extras: Object.keys(extras).length ? extras : null,
                             id: Date.now() + index,
                             name: name || 'Nome não identificado',
                             title: name || 'Nome não identificado', // Compatibilidade
@@ -1354,6 +1392,7 @@ async function safeFetch(url, options = {}) {
                     gps_coordinates: prospect.gps_coordinates || null,
                     whatsappJid: whatsappData ? whatsappData.jid : null,
                     source: prospect.source || 'API', // Track source
+                    dados_extras: prospect.dados_extras || null,
                     debugInfo: debugMode ? {
                         originalPhone: originalPhone,
                         cleanPhone: cleanPhone,
@@ -2045,6 +2084,7 @@ async function safeFetch(url, options = {}) {
                     // Prepare individual prospect data
                     const webhookData = {
                         nome_empresa: prospect.name,
+                        dados_extras: prospect.dados_extras || null,
                         telefone: cleanPhone || 'Não informado',
                         telefone_original: prospect.telefone || 'Não informado',
                         rating_google: prospect.rating || 0,
@@ -2073,6 +2113,11 @@ async function safeFetch(url, options = {}) {
                                 total_prospects: prospects.length,
                                 timestamp: new Date().toISOString(),
                                 source: 'Prospecta IA',
+                                envio: {
+                                    modo: ENVIO_CONFIG.modo,
+                                    mensagem: mensagemDoLead(i),
+                                    contexto: ENVIO_CONFIG.contexto || null
+                                },
                                 evolution_config: {
                                     url: WHATSAPP_API_CONFIG.baseUrl || 'Não configurado',
                                     instancia: WHATSAPP_API_CONFIG.instance || 'Não configurado',
@@ -2369,6 +2414,21 @@ async function safeFetch(url, options = {}) {
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        <ul class="nav nav-tabs mb-4" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#aba-apis" type="button">
+                                    <i class="bi bi-plug me-1"></i>APIs
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#aba-envios" type="button">
+                                    <i class="bi bi-chat-dots me-1"></i>Envios
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content">
+                        <div class="tab-pane fade show active" id="aba-apis">
                         <div class="card mb-4">
                             <div class="card-header">
                                 <h6 class="mb-0">
@@ -2466,7 +2526,82 @@ async function safeFetch(url, options = {}) {
                             </div>
                         </div>
 
-                        <div class="card">
+                        </div>
+
+                        <div class="tab-pane fade" id="aba-envios">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle me-2"></i>
+                                Escolha o que será enviado para cada lead selecionado.
+                            </div>
+
+                            <div class="card mb-4">
+                                <div class="card-body">
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="radio" name="modo-envio" id="modo-fixa" value="fixa"
+                                               onchange="atualizarCamposEnvio()">
+                                        <label class="form-check-label fw-semibold" for="modo-fixa">
+                                            Mensagem fixa
+                                            <div class="form-text mb-0">A mesma mensagem para todo mundo.</div>
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="radio" name="modo-envio" id="modo-rodizio" value="rodizio"
+                                               onchange="atualizarCamposEnvio()">
+                                        <label class="form-check-label fw-semibold" for="modo-rodizio">
+                                            Rodízio de mensagens
+                                            <div class="form-text mb-0">
+                                                Alterna entre as mensagens cadastradas, uma por lead.
+                                                Variar o texto reduz o risco de bloqueio no WhatsApp.
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input" type="radio" name="modo-envio" id="modo-ia" value="ia"
+                                               onchange="atualizarCamposEnvio()">
+                                        <label class="form-check-label fw-semibold" for="modo-ia">
+                                            A IA escreve
+                                            <div class="form-text mb-0">
+                                                Personalizada por lead, usando os dados da busca ou da planilha.
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card mb-4" id="card-mensagens">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-list-ul me-2"></i>Mensagens</h6>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label fw-semibold">Uma mensagem por bloco, separadas por <code>---</code></label>
+                                    <textarea class="form-control" id="envio-mensagens" rows="10"
+                                              placeholder="Oi! Aqui é a Ana, da Empresa X...&#10;---&#10;Olá! Sou a Ana, da Empresa X...&#10;---&#10;Bom dia! Ana falando, da Empresa X..."></textarea>
+                                    <div class="form-text">
+                                        Cadastre 3 a 5 variações no modo rodízio.
+                                        <span id="contador-mensagens" class="fw-semibold"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card" id="card-contexto">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-robot me-2"></i>Contexto para a IA</h6>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label fw-semibold">O que a IA precisa saber para escrever</label>
+                                    <textarea class="form-control" id="envio-contexto" rows="8"
+                                              placeholder="Quem somos, o que vendemos, para quem, condição comercial, tom de voz, o que nunca dizer."></textarea>
+                                    <div class="form-text">
+                                        A IA também recebe os dados do lead. Se a planilha tiver colunas extras
+                                        (último pedido, valor, produtos), elas entram aqui automaticamente e viram
+                                        personalização.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        </div>
+
+                        <div class="card mt-4">
                             <div class="card-header">
                                 <h6 class="mb-0">
                                     <i class="bi bi-check-circle me-2"></i>Testar Configurações
@@ -2505,12 +2640,40 @@ async function safeFetch(url, options = {}) {
     `;
 
             document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // Preenche a aba Envios com o que já está salvo
+            document.getElementById(`modo-${ENVIO_CONFIG.modo}`).checked = true;
+            document.getElementById('envio-mensagens').value = ENVIO_CONFIG.mensagens.join('\n---\n');
+            document.getElementById('envio-contexto').value = ENVIO_CONFIG.contexto;
+            document.getElementById('envio-mensagens').addEventListener('input', atualizarContadorMensagens);
+            atualizarCamposEnvio();
+
             const modal = new bootstrap.Modal(document.getElementById('configModal'));
             modal.show();
 
             document.getElementById('configModal').addEventListener('hidden.bs.modal', function () {
                 this.remove();
             });
+        }
+
+        // Quebra o textarea em mensagens, ignorando blocos vazios
+        function lerMensagensDoCampo() {
+            const bruto = document.getElementById('envio-mensagens').value;
+            return bruto.split(/^\s*---\s*$/m).map(m => m.trim()).filter(Boolean);
+        }
+
+        function atualizarContadorMensagens() {
+            const n = lerMensagensDoCampo().length;
+            const el = document.getElementById('contador-mensagens');
+            if (el) el.textContent = n ? `${n} cadastrada${n > 1 ? 's' : ''}.` : '';
+        }
+
+        // Cada modo usa campos diferentes — esconde o que não se aplica
+        function atualizarCamposEnvio() {
+            const modo = document.querySelector('input[name="modo-envio"]:checked').value;
+            document.getElementById('card-mensagens').style.display = modo === 'ia' ? 'none' : '';
+            document.getElementById('card-contexto').style.display = modo === 'ia' ? '' : 'none';
+            atualizarContadorMensagens();
         }
 
         // Show webhook example
@@ -2642,6 +2805,22 @@ async function safeFetch(url, options = {}) {
             localStorage.setItem('webhook_config', JSON.stringify({
                 url: webhookUrl
             }));
+
+            // Aba Envios
+            const modoEnvio = document.querySelector('input[name="modo-envio"]:checked').value;
+            const mensagens = lerMensagensDoCampo();
+            const contexto = document.getElementById('envio-contexto').value.trim();
+
+            if (modoEnvio !== 'ia' && !mensagens.length) {
+                showErrorToast('❌ Cadastre pelo menos uma mensagem na aba Envios, ou escolha "A IA escreve".');
+                return;
+            }
+
+            ENVIO_CONFIG.modo = modoEnvio;
+            ENVIO_CONFIG.mensagens = mensagens;
+            ENVIO_CONFIG.contexto = contexto;
+
+            localStorage.setItem('envio_config', JSON.stringify(ENVIO_CONFIG));
 
             updateSearchButtonState();
             updateWebhookButtons();
@@ -3023,6 +3202,19 @@ async function safeFetch(url, options = {}) {
                     debugLog('Configuração WhatsApp carregada');
                 } catch (error) {
                     debugLog('Erro ao carregar configuração WhatsApp:', error);
+                }
+            }
+
+            const savedEnvioConfig = localStorage.getItem('envio_config');
+            if (savedEnvioConfig) {
+                try {
+                    const config = JSON.parse(savedEnvioConfig);
+                    ENVIO_CONFIG.modo = config.modo || ENVIO_CONFIG.modo;
+                    ENVIO_CONFIG.mensagens = config.mensagens || [];
+                    ENVIO_CONFIG.contexto = config.contexto || '';
+                    debugLog('Configuração de envios carregada:', ENVIO_CONFIG.modo);
+                } catch (error) {
+                    debugLog('Erro ao carregar configuração de envios:', error);
                 }
             }
 
