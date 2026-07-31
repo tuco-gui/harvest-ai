@@ -1,13 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { PROVEDORES } from '@/lib/ia';
 
 type Props = {
   temSerpapi: boolean;
   evolutionUrl: string;
   evolutionInstancia: string;
   temEvolutionKey: boolean;
-  temOpenai: boolean;
+  temIa: boolean;
+  iaProvedor: string;
   modo: string;
   mensagens: string[];
   contexto: string;
@@ -22,7 +24,8 @@ export default function Configuracoes(p: Props) {
   const [evoUrl, setEvoUrl] = useState(p.evolutionUrl);
   const [evoInst, setEvoInst] = useState(p.evolutionInstancia);
   const [evoKey, setEvoKey] = useState('');
-  const [openai, setOpenai] = useState('');
+  const [iaProvedor, setIaProvedor] = useState(p.iaProvedor);
+  const [iaKey, setIaKey] = useState('');
 
   const [modo, setModo] = useState(p.modo);
   const [textos, setTextos] = useState(p.mensagens.join('\n---\n'));
@@ -73,7 +76,8 @@ export default function Configuracoes(p: Props) {
         evolution_url: evoUrl,
         evolution_instancia: evoInst,
         evolution_key: evoKey || undefined,
-        openai_key: openai || undefined,
+        ia_provedor: iaProvedor,
+        ia_key: iaKey || undefined,
         modo,
         mensagens: lista,
         contexto,
@@ -84,7 +88,7 @@ export default function Configuracoes(p: Props) {
     const dados = await r.json();
     setSalvando(false);
     setAviso(r.ok ? 'Configurações salvas.' : (dados.erro ?? 'Não consegui salvar.'));
-    if (r.ok) { setSerpapi(''); setEvoKey(''); setOpenai(''); }
+    if (r.ok) { setSerpapi(''); setEvoKey(''); setIaKey(''); }
   }
 
   return (
@@ -138,13 +142,29 @@ export default function Configuracoes(p: Props) {
           <section className="secao">
             <h2>Inteligência artificial</h2>
             <p className="resumo-secao">
-              Só necessária no modo "A IA escreve". Nos outros modos pode ficar em branco.
+              Só necessária no modo "A IA escreve". Nos outros modos pode ficar em branco. Groq e
+              Gemini têm plano gratuito — bons para testar sem custo.
             </p>
             <div className="cartaocfg">
               <div className="grupo">
-                <label className="label" htmlFor="oa">Chave da OpenAI</label>
-                <input id="oa" type="password" value={openai} onChange={(e) => setOpenai(e.target.value)}
-                       placeholder={p.temOpenai ? '•••••••• já cadastrada' : 'sk-…'} />
+                <label className="label" htmlFor="ia-provedor">Provedor</label>
+                <select id="ia-provedor" value={iaProvedor} onChange={(e) => setIaProvedor(e.target.value)}
+                        style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)',
+                                 border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
+                  {PROVEDORES.map((prov) => (
+                    <option key={prov.valor} value={prov.valor}>
+                      {prov.nome}{prov.gratis ? ' — grátis' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grupo">
+                <label className="label" htmlFor="ia-key">Chave da API</label>
+                <input id="ia-key" type="password" value={iaKey} onChange={(e) => setIaKey(e.target.value)}
+                       placeholder={p.temIa ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                <p className="ajuda">
+                  Pegue em {PROVEDORES.find((prov) => prov.valor === iaProvedor)?.ondePegar}.
+                </p>
               </div>
             </div>
           </section>
@@ -152,14 +172,16 @@ export default function Configuracoes(p: Props) {
           <section className="secao">
             <h2>Testar as conexões</h2>
             <p className="resumo-secao">
-              Nenhum destes testes gasta crédito nem envia mensagem. Salve antes de testar.
+              Nenhum destes testes envia mensagem pro WhatsApp. Testar busca e WhatsApp não gasta
+              nada; testar IA gera uma mensagem de exemplo de verdade, então consome um token
+              pequeno do seu provedor. Salve antes de testar.
             </p>
             <div className="cartaocfg">
               <div className="testes">
                 {[
                   ['serpapi', 'Testar busca'],
                   ['whatsapp', 'Testar WhatsApp'],
-                  ['openai', 'Testar IA'],
+                  ['ia', 'Testar IA'],
                 ].map(([qual, rotulo]) => (
                   <button key={qual} type="button" className="btn-teste"
                           data-r={testes[qual]?.ok === undefined ? undefined : testes[qual].ok ? 'ok' : 'erro'}

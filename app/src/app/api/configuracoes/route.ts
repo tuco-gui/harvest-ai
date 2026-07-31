@@ -21,7 +21,8 @@ export async function POST(req: Request) {
   const cred: Record<string, unknown> = { conta_id: conta, atualizado_em: new Date().toISOString() };
   if (typeof b.serpapi_key === 'string' && b.serpapi_key) cred.serpapi_key = b.serpapi_key.trim();
   if (typeof b.evolution_key === 'string' && b.evolution_key) cred.evolution_key = b.evolution_key.trim();
-  if (typeof b.openai_key === 'string' && b.openai_key) cred.openai_key = b.openai_key.trim();
+  if (typeof b.ia_key === 'string' && b.ia_key) cred.ia_key = b.ia_key.trim();
+  if (['groq', 'gemini', 'openai', 'claude'].includes(String(b.ia_provedor))) cred.ia_provedor = b.ia_provedor;
   if (typeof b.evolution_url === 'string') cred.evolution_url = b.evolution_url.trim() || null;
   if (typeof b.evolution_instancia === 'string') cred.evolution_instancia = b.evolution_instancia.trim() || null;
 

@@ -45,7 +45,8 @@ export default async function Pagina() {
       evolutionUrl={cred?.evolution_url ?? ''}
       evolutionInstancia={cred?.evolution_instancia ?? ''}
       temEvolutionKey={!!cred?.evolution_key}
-      temOpenai={!!cred?.openai_key}
+      temIa={!!cred?.ia_key}
+      iaProvedor={cred?.ia_provedor ?? 'groq'}
       modo={envio?.modo ?? 'ia'}
       mensagens={(envio?.mensagens as string[]) ?? []}
       contexto={envio?.contexto ?? ''}

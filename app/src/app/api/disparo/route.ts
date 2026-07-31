@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
 
 /**
  * Envia UMA mensagem. O navegador chama uma vez por lead e controla o
@@ -39,14 +40,15 @@ export async function POST(req: Request) {
 
   let mensagem: string;
   if (modo === 'ia') {
-    if (!cred.openai_key) {
+    if (!cred.ia_key) {
       return NextResponse.json(
-        { erro: 'O modo "A IA escreve" precisa da chave da OpenAI em Configurações.' },
+        { erro: 'O modo "A IA escreve" precisa de uma chave de IA em Configurações.' },
         { status: 400 },
       );
     }
     try {
-      mensagem = await escreverComIA(cred.openai_key, envio?.contexto ?? '', lead);
+      const { system, user } = montarPrompts(envio?.contexto ?? '', lead);
+      mensagem = await gerarComIA((cred.ia_provedor ?? 'openai') as ProvedorIA, cred.ia_key, system, user);
     } catch {
       return NextResponse.json({ erro: 'A IA não respondeu. Tente de novo.' }, { status: 502 });
     }
@@ -108,45 +110,4 @@ export async function POST(req: Request) {
 
   if (!entregue) return NextResponse.json({ erro: falha }, { status: 502 });
   return NextResponse.json({ ok: true, mensagem });
-}
-
-async function escreverComIA(chave: string, contexto: string, lead: any): Promise<string> {
-  const r = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chave}` },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      temperature: 0.8,
-      max_tokens: 220,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Você escreve a primeira mensagem de WhatsApp de uma prospecção B2B, em português brasileiro. ' +
-            'Uma mensagem só, de 25 a 45 palavras, terminando com uma pergunta. ' +
-            'Tom humano, direto e educado. Sem emoji no início, no máximo um na mensagem inteira. ' +
-            'Nunca invente fato sobre a empresa: use apenas o que vier nos dados. ' +
-            'Proibido urgência artificial, promessa de resultado e linguagem de spam. ' +
-            'Responda apenas com o texto da mensagem, sem aspas e sem explicação.\n\n' +
-            `Contexto de quem está mandando:\n${contexto || '(não informado)'}`,
-        },
-        {
-          role: 'user',
-          content:
-            `Empresa: ${lead.empresa}\n` +
-            `Ramo: ${lead.especialidades ?? 'não informado'}\n` +
-            `Nota no Google: ${lead.rating ?? 'não informada'} (${lead.reviews ?? 0} avaliações)\n` +
-            `Endereço: ${lead.endereco ?? 'não informado'}\n` +
-            `Site: ${lead.site ?? 'não tem'}`,
-        },
-      ],
-    }),
-    signal: AbortSignal.timeout(40_000),
-  });
-
-  if (!r.ok) throw new Error(String(r.status));
-  const d = await r.json();
-  const texto = d.choices?.[0]?.message?.content?.trim();
-  if (!texto) throw new Error('vazio');
-  return texto;
 }

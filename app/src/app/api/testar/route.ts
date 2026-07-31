@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
+
+const LEAD_EXEMPLO = {
+  empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
+  endereco: 'Rua Example, 123 - Centro', site: 'https://exemplo.com.br',
+};
 
 /**
  * Testa uma conexão sem gastar nada:
  *  - serpapi  -> consulta a conta, não faz busca (busca custaria 1 crédito)
  *  - whatsapp -> valida um número qualquer, que a Evolution não cobra
- *  - openai   -> lista modelos, que não consome token
+ *  - ia       -> gera de verdade uma mensagem de exemplo, pra dar pra ver o
+ *                resultado real antes de soltar pro cliente. Custa um token,
+ *                mas é a única forma de saber se ficou bom.
  */
 export async function POST(req: Request) {
   const perfil = await perfilAtual();
@@ -51,14 +59,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, recado: 'Conectado. O número está respondendo.' });
     }
 
-    if (qual === 'openai') {
-      if (!c?.openai_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
-      const r = await fetch('https://api.openai.com/v1/models', {
-        headers: { Authorization: `Bearer ${c.openai_key}` },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!r.ok) return NextResponse.json({ erro: 'Chave recusada pela OpenAI.' }, { status: 400 });
-      return NextResponse.json({ ok: true, recado: 'Chave válida.' });
+    if (qual === 'ia') {
+      if (!c?.ia_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
+
+      const { data: envio } = await supabaseAdmin()
+        .from('conta_config_envio').select('contexto').eq('conta_id', perfil.conta_id).maybeSingle();
+
+      const { system, user } = montarPrompts(envio?.contexto ?? '', LEAD_EXEMPLO);
+      try {
+        const texto = await gerarComIA((c.ia_provedor ?? 'openai') as ProvedorIA, c.ia_key, system, user);
+        return NextResponse.json({ ok: true, recado: `Exemplo gerado: "${texto}"` });
+      } catch (e: any) {
+        return NextResponse.json({ erro: e?.message ?? 'A IA não respondeu.' }, { status: 400 });
+      }
     }
   } catch {
     return NextResponse.json({ erro: 'Não consegui alcançar o serviço.' }, { status: 502 });
