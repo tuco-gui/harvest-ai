@@ -114,11 +114,12 @@ grant usage, select on sequence public.prospecta_mensagens_id_seq to service_rol
 
 -- Pede ao PostgREST para recarregar o cache de schema.
 --
--- ATENÇÃO — em Supabase self-hosted isso pode não bastar. Se o container do
--- PostgREST não estiver ouvindo o canal, a tabela nova fica num estado
--- traiçoeiro: SELECT funciona normalmente, mas todo INSERT/UPDATE/DELETE
--- devolve `404 {}` — sem mensagem de erro, como se a tabela não existisse.
--- Sintoma de confirmação: GET /rest/v1/ (OpenAPI) não lista a tabela.
--- Solução: reiniciar o serviço rest:
---     docker restart supabase-rest        # ou: docker compose restart rest
+-- Isto só funciona se o serviço rest estiver com o canal ligado:
+--     PGRST_DB_CHANNEL_ENABLED=true
+--     PGRST_DB_CHANNEL=pgrst
+-- Sem essas duas variáveis a tabela nova entra num estado traiçoeiro —
+-- SELECT funciona, mas todo INSERT devolve `404 {}` sem mensagem, e só um
+-- restart do container resolve. Aconteceu em 30/07/2026; corrigido na stack
+-- em 31/07 e verificado (tabela criada e INSERT no segundo seguinte, 201).
+-- Sintoma de confirmação, se voltar: GET /rest/v1/ não lista a tabela.
 notify pgrst, 'reload schema';
