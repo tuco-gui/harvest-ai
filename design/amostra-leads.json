@@ -1,0 +1,182 @@
+[
+  {
+    "nome": "Barcelona Jóias",
+    "endereco": "Av. Dom Lúcio, N° 450 - Centro, Botucatu - SP, 18602-092",
+    "telefone": "(14) 99752-2183",
+    "rating": 5,
+    "reviews": 136,
+    "tipo": "Joalheria",
+    "site": "https://www.barcelonajoias.store/"
+  },
+  {
+    "nome": "Faina Joias e Alianças Botucatu",
+    "endereco": "R. Amando de Barros, 869 - Centro, Botucatu - SP, 18600-050",
+    "telefone": "(14) 3882-3126",
+    "rating": 4.8,
+    "reviews": 63,
+    "tipo": "Joalheria",
+    "site": "http://www.faina.com.br/"
+  },
+  {
+    "nome": "Gold Silver - Jóias, Relógios, Ótica e Presentes - Armando de Barros",
+    "endereco": "R. Amando de Barros, 611/615 - Centro, Botucatu - SP, 18600-050",
+    "telefone": "(14) 3815-2080",
+    "rating": 4.5,
+    "reviews": 325,
+    "tipo": "Joalheria",
+    "site": "https://www.goldsilver.com.br/"
+  },
+  {
+    "nome": "Belo Jóias Confecções de Alianças e Consertos",
+    "endereco": "R. Monsenhor Ferrari, 274-a - Centro, Botucatu - SP, 18600-310",
+    "telefone": "(14) 3814-3713",
+    "rating": 4.9,
+    "reviews": 81,
+    "tipo": "Loja",
+    "site": null
+  },
+  {
+    "nome": "Art's Joias",
+    "endereco": "R. Gen. Teles, 1302 - Vila Padovan, Botucatu - SP, 18602-120",
+    "telefone": "(14) 3881-0052",
+    "rating": 4.9,
+    "reviews": 33,
+    "tipo": "Joalheria",
+    "site": "https://artsjoias-jewelrystore.negocio.site/?utm_source=gmb&utm_medium=referral"
+  },
+  {
+    "nome": "Denise Tardivo Joias",
+    "endereco": "R. Waldomiro Rodrigues R.2, 101 - Chácara Recreio Vista Alegre, Botucatu - SP, 18608-059",
+    "telefone": "(14) 99882-7475",
+    "rating": 5,
+    "reviews": 16,
+    "tipo": "Joalheria",
+    "site": "http://www.denisejoias.com.br/"
+  },
+  {
+    "nome": "LIILA",
+    "endereco": null,
+    "telefone": "(14) 98209-3663",
+    "rating": 5,
+    "reviews": 20,
+    "tipo": "Loja de acessórios de moda",
+    "site": "http://www.liila.com.br/"
+  },
+  {
+    "nome": "Gold Silver - Jóias, Alianças, Semijóias, Relógios e Presentes - Av. Dom Lúcio",
+    "endereco": "Av. Dom Lúcio, 416 - Centro, Botucatu - SP, 18602-092",
+    "telefone": "(14) 3882-0086",
+    "rating": 4.5,
+    "reviews": 27,
+    "tipo": "Joalheria",
+    "site": "https://www.goldsilver.com.br/"
+  },
+  {
+    "nome": "Lelis semijoias",
+    "endereco": "Av. Dom Lúcio, 520 - Lj 2 - Centro, Botucatu - SP, 18602-092",
+    "telefone": null,
+    "rating": 5,
+    "reviews": 35,
+    "tipo": "Loja",
+    "site": null
+  },
+  {
+    "nome": "By D Acessórios e Alianças",
+    "endereco": "Av. Dom Lúcio, 27 - salas 05 e 06 - Centro, Botucatu - SP, 18602-092",
+    "telefone": "(14) 99652-1020",
+    "rating": 5,
+    "reviews": 19,
+    "tipo": "Joalheria",
+    "site": "https://bydacessorios.lojavirtualnuvem.com.br/"
+  },
+  {
+    "nome": "Lunardi Jóias",
+    "endereco": "R. Dr. Gáspar Ricardo, 115 - Vila dos Lavradores, Botucatu - SP, 18609-055",
+    "telefone": "(14) 3815-1777",
+    "rating": 4.8,
+    "reviews": 12,
+    "tipo": "Joalheiro",
+    "site": null
+  },
+  {
+    "nome": "MAPA DA MINA -BOTUCATU",
+    "endereco": "R. Nícola Durante, 114 - Jardim Bom Pastor, Botucatu - SP, 18603-490",
+    "telefone": "(14) 99840-1092",
+    "rating": 4.6,
+    "reviews": 51,
+    "tipo": "Loja de acessórios de moda",
+    "site": null
+  },
+  {
+    "nome": "Stela Pires Joias Contemporâneas",
+    "endereco": "Av. Dom Lúcio, 657 - Centro, Botucatu - SP, 18602-092",
+    "telefone": "(14) 98830-2046",
+    "rating": 5,
+    "reviews": 1,
+    "tipo": "Loja de acessórios de moda",
+    "site": null
+  },
+  {
+    "nome": "Gabriela & Co.",
+    "endereco": "Av. Leonardo Vilas Boas, 2530 - Vila Nova Botucatu, Botucatu - SP, 18608-227",
+    "telefone": "(14) 99604-3903",
+    "rating": 4.9,
+    "reviews": 22,
+    "tipo": "Joalheria",
+    "site": null
+  },
+  {
+    "nome": "Girardi Joias",
+    "endereco": "Avenida Marginal 200, 1050, quiosque 09A Shopping Park, Vila Real, Botucatu - SP, 18606-294",
+    "telefone": "(14) 99791-4492",
+    "rating": null,
+    "reviews": null,
+    "tipo": "Joalheria",
+    "site": "http://www.girardijoias.com/"
+  },
+  {
+    "nome": "Della Fiori Semijoias",
+    "endereco": "R. Dr. Damião Pinheiro Machado, 930 - Centro, Botucatu - SP, 18603-560",
+    "telefone": "(14) 99621-8510",
+    "rating": 4.9,
+    "reviews": 82,
+    "tipo": "Loja de acessórios de moda",
+    "site": "https://www.dellafiorisemijoias.com.br/"
+  },
+  {
+    "nome": "Arte e terapia | Acessórios artesanais",
+    "endereco": "Av. Prof. Rafael Laurindo, 1273 - Jardim Paraiso, Botucatu - SP, 18610-302",
+    "telefone": "(14) 99745-7773",
+    "rating": 5,
+    "reviews": 114,
+    "tipo": "Loja de acessórios de moda",
+    "site": "https://arteterapiaju.com.br/"
+  },
+  {
+    "nome": "Queen Semijoias Park Botucatu",
+    "endereco": "Av. Marginal 200, 1050 - Jardim Riviera, Botucatu - SP, 18606-840",
+    "telefone": "(14) 99882-7289",
+    "rating": 4.2,
+    "reviews": 5,
+    "tipo": "Joalheria",
+    "site": null
+  },
+  {
+    "nome": "Chris Suganoº Semijoias",
+    "endereco": "Condomínio Parque Braga, R. Orlando Gamito, 171 - Vila Cidade Jardim, Botucatu - SP, 18601-250",
+    "telefone": "(14) 99844-7879",
+    "rating": 5,
+    "reviews": 6,
+    "tipo": "Loja de acessórios de moda",
+    "site": "https://chrissugano.com.br/"
+  },
+  {
+    "nome": "Eliane Acessórios",
+    "endereco": "R. Maj. Matheus, 257 - Vila dos Lavradores, Botucatu - SP, 18609-083",
+    "telefone": "(14) 3814-4338",
+    "rating": 4.6,
+    "reviews": 15,
+    "tipo": "Loja",
+    "site": null
+  }
+]
