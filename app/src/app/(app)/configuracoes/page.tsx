@@ -47,6 +47,7 @@ export default async function Pagina() {
       temEvolutionKey={!!cred?.evolution_key}
       temIa={!!cred?.ia_key}
       iaProvedor={cred?.ia_provedor ?? 'groq'}
+      iaModelo={cred?.ia_modelo ?? ''}
       modo={envio?.modo ?? 'ia'}
       mensagens={(envio?.mensagens as string[]) ?? []}
       contexto={envio?.contexto ?? ''}

@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     }
     try {
       const { system, user } = montarPrompts(envio?.contexto ?? '', lead);
-      mensagem = await gerarComIA((cred.ia_provedor ?? 'openai') as ProvedorIA, cred.ia_key, system, user);
+      mensagem = await gerarComIA((cred.ia_provedor ?? 'openai') as ProvedorIA, cred.ia_key, system, user, cred.ia_modelo);
     } catch {
       return NextResponse.json({ erro: 'A IA não respondeu. Tente de novo.' }, { status: 502 });
     }

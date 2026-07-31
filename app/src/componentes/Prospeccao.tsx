@@ -61,6 +61,7 @@ export default function Prospeccao({
   const [enviados, setEnviados] = useState(0);
   const [falhas, setFalhas] = useState(0);
   const [recado, setRecado] = useState<string | null>(null);
+  const [errosDisparo, setErrosDisparo] = useState<{ empresa: string; motivo: string }[]>([]);
   const [avisoRegiao, setAvisoRegiao] = useState<string | null>(null);
   const [raioCustom, setRaioCustom] = useState('');
 
@@ -162,6 +163,7 @@ export default function Prospeccao({
     setEnviados(0);
     setFalhas(0);
     setRecado(null);
+    setErrosDisparo([]);
 
     let ok = 0;
     let erro = 0;
@@ -181,11 +183,14 @@ export default function Prospeccao({
         else {
           erro++; setFalhas(erro);
           const d = await r.json().catch(() => ({}));
+          const motivo = d.erro ?? `Evolution respondeu ${r.status}.`;
+          setErrosDisparo((antes) => [...antes, { empresa: fila[i].empresa, motivo }]);
           // erro de configuração não adianta repetir 20 vezes
-          if (r.status === 400) { setRecado(d.erro ?? 'Erro de configuração.'); break; }
+          if (r.status === 400) { setRecado(motivo); break; }
         }
       } catch {
         erro++; setFalhas(erro);
+        setErrosDisparo((antes) => [...antes, { empresa: fila[i].empresa, motivo: 'Sem conexão com o servidor.' }]);
       }
 
       if (i < fila.length - 1 && !parada.current.parar) {
@@ -442,7 +447,9 @@ export default function Prospeccao({
     }
   }, [leads, regiao, mostrarMapa]);
 
-  const naFila = selecionados.slice(enviados);
+  // enviados conta só sucesso — sem somar falhas, um lead que deu erro
+  // continuava aparecendo como "esperando" na fila para sempre.
+  const naFila = selecionados.slice(enviados + falhas);
   const minutos = Math.max(1, Math.round((naFila.length * (intervaloMin + intervaloMax)) / 2 / 60));
   const disparando = estado !== 'parado';
 
@@ -750,6 +757,17 @@ export default function Prospeccao({
               ? 'Pausado. Nenhuma mensagem sai até você retomar.'
               : 'O intervalo entre envios protege o número contra bloqueio. Você pode pausar ou parar a qualquer momento.')}
         </p>
+
+        {errosDisparo.length > 0 && (
+          <div className="erros-disparo">
+            <p className="label">Erros deste disparo</p>
+            <ul>
+              {errosDisparo.map((e, i) => (
+                <li key={i}><b>{e.empresa}:</b> {e.motivo}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </aside>
     </div>
   );

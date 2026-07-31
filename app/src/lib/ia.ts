@@ -1,19 +1,24 @@
-export type ProvedorIA = 'groq' | 'gemini' | 'openai' | 'claude';
+export type ProvedorIA = 'groq' | 'gemini' | 'openai' | 'claude' | 'ollama';
 
-/** Groq e Gemini têm plano gratuito generoso — bom para começar sem custo.
+/** Groq e Gemini têm plano gratuito generoso. Ollama Cloud também tem uso
+ *  grátis e dá acesso a modelos abertos (Llama, Qwen, DeepSeek, GLM, Gemma…) —
+ *  o catálogo muda direto, por isso o modelo é sempre digitável, nunca fixo.
  *  OpenAI e Claude são pagos, mas alguns times já têm chave de outro uso. */
 export const PROVEDORES: { valor: ProvedorIA; nome: string; gratis: boolean; ondePegar: string }[] = [
   { valor: 'groq', nome: 'Groq (Llama)', gratis: true, ondePegar: 'console.groq.com/keys' },
   { valor: 'gemini', nome: 'Google Gemini', gratis: true, ondePegar: 'aistudio.google.com/apikey' },
+  { valor: 'ollama', nome: 'Ollama Cloud (open source)', gratis: true, ondePegar: 'ollama.com/settings/keys' },
   { valor: 'openai', nome: 'OpenAI (GPT)', gratis: false, ondePegar: 'platform.openai.com/api-keys' },
   { valor: 'claude', nome: 'Anthropic (Claude)', gratis: false, ondePegar: 'console.anthropic.com' },
 ];
 
-// Modelos rápidos e baratos de cada provedor. Vale revisar de tempos em
-// tempos — cada provedor descontinua e lança modelo novo no seu próprio ritmo.
+// Modelo padrão de cada provedor, usado quando a conta não digita um modelo
+// próprio. Vale revisar de tempos em tempos — cada provedor troca no seu
+// próprio ritmo, e o do Ollama especialmente (catálogo de nuvem novo).
 const MODELOS: Record<ProvedorIA, string> = {
   groq: 'llama-3.3-70b-versatile',
   gemini: 'gemini-2.0-flash',
+  ollama: 'gpt-oss:120b-cloud',
   openai: 'gpt-4o-mini',
   claude: 'claude-haiku-4-5-20251001',
 };
@@ -42,9 +47,12 @@ export function montarPrompts(contexto: string, lead: {
 }
 
 /** Gera a mensagem no provedor escolhido. Lança erro com a mensagem do
- *  provedor quando a chamada falha — quem chama decide o que mostrar. */
-export async function gerarComIA(provedor: ProvedorIA, chave: string, system: string, user: string): Promise<string> {
-  const modelo = MODELOS[provedor];
+ *  provedor quando a chamada falha — quem chama decide o que mostrar.
+ *  `modeloCustom` sobrescreve o modelo padrão quando a conta digitou um. */
+export async function gerarComIA(
+  provedor: ProvedorIA, chave: string, system: string, user: string, modeloCustom?: string | null,
+): Promise<string> {
+  const modelo = modeloCustom?.trim() || MODELOS[provedor];
 
   if (provedor === 'openai' || provedor === 'groq') {
     // A API da Groq é compatível com a da OpenAI — só troca a base e o modelo.
@@ -61,6 +69,24 @@ export async function gerarComIA(provedor: ProvedorIA, chave: string, system: st
     if (!r.ok) throw new Error(await mensagemErro(r));
     const d = await r.json();
     const texto = d.choices?.[0]?.message?.content?.trim();
+    if (!texto) throw new Error('A resposta veio vazia.');
+    return texto;
+  }
+
+  if (provedor === 'ollama') {
+    // API nativa da Ollama Cloud (ollama.com), não a compatível com OpenAI.
+    const r = await fetch('https://ollama.com/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chave}` },
+      body: JSON.stringify({
+        model: modelo, stream: false,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!r.ok) throw new Error(await mensagemErro(r));
+    const d = await r.json();
+    const texto = d.message?.content?.trim();
     if (!texto) throw new Error('A resposta veio vazia.');
     return texto;
   }

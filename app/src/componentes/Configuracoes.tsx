@@ -10,6 +10,7 @@ type Props = {
   temEvolutionKey: boolean;
   temIa: boolean;
   iaProvedor: string;
+  iaModelo: string;
   modo: string;
   mensagens: string[];
   contexto: string;
@@ -26,6 +27,7 @@ export default function Configuracoes(p: Props) {
   const [evoKey, setEvoKey] = useState('');
   const [iaProvedor, setIaProvedor] = useState(p.iaProvedor);
   const [iaKey, setIaKey] = useState('');
+  const [iaModelo, setIaModelo] = useState(p.iaModelo);
 
   const [modo, setModo] = useState(p.modo);
   const [textos, setTextos] = useState(p.mensagens.join('\n---\n'));
@@ -78,6 +80,7 @@ export default function Configuracoes(p: Props) {
         evolution_key: evoKey || undefined,
         ia_provedor: iaProvedor,
         ia_key: iaKey || undefined,
+        ia_modelo: iaModelo,
         modo,
         mensagens: lista,
         contexto,
@@ -164,6 +167,22 @@ export default function Configuracoes(p: Props) {
                        placeholder={p.temIa ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
                 <p className="ajuda">
                   Pegue em {PROVEDORES.find((prov) => prov.valor === iaProvedor)?.ondePegar}.
+                  {iaProvedor === 'gemini' && (
+                    <> Assinatura do Gemini (Workspace/Gemini Advanced) não dá cota de API — é um
+                      produto separado. Se der "cota excedida" mesmo sem uso, o projeto do Google
+                      Cloud dessa chave precisa ter faturamento ativado em
+                      console.cloud.google.com/billing.</>
+                  )}
+                </p>
+              </div>
+              <div className="grupo">
+                <label className="label" htmlFor="ia-modelo">Modelo (opcional)</label>
+                <input id="ia-modelo" value={iaModelo} onChange={(e) => setIaModelo(e.target.value)}
+                       placeholder="deixe em branco para o padrão" />
+                <p className="ajuda">
+                  {iaProvedor === 'ollama'
+                    ? 'Copie o nome exato de ollama.com/models — ex.: gpt-oss:120b-cloud, glm-4.6:cloud, qwen3:cloud.'
+                    : 'Só mexa aqui se quiser um modelo específico desse provedor. Em branco, usamos um rápido e barato por padrão.'}
                 </p>
               </div>
             </div>

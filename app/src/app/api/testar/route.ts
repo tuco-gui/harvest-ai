@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 
       const { system, user } = montarPrompts(envio?.contexto ?? '', LEAD_EXEMPLO);
       try {
-        const texto = await gerarComIA((c.ia_provedor ?? 'openai') as ProvedorIA, c.ia_key, system, user);
+        const texto = await gerarComIA((c.ia_provedor ?? 'openai') as ProvedorIA, c.ia_key, system, user, c.ia_modelo);
         return NextResponse.json({ ok: true, recado: `Exemplo gerado: "${texto}"` });
       } catch (e: any) {
         return NextResponse.json({ erro: e?.message ?? 'A IA não respondeu.' }, { status: 400 });
