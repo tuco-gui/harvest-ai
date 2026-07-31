@@ -7,6 +7,7 @@ type Props = {
   evolutionUrl: string;
   evolutionInstancia: string;
   temEvolutionKey: boolean;
+  temOpenai: boolean;
   modo: string;
   mensagens: string[];
   contexto: string;
@@ -21,6 +22,7 @@ export default function Configuracoes(p: Props) {
   const [evoUrl, setEvoUrl] = useState(p.evolutionUrl);
   const [evoInst, setEvoInst] = useState(p.evolutionInstancia);
   const [evoKey, setEvoKey] = useState('');
+  const [openai, setOpenai] = useState('');
 
   const [modo, setModo] = useState(p.modo);
   const [textos, setTextos] = useState(p.mensagens.join('\n---\n'));
@@ -58,6 +60,7 @@ export default function Configuracoes(p: Props) {
         evolution_url: evoUrl,
         evolution_instancia: evoInst,
         evolution_key: evoKey || undefined,
+        openai_key: openai || undefined,
         modo,
         mensagens: lista,
         contexto,
@@ -68,7 +71,7 @@ export default function Configuracoes(p: Props) {
     const dados = await r.json();
     setSalvando(false);
     setAviso(r.ok ? 'Configurações salvas.' : (dados.erro ?? 'Não consegui salvar.'));
-    if (r.ok) { setSerpapi(''); setEvoKey(''); }
+    if (r.ok) { setSerpapi(''); setEvoKey(''); setOpenai(''); }
   }
 
   return (
@@ -114,6 +117,20 @@ export default function Configuracoes(p: Props) {
                 <label className="label" htmlFor="evokey">Token</label>
                 <input id="evokey" type="password" value={evoKey} onChange={(e) => setEvoKey(e.target.value)}
                        placeholder={p.temEvolutionKey ? '•••••••• já cadastrado' : 'cole o token aqui'} />
+              </div>
+            </div>
+          </section>
+
+          <section className="secao">
+            <h2>Inteligência artificial</h2>
+            <p className="resumo-secao">
+              Só necessária no modo "A IA escreve". Nos outros modos pode ficar em branco.
+            </p>
+            <div className="cartaocfg">
+              <div className="grupo">
+                <label className="label" htmlFor="oa">Chave da OpenAI</label>
+                <input id="oa" type="password" value={openai} onChange={(e) => setOpenai(e.target.value)}
+                       placeholder={p.temOpenai ? '•••••••• já cadastrada' : 'sk-…'} />
               </div>
             </div>
           </section>
