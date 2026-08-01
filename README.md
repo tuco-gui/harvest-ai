@@ -101,15 +101,20 @@ Detalhes em `docs/deploy.md`.
 
 ## O que já funciona
 
-Login com sessão e guarda de rota · três papéis · painel de contas e usuários
-(criar, renomear, excluir) · senha provisória com troca obrigatória no
-primeiro login · SMTP configurável pela tela, com convite e reset de senha por
-e-mail · perfil com foto, nome, telefone e e-mail editáveis · busca no Google
-Maps com validação de WhatsApp · mapa com localização por clique ou CEP,
-disponível antes da busca · importação de CSV · adicionar contato manualmente
-· disparo real com pausar e parar · mensagem fixa, rodízio ou IA · presets de
-intervalo, aplicados de verdade no disparo · testes de conexão que não gastam
-crédito · tema claro e escuro.
+Login com sessão e guarda de rota · três papéis, com navegação separada por
+escopo (Contas, Usuários da conta, Equipe da agência, Sistema) · senha
+provisória com troca obrigatória no primeiro login · SMTP configurável pela
+tela, com convite e reset de senha por e-mail · perfil com foto, nome,
+telefone e e-mail editáveis · busca no Google Maps com validação de WhatsApp
+e filtro por raio real (com aviso pra abrir o raio quando acha pouco) · mapa
+com localização por clique ou CEP, disponível antes da busca · importação de
+CSV · adicionar contato manualmente · IA com escolha de provedor (Groq,
+Gemini, Ollama Cloud, OpenAI, Claude) e teste que gera mensagem de exemplo de
+verdade · disparo real com pausar e parar, e log de erro por lead · mensagem
+fixa, rodízio ou IA · presets de intervalo, aplicados de verdade no disparo ·
+campanhas nomeáveis com funil (encontradas, com WhatsApp, enviadas, erro) ·
+página de status da ferramenta · chamados de suporte com SLA · testes de
+conexão que não gastam crédito · tema claro e escuro.
 
 ## O que falta
 
@@ -126,11 +131,14 @@ crédito · tema claro e escuro.
 3. **Paginação da busca.** Só traz a primeira página de 20. A rota já aceita
    `pagina`; falta o botão.
 4. **Enriquecimento** — ver `docs/enriquecimento.md`.
-5. **Consumo por conta** — `prospecta_buscas` já registra cada busca; falta a
-   tela.
+5. **Consumo por período** — campanhas já mostram o funil por leva; falta
+   agregar por mês.
 6. **"Esqueci minha senha" self-service** — hoje quem esqueceu pede pro admin
-   clicar em "Gerar nova senha" em Contas; com SMTP configurado dá pra
+   clicar em "Gerar nova senha" em Usuários; com SMTP configurado dá pra
    trocar por um link de recuperação de verdade.
+7. **Chat interno da equipe do cliente e notificação de chamado por e-mail** —
+   o schema de chamados (`conversas`/`conversa_mensagens`) já foi desenhado
+   pra isso, faltam só as telas.
 
 ## Detalhes que custam caro quando esquecidos
 

@@ -7,10 +7,11 @@ O painel que está em produção hoje (`/webhook/prospecta`) **continua no ar e
 intocado** durante todo o percurso. A migração acontece só no fim, quando o
 novo estiver validado.
 
-> **Onde estamos (31/07/2026):** Fases 0 a 5 e 8b entregues. Falta um restart
-> do serviço `rest` no Supabase para a leva mais recente (Fase 8b) funcionar
-> de verdade em produção — ver o aviso no topo do `ESTADO.md`. O que falta de
-> feature está na seção **O que vem agora**, no fim deste documento.
+> **Onde estamos (31/07/2026):** Fases 0 a 5, 8b e 9b entregues. Falta um
+> restart do serviço `rest` no Supabase para as duas últimas levas
+> funcionarem de verdade em produção — ver o aviso no topo do `ESTADO.md`.
+> O que falta de feature está na seção **Por onde continuar**, no fim deste
+> documento.
 
 ---
 
@@ -253,10 +254,37 @@ montar agora que o SMTP existe, se quiser depois).
 
 ---
 
-### Fase 9 — Os pendentes menores
+### ✅ Fase 9b — Reestruturação: navegação, campanhas, erros, status, chamados
+
+Entregue em 31/07/2026 (mesmo dia da 8b), por pedido explícito: a estrutura
+antiga misturava conta de cliente, usuário e configuração de sistema numa
+página só, e isso estava atrapalhando o dia a dia.
+
+- **Navegação separada**: `/contas` (só CRUD de conta) · `/usuarios`
+  (usuários da conta ativa) · `/equipe` (usuários da agência, só super
+  admin) · `/sistema` (SMTP e infra, só super admin)
+- **Campanhas** (`/campanhas`): busca, planilha ou lista manual vira uma
+  campanha nomeável, com funil (encontradas, com WhatsApp, enviadas, erro).
+  Corrigido de brinde: `prospecta_leads.tem_whatsapp` nunca era persistido
+  de verdade
+- **Log de erros por conta** — aba nova em Configurações
+- **Status** (`/status`) — banco, SMTP, e as integrações da conta ativa
+- **Chamados de suporte com SLA** (`/chamados`) — abrir, responder, fechar,
+  reabrir, prazo de 4h. Schema (`conversas`/`conversa_mensagens`) desenhado
+  genérico de propósito, pra virar chat interno da equipe do cliente depois
+
+**Não fiz**, por pedido explícito de focar primeiro no suporte: chat interno
+entre a equipe do próprio cliente (schema já suporta, falta só a tela) e
+notificação de chamado por e-mail (SMTP já existe, é rápido de ligar depois).
+"Quem respondeu" na campanha continua impossível até a Fase 7 (agente de
+resposta) existir.
+
+---
+
+### Fase 10 — Os pendentes menores
 
 - **Paginação da busca** — só traz 20; a rota já aceita `pagina`, falta o botão. **P**
-- **Consumo por conta** — `prospecta_buscas` já registra tudo, falta a tela. **P**
+- **Consumo por conta, agregado por período** — campanhas já mostram o funil por leva; falta somar por mês. **P**
 - **Enriquecimento** — ver `docs/enriquecimento.md`. **G**
 
 ---
@@ -271,9 +299,10 @@ resolvida antes do segundo cliente.
 
 **PostgREST self-hosted.** Toda tabela ou coluna nova exige reiniciar o
 serviço `rest` de verdade — `SELECT` funciona na hora, `INSERT`/`PATCH`
-continua 404/PGRST204 até o restart, mesmo com `NOTIFY`. Já aconteceu duas
-vezes. Reinicie o `rest` **antes** de testar qualquer escrita depois de rodar
-uma migração nova.
+continua 404/PGRST204 até o restart, mesmo com `NOTIFY`. Já aconteceu cinco
+vezes no mesmo dia. Reinicie o `rest` **antes** de testar qualquer escrita
+depois de rodar uma migração nova — e um restart só cobre todas as migrações
+pendentes de uma vez, não precisa reiniciar depois de cada uma.
 
 **SMTP.** ✅ Resolvido — configurável pela tela (Contas → super admin), na
 Fase 8b. Falta só ligar num provedor de verdade quando você tiver a conta.
@@ -287,10 +316,10 @@ e fica para depois — vale registrar que hoje não teremos.
 
 ## Por onde continuar
 
-Fase 6 (conectar WhatsApp por QR). É a única coisa entre o produto de hoje e
-uma entrega em que o cliente não depende de ninguém da Figueira para começar
-a usar. Antes disso, reinicie o serviço `rest` — ver aviso no topo do
-`ESTADO.md`.
+Reinicie o serviço `rest` primeiro — ver aviso no topo do `ESTADO.md`, cobre
+várias migrações acumuladas de uma vez. Depois disso, Fase 6 (conectar
+WhatsApp por QR): é a única coisa entre o produto de hoje e uma entrega em
+que o cliente não depende de ninguém da Figueira para começar a usar.
 
 Quem for continuar este trabalho: o estado atual, as credenciais e as
 armadilhas já conhecidas estão em `ESTADO.md`, na raiz do projeto — fora do
