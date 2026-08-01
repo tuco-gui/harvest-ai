@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { PROVEDORES } from '@/lib/ia';
 
+type ErroMensagem = { empresa: string; erro: string; quando: string };
+
 type Props = {
   temSerpapi: boolean;
   evolutionUrl: string;
@@ -16,10 +18,11 @@ type Props = {
   contexto: string;
   intervaloMin: number;
   intervaloMax: number;
+  erros: ErroMensagem[];
 };
 
 export default function Configuracoes(p: Props) {
-  const [aba, setAba] = useState<'conexoes' | 'mensagens' | 'tempo'>('conexoes');
+  const [aba, setAba] = useState<'conexoes' | 'mensagens' | 'tempo' | 'erros'>('conexoes');
 
   const [serpapi, setSerpapi] = useState('');
   const [evoUrl, setEvoUrl] = useState(p.evolutionUrl);
@@ -100,6 +103,9 @@ export default function Configuracoes(p: Props) {
         <button aria-pressed={aba === 'conexoes'} onClick={() => setAba('conexoes')}>Conexões</button>
         <button aria-pressed={aba === 'mensagens'} onClick={() => setAba('mensagens')}>Mensagens</button>
         <button aria-pressed={aba === 'tempo'} onClick={() => setAba('tempo')}>Tempo de envio</button>
+        <button aria-pressed={aba === 'erros'} onClick={() => setAba('erros')}>
+          Erros{p.erros.length > 0 ? ` (${p.erros.length})` : ''}
+        </button>
       </div>
 
       {aba === 'conexoes' && (
@@ -321,9 +327,37 @@ export default function Configuracoes(p: Props) {
         </section>
       )}
 
-      <button className="salvar" onClick={salvar} disabled={salvando}>
-        {salvando ? 'Salvando…' : 'Salvar'}
-      </button>
+      {aba === 'erros' && (
+        <section className="secao">
+          <h2>Erros de envio</h2>
+          <p className="resumo-secao">
+            Os últimos disparos que falharam nesta conta, mais recentes primeiro.
+          </p>
+          <table className="tabela">
+            <thead>
+              <tr><th>Quando</th><th>Empresa</th><th>Motivo</th></tr>
+            </thead>
+            <tbody>
+              {p.erros.map((e, i) => (
+                <tr key={i}>
+                  <td style={{ color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{e.quando}</td>
+                  <td>{e.empresa}</td>
+                  <td style={{ color: 'var(--ink-2)' }}>{e.erro}</td>
+                </tr>
+              ))}
+              {!p.erros.length && (
+                <tr><td colSpan={3} style={{ color: 'var(--ink-3)' }}>Nenhum erro registrado.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {aba !== 'erros' && (
+        <button className="salvar" onClick={salvar} disabled={salvando}>
+          {salvando ? 'Salvando…' : 'Salvar'}
+        </button>
+      )}
       {aviso && <p className="aviso">{aviso}</p>}
     </div>
   );

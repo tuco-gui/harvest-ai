@@ -108,13 +108,35 @@ export default function Topo(p: Props) {
 
       <nav className="nav">
         <Link href="/" aria-current={caminho === '/' ? 'page' : undefined}>Prospecção</Link>
+        <Link href="/campanhas" aria-current={caminho.startsWith('/campanhas') ? 'page' : undefined}>
+          Campanhas
+        </Link>
         <Link href="/configuracoes" aria-current={caminho.startsWith('/configuracoes') ? 'page' : undefined}>
           Configurações
         </Link>
-        {p.ehSuperAdmin && (
-          <Link href="/contas" aria-current={caminho.startsWith('/contas') ? 'page' : undefined}>
-            Contas
+        {p.papel !== 'operador' && (
+          <Link href="/usuarios" aria-current={caminho.startsWith('/usuarios') ? 'page' : undefined}>
+            Usuários
           </Link>
+        )}
+        <Link href="/chamados" aria-current={caminho.startsWith('/chamados') ? 'page' : undefined}>
+          Chamados
+        </Link>
+        <Link href="/status" aria-current={caminho.startsWith('/status') ? 'page' : undefined}>
+          Status
+        </Link>
+        {p.ehSuperAdmin && (
+          <>
+            <Link href="/contas" aria-current={caminho.startsWith('/contas') ? 'page' : undefined}>
+              Contas
+            </Link>
+            <Link href="/equipe" aria-current={caminho.startsWith('/equipe') ? 'page' : undefined}>
+              Equipe
+            </Link>
+            <Link href="/sistema" aria-current={caminho.startsWith('/sistema') ? 'page' : undefined}>
+              Sistema
+            </Link>
+          </>
         )}
       </nav>
 

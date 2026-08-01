@@ -65,6 +65,9 @@ export default function Prospeccao({
   const [avisoRegiao, setAvisoRegiao] = useState<string | null>(null);
   const [raioCustom, setRaioCustom] = useState('');
 
+  const [campanhaId, setCampanhaId] = useState<number | null>(null);
+  const [campanhaNome, setCampanhaNome] = useState('');
+
   const chave = (l: Lead, i: number) => l.place_id ?? `${l.empresa}-${i}`;
   const selecionados = useMemo(
     () => leads.filter((l, i) => escolhidos.has(chave(l, i))),
@@ -72,6 +75,43 @@ export default function Prospeccao({
   );
   const comZap = leads.filter((l) => l.tem_whatsapp === true).length;
   const mostrarMapa = painelExtra === 'mapa' || (leads.length > 0 && vista === 'mapa');
+
+  /** Cria a campanha antes de buscar/importar/adicionar (pra já poder marcar
+   *  os leads com o campanha_id assim que forem salvos), e atualiza os
+   *  números depois. Tudo que entra antes de "Limpar lista" é a mesma campanha. */
+  const campanhaIdRef = useRef<number | null>(null);
+  async function campanhaAntes(origem: 'busca' | 'planilha' | 'manual', nomeSugerido: string): Promise<number | null> {
+    if (campanhaIdRef.current) return campanhaIdRef.current;
+    const r = await fetch('/api/campanhas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome: nomeSugerido, origem, encontradas: 0, comWhatsapp: 0 }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.id) return null;
+    campanhaIdRef.current = d.id;
+    setCampanhaId(d.id);
+    setCampanhaNome(nomeSugerido);
+    return d.id;
+  }
+
+  function campanhaDepois(totalEncontradas: number, totalComZap: number) {
+    if (!campanhaIdRef.current) return;
+    fetch('/api/campanhas', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: campanhaIdRef.current, encontradas: totalEncontradas, comWhatsapp: totalComZap }),
+    }).catch(() => {});
+  }
+
+  function renomearCampanha() {
+    if (!campanhaId) return;
+    const novo = prompt('Nome da campanha:', campanhaNome);
+    if (!novo || !novo.trim() || novo.trim() === campanhaNome) return;
+    setCampanhaNome(novo.trim());
+    fetch('/api/campanhas', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: campanhaId, nome: novo.trim() }),
+    }).catch(() => {});
+  }
 
   async function buscar(e?: React.FormEvent) {
     e?.preventDefault();
@@ -82,6 +122,7 @@ export default function Prospeccao({
     setAvisoRegiao(null);
 
     try {
+      const idCampanha = await campanhaAntes('busca', termo.trim());
       const r = await fetch('/api/busca', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -93,6 +134,7 @@ export default function Prospeccao({
           // verdade pela distância real.
           ll: regiao ? `@${regiao.lat.toFixed(6)},${regiao.lng.toFixed(6)},${zoomParaRaio(regiao.km)}z` : undefined,
           regiao: regiao ?? undefined,
+          campanhaId: idCampanha,
         }),
       });
       const dados = await r.json();
@@ -101,10 +143,13 @@ export default function Prospeccao({
         setErro(dados.erro ?? 'Não consegui buscar agora.');
         setLeads([]);
       } else {
-        setLeads(dados.leads ?? []);
+        const novaLeva: Lead[] = dados.leads ?? [];
+        setLeads(novaLeva);
         setEscolhidos(new Set());
         setVista(regiao ? 'mapa' : 'lista');
         setAvisoRegiao(dados.avisoRegiao ?? null);
+        const comZapLeva = novaLeva.filter((l) => l.tem_whatsapp === true).length;
+        campanhaDepois(novaLeva.length, comZapLeva);
       }
       setJaBuscou(true);
       setPainelExtra(null);
@@ -136,6 +181,9 @@ export default function Prospeccao({
     setErro(null);
     setAvisoRegiao(null);
     setVista('lista');
+    campanhaIdRef.current = null;
+    setCampanhaId(null);
+    setCampanhaNome('');
   }
 
   function aplicarRaioCustom() {
@@ -177,7 +225,7 @@ export default function Prospeccao({
         const r = await fetch('/api/disparo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lead: fila[i], indice: i }),
+          body: JSON.stringify({ lead: fila[i], indice: i, campanhaId: campanhaIdRef.current }),
         });
         if (r.ok) { ok++; setEnviados(ok); }
         else {
@@ -311,14 +359,19 @@ export default function Prospeccao({
         }).filter((l) => l.telefone);
 
         const validacao = await validarLeva(importados.map((l) => l.telefone));
+        const comValidacao = importados.map((l) => ({ ...l, tem_whatsapp: l.telefone ? (validacao[l.telefone] ?? null) : null }));
 
-        setLeads(importados.map((l) => ({ ...l, tem_whatsapp: l.telefone ? (validacao[l.telefone] ?? null) : null })));
+        setLeads(comValidacao);
         setEscolhidos(new Set());
         setJaBuscou(true);
         setVista('lista');
         setPainelExtra(null);
         setImportando(false);
         if (!importados.length) setErro('Nenhuma linha com telefone válido. Confira a coluna de telefone.');
+        else {
+          await campanhaAntes('planilha', `Planilha ${new Date().toLocaleDateString('pt-BR')}`);
+          campanhaDepois(comValidacao.length, comValidacao.filter((l) => l.tem_whatsapp === true).length);
+        }
       },
       error: () => { setImportando(false); setErro('Não consegui ler o arquivo. Salve como CSV UTF-8.'); },
     });
@@ -350,15 +403,17 @@ export default function Prospeccao({
       tem_whatsapp: c.telefone ? (validacao[c.telefone] ?? null) : null, dados_extras: null,
     }));
 
-    setLeads((antes) => {
-      const existentes = new Set(antes.map((l) => l.telefone));
-      return [...antes, ...novos.filter((n) => !existentes.has(n.telefone))];
-    });
+    const existentes = new Set(leads.map((l) => l.telefone));
+    const mesclados = [...leads, ...novos.filter((n) => !existentes.has(n.telefone))];
+    setLeads(mesclados);
     setJaBuscou(true);
     setVista('lista');
     setManualTexto('');
     setAdicionandoManual(false);
     setPainelExtra(null);
+
+    await campanhaAntes('manual', `Manual ${new Date().toLocaleDateString('pt-BR')}`);
+    campanhaDepois(mesclados.length, mesclados.filter((l) => l.tem_whatsapp === true).length);
   }
 
   /* ---------------------------------------------------------- o CEP */
@@ -592,6 +647,15 @@ export default function Prospeccao({
             <span>Buscando em <b>{regiao.km} km</b> ao redor do ponto marcado</span>
             <button onClick={() => setRegiao(null)} aria-label="Remover região">×</button>
           </div>
+        )}
+
+        {campanhaId && (
+          <p className="ajuda" style={{ marginTop: 4 }}>
+            Campanha: <b style={{ color: 'var(--ink)' }}>{campanhaNome}</b>{' '}
+            <button type="button" onClick={renomearCampanha} style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
+              editar
+            </button>
+          </p>
         )}
 
         {avisoRegiao && <p className="aviso-suave">{avisoRegiao}</p>}

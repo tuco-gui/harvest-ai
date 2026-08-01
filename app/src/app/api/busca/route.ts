@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { termo, pagina = 1, ll, regiao } = await req.json().catch(() => ({}) as Record<string, unknown>);
+  const { termo, pagina = 1, ll, regiao, campanhaId } = await req.json().catch(() => ({}) as Record<string, unknown>);
   if (typeof termo !== 'string' || !termo.trim()) {
     return NextResponse.json({ erro: 'Digite o ramo e a cidade.' }, { status: 400 });
   }
@@ -120,12 +120,21 @@ export async function POST(req: Request) {
     }
   }
 
+  const podeValidar = cred.evolution_url && cred.evolution_instancia && cred.evolution_key;
+  const zap = podeValidar ? await validarWhatsApp(cred, leads.map((l) => l.telefone)) : {};
+
   // Guarda os leads da conta. on_conflict=place_id evita duplicar entre buscas.
   const comId = leads.filter((l) => l.place_id);
   if (comId.length) {
     await admin
       .from('prospecta_leads')
-      .upsert(comId.map((l) => ({ ...l, conta_id: perfil.conta_id, origem: 'serpapi' })), {
+      .upsert(comId.map((l) => ({
+        ...l,
+        conta_id: perfil.conta_id,
+        origem: 'serpapi',
+        campanha_id: typeof campanhaId === 'number' ? campanhaId : null,
+        tem_whatsapp: l.telefone ? (zap[l.telefone] === true ? 'sim' : zap[l.telefone] === false ? 'nao' : 'nao_verificado') : 'nao_verificado',
+      })), {
         onConflict: 'place_id',
         ignoreDuplicates: false,
       });
@@ -140,9 +149,6 @@ export async function POST(req: Request) {
     novos_leads: comId.length,
     origem: 'app',
   });
-
-  const podeValidar = cred.evolution_url && cred.evolution_instancia && cred.evolution_key;
-  const zap = podeValidar ? await validarWhatsApp(cred, leads.map((l) => l.telefone)) : {};
 
   const comExtras = leads.map((l, i) => ({
     ...l,

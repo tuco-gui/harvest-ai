@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Escolha uma conta antes de disparar.' }, { status: 400 });
   }
 
-  const { lead, indice = 0 } = await req.json().catch(() => ({}) as any);
+  const { lead, indice = 0, campanhaId } = await req.json().catch(() => ({}) as any);
   if (!lead?.telefone) {
     return NextResponse.json({ erro: 'Lead sem telefone.' }, { status: 400 });
   }
@@ -88,6 +88,7 @@ export async function POST(req: Request) {
         empresa: lead.empresa,
         telefone: lead.telefone,
         telefone_original: lead.telefone_original ?? null,
+        ...(typeof campanhaId === 'number' ? { campanha_id: campanhaId } : {}),
         ...(entregue ? { disparo: 'sim', status: 'disparado', disparado_em: new Date().toISOString() } : {}),
       },
       { onConflict: 'place_id' },
