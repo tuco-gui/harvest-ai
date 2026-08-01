@@ -127,6 +127,42 @@ tem esse campo. Para chegar no CNPJ a partir de um resultado de Maps, o caminho 
 não busca por nome) e bases pagas de enriquecimento (Speedio, Econodata, Data2CRM) que
 fazem esse casamento por nome+telefone já prontas — custam por consulta ou por assinatura.
 
+**Atualização (31/07/2026) — achamos uma candidata concreta: Kipflow.** O Guilherme trouxe
+um workflow n8n + análise de um vídeo mostrando um agente que usa Apify (raspa Google Maps)
++ Kipflow (enriquece por domínio → CNPJ → LinkedIn → decisor → e-mail). Verifiquei a Kipflow
+de verdade antes de confiar no que o vídeo/Gemini descreveram:
+
+- **Real, é brasileira, e por trás dela está a Driva** (infraestrutura de dados B2B já
+  estabelecida). Confirmei um endpoint funcionando na doc oficial (`docs.kipflow.io`):
+  `GET https://data.z-api.driva.io/social/v1/companies/search?company_public_id=X` devolve
+  `company_name`, `cnpj`, `website`, `staff_count`, cidade/UF — **R$ 0,49 por consulta**.
+  Isso resolve a parte de "achar o CNPJ a partir de dado público" sem fuzzy-match por nome.
+- **Não confirmei dois endpoints que o workflow usa**: busca de decisor
+  (`/social/v1/personas/search` — a doc oficial mostra `/social/v1/people/search`, nome
+  diferente) e geração de e-mail (`/contacts/v1/emails/generate-by-domain` — não apareceu em
+  lugar nenhum que eu encontrei). O JSON do workflow tem `"aiBuilderAssisted": true` no
+  próprio metadata — foi montado por IA, e esses dois endpoints podem estar desatualizados
+  ou levemente errados. **Não construir nada contra eles sem testar com uma chave real primeiro.**
+- **Limitação estrutural, não é bug da Kipflow**: só enriquece quem tem site (a busca é por
+  domínio). Boa parte da nossa base típica (salão, joalheria, padaria) não tem — esses leads
+  ficam sem enriquecimento nenhum, do jeito que esse fluxo é desenhado.
+- **Custo real**: R$0,49 por consulta de empresa, provavelmente +R$0,49 pela consulta de
+  decisor (não confirmado) — bate com a estimativa do vídeo de R$0,60–1,00 por lead completo.
+  Em volume, isso é dinheiro de verdade por lead.
+
+**Como incorporaria no Harvest AI** (se a decisão comercial for "sim"): colunas novas em
+`prospecta_leads` (`cnpj`, `decisor_nome`, `decisor_cargo`, `decisor_linkedin`, `email`,
+`email_validacao`), uma rota `/api/enriquecer` chamada **por lead, sob demanda** — nunca
+automática pra toda busca, mesmo padrão de custo controlado que já usamos pra crédito de
+SerpAPI e token de IA — e a coluna "enriquecidas" no funil de Campanhas.
+
+**Próximos passos, nessa ordem, antes de escrever qualquer código:**
+1. Guilherme cria conta de teste na Kipflow (buscas indicam até 5.000 consultas grátis pra
+   testar, mas isso não foi confirmado na página de preço — checar direto com eles)
+2. Com uma chave real, confirmar os endpoints de decisor e e-mail batendo na API de verdade
+3. Decidir o modelo de custo (por lead sob demanda, com um botão "Enriquecer" — mesmo padrão
+   dos testes que já existem em Configurações)
+
 **Decisão que falta:** vale pagar por uma base de enriquecimento pronta (mais confiável,
 mais caro) ou tentar o casamento por conta própria (mais barato, mais falso positivo)?
 Isso é decisão comercial — depende de quanto cada lead vale para o cliente que está
