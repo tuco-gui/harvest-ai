@@ -16,17 +16,57 @@ usuários. Uma conta nunca enxerga a outra.
 | Caminho | O que é |
 |---|---|
 | `app/` | A aplicação Next.js 15 (App Router). É o produto. |
-| `sql/001_schema.sql` | Tabelas de leads, buscas e mensagens. Idempotente. |
-| `sql/002_multitenant.sql` | Contas, perfis, credenciais e as políticas de RLS. |
+| `sql/001_schema.sql` | Leads, buscas e mensagens (schema original, sem conta). |
+| `sql/002_multitenant.sql` | Contas, perfis, papéis, credenciais por conta e RLS. |
+| `sql/003_perfil.sql` | Foto de perfil (`avatar_url` + bucket `avatares`). |
+| `sql/004_perfil_e_sistema.sql` | Telefone e senha provisória no perfil; config do sistema (SMTP). |
+| `sql/005_ia_provedores.sql` | Troca `openai_key` fixo por `ia_provedor` + `ia_key` (múltiplos provedores). |
+| `sql/006_ia_modelo.sql` | Campo de modelo de IA customizável por conta. |
+| `sql/007_campanhas.sql` | Campanhas: agrupam leads de uma leva de prospecção com nome e funil. |
+| `sql/008_conversas.sql` | Chamados de suporte (`conversas` + `conversa_mensagens`). |
 | `scripts/sql.sh` | Roda SQL no Supabase sem abrir o Studio. |
-| `docs/roadmap-saas.md` | O que já foi feito e o que vem. |
+| `docs/roadmap-saas.md` | O que já foi feito e o que vem — histórico fase a fase. |
 | `docs/deploy.md` | Como sobe no VPS. |
 | `docs/enriquecimento.md` | De prospecção fria para prospecção quente. |
 | `n8n/prospecta-ia.json` | Workflow da versão anterior (painel único no n8n). |
 | `painel/index.html` | Painel da versão anterior. Mantido como referência. |
 
 A versão anterior continua funcionando para quem quiser só o n8n. O produto
-novo é o `app/`.
+novo é o `app/`. Os arquivos SQL são numerados na ordem em que devem rodar —
+todos idempotentes, dá para rodar de novo sem medo.
+
+## Banco de dados
+
+Postgres via Supabase self-hosted. Todas as tabelas de dado de cliente têm
+RLS (row level security): cada conta só enxerga as próprias linhas, exceto o
+`super_admin`, que enxerga todas. Isso é a segunda camada de proteção — a
+primeira é o servidor nunca aceitar `conta_id` vindo do navegador.
+
+### Multi-conta e usuários
+
+| Tabela | Colunas principais | Papel |
+|---|---|---|
+| `contas` | `id`, `nome`, `slug`, `ativo` | Uma linha por empresa cliente. |
+| `perfis` | `id` (= `auth.users.id`), `conta_id`, `papel`, `nome`, `email`, `telefone`, `avatar_url`, `senha_provisoria` | Estende o usuário do Supabase Auth. `conta_id` nulo só para `super_admin`. `papel` é `super_admin` \| `admin` \| `operador`. |
+| `conta_credenciais` | `conta_id` (PK), `serpapi_key`, `evolution_url`/`instancia`/`key`, `ia_provedor`, `ia_key`, `ia_modelo` | As chaves de cada cliente. Só `admin`/`super_admin` leem. |
+| `conta_config_envio` | `conta_id` (PK), `modo`, `mensagens` (jsonb), `contexto`, `intervalo_min`/`max` | Como e com que ritmo a conta dispara. |
+| `config_sistema` | singleton (`id=1`), `smtp_*` | Configuração de infraestrutura do sistema inteiro — não é por conta. |
+
+### Prospecção
+
+| Tabela | Colunas principais | Papel |
+|---|---|---|
+| `prospecta_campanhas` | `id`, `conta_id`, `nome`, `origem`, `encontradas`, `com_whatsapp` | O nome que o cliente dá a uma leva de busca/planilha/manual. |
+| `prospecta_leads` | `id`, `conta_id`, `campanha_id`, `place_id` (dedupe), `empresa`, `telefone`, `tem_whatsapp`, `especialidades`, `rating`, `status` | Uma linha por empresa encontrada ou importada. |
+| `prospecta_buscas` | `id`, `conta_id`, `termo`, `ll`, `total_resultados` | Uma linha por chamada à SerpAPI — controla crédito gasto. |
+| `prospecta_mensagens` | `id`, `conta_id`, `lead_id`, `direcao`, `conteudo`, `status`, `erro` | O que foi gerado/enviado para cada lead, e o motivo quando falha. |
+
+### Suporte
+
+| Tabela | Colunas principais | Papel |
+|---|---|---|
+| `conversas` | `id`, `conta_id`, `assunto`, `categoria`, `status`, `prazo_sla`, `respondido_em` | Um chamado de suporte. Schema pensado para virar chat interno da equipe do cliente também (`tipo`), sem precisar mudar tabela. |
+| `conversa_mensagens` | `id`, `conversa_id`, `autor_id`, `conteudo` | As respostas da thread. |
 
 ## Como funciona por dentro
 
@@ -34,7 +74,8 @@ novo é o `app/`.
 navegador → Next.js  → Supabase  (auth, contas, leads, credenciais)
                      → SerpAPI   (via ponte no n8n, por causa de CORS)
                      → Evolution (direto, para enviar e validar WhatsApp)
-                     → OpenAI    (direto, no modo "A IA escreve")
+                     → IA        (direto, no modo "A IA escreve" — Groq,
+                                   Gemini, Ollama Cloud, OpenAI ou Claude)
 ```
 
 A regra que sustenta a segurança: **o navegador nunca vê uma chave.** O front
@@ -56,6 +97,64 @@ simplesmente não chamar de novo.
 O bloqueio do operador é aplicado na tela **e** na rota — esconder o botão não
 é permissão.
 
+## Código
+
+Next.js 15, App Router, TypeScript. Cada página é um Server Component que
+busca os dados (via `supabaseAdmin()`, ignorando RLS de propósito — quem
+decide o que cada um vê é o código, checando `perfilAtual()`) e passa pronto
+para um componente `'use client'` que cuida da interação.
+
+```
+app/src/
+├── app/
+│   ├── entrar/page.tsx              login
+│   ├── (app)/                       tudo que exige sessão — o layout aqui
+│   │   │                            chama perfilAtual() e barra quem não
+│   │   │                            está logado, e trava a navegação
+│   │   │                            inteira se senha_provisoria for true
+│   │   ├── page.tsx                 Prospecção (busca, mapa, planilha, manual, disparo)
+│   │   ├── campanhas/page.tsx       funil por campanha
+│   │   ├── configuracoes/page.tsx   conexões, mensagens, tempo de envio, erros
+│   │   ├── usuarios/page.tsx        usuários da conta ativa
+│   │   ├── contas/page.tsx          CRUD de conta (só super_admin)
+│   │   ├── equipe/page.tsx          usuários da agência (só super_admin)
+│   │   ├── sistema/page.tsx         SMTP (só super_admin)
+│   │   ├── chamados/                lista + page.tsx / [id]/page.tsx (thread)
+│   │   ├── status/page.tsx          saúde da ferramenta
+│   │   └── perfil/page.tsx          foto, nome, telefone, e-mail, senha
+│   └── api/                         uma pasta por rota; nome do arquivo é sempre route.ts
+│       ├── busca/                   ponte pra SerpAPI (o navegador não fala com ela direto)
+│       ├── disparo/                 envia UMA mensagem — o navegador chama em loop
+│       ├── validar/                 confere WhatsApp de uma leva de telefones
+│       ├── cep/                     geocodifica CEP (ViaCEP + Nominatim)
+│       ├── campanhas/                cria/atualiza campanha
+│       ├── conversas/                chamados de suporte + [id]/mensagens
+│       ├── usuarios/                 criar, remover, gerar senha nova
+│       ├── contas/                   criar, renomear, excluir conta
+│       ├── perfil/                   dados, senha, foto (avatar/route.ts)
+│       ├── configuracoes/            salva credenciais e regra de envio
+│       ├── testar/                   testa cada integração sem gastar crédito
+│       └── sistema/smtp/             configura e testa o SMTP do sistema
+├── componentes/                     um `'use client'` por página, mesmo nome
+├── lib/
+│   ├── supabase/server.ts           perfilAtual() — a função mais importante do
+│   │                                 projeto: deriva quem é o usuário e qual conta
+│   │                                 ele enxerga a partir da sessão, nunca do cliente
+│   ├── supabase/browser.ts          cliente Supabase pro navegador (login, sair)
+│   ├── ia.ts                        adaptador dos 5 provedores de IA atrás de uma função só
+│   ├── email.ts                     envio via SMTP (nodemailer)
+│   └── senha.ts                     regra de senha forte + senha provisória previsível
+└── middleware.ts                    renova a sessão a cada request e redireciona
+                                       quem não está logado para /entrar
+```
+
+**A regra que atravessa o projeto inteiro:** o navegador manda a *intenção*
+("buscar", "disparar", "criar usuário"), nunca um dado sensível como
+`conta_id` ou uma chave. O servidor sempre deriva a conta da sessão verificada
+(`perfilAtual()`) e só então decide o que fazer. Confiar no que vem do
+navegador — mesmo que pareça inofensivo — é a categoria de bug mais cara de
+um sistema multi-cliente.
+
 ## Subindo do zero
 
 1. **Banco** — rode `sql/001_schema.sql` e depois `sql/002_multitenant.sql`.
@@ -72,7 +171,8 @@ O bloqueio do operador é aplicado na tela **e** na rota — esconder o botão n
    (CORS). Suba um webhook no n8n que só repassa a chamada e aponte
    `N8N_WEBHOOK_BUSCA` para ele.
 6. **Chaves do cliente** — entram pela tela, em Configurações → Conexões:
-   SerpAPI, Evolution (endereço, instância e token) e OpenAI. Ficam em
+   SerpAPI, Evolution (endereço, instância e token) e a IA de sua escolha
+   (Groq, Gemini, Ollama Cloud, OpenAI ou Claude). Ficam em
    `conta_credenciais`, uma linha por conta.
 
 ## Onde ficam as credenciais
