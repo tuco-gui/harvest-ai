@@ -23,6 +23,7 @@ export async function POST(req: Request) {
   if (typeof b.evolution_key === 'string' && b.evolution_key) cred.evolution_key = b.evolution_key.trim();
   if (typeof b.ia_key === 'string' && b.ia_key) cred.ia_key = b.ia_key.trim();
   if (typeof b.perplexity_key === 'string' && b.perplexity_key) cred.perplexity_key = b.perplexity_key.trim();
+  if (['perplexity', 'gratis'].includes(String(b.decisor_provedor))) cred.decisor_provedor = b.decisor_provedor;
   if (typeof b.serper_key === 'string' && b.serper_key) cred.serper_key = b.serper_key.trim();
   if (typeof b.tavily_key === 'string' && b.tavily_key) cred.tavily_key = b.tavily_key.trim();
   if (['serper', 'tavily'].includes(String(b.linkedin_provedor))) cred.linkedin_provedor = b.linkedin_provedor;

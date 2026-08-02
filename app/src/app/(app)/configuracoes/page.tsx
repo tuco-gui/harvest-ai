@@ -59,6 +59,7 @@ export default async function Pagina() {
       iaProvedor={cred?.ia_provedor ?? 'groq'}
       iaModelo={cred?.ia_modelo ?? ''}
       temPerplexity={!!cred?.perplexity_key}
+      decisorProvedor={cred?.decisor_provedor ?? 'perplexity'}
       temSerper={!!cred?.serper_key}
       temTavily={!!cred?.tavily_key}
       linkedinProvedor={cred?.linkedin_provedor ?? 'serper'}

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
-import { buscarDecisor, buscarLinkedin, buscarLinkedinTavily } from '@/lib/enriquecimento';
+import { buscarDecisor, buscarDecisorGratis, buscarLinkedin, buscarLinkedinTavily } from '@/lib/enriquecimento';
 
 const LEAD_EXEMPLO = {
   empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
@@ -94,6 +94,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, recado: 'Chave válida.' });
       } catch (e: any) {
         return NextResponse.json({ erro: e?.message ?? 'O Serper não respondeu.' }, { status: 400 });
+      }
+    }
+
+    if (qual === 'decisor-gratis') {
+      if (!c?.ia_key) return NextResponse.json({ erro: 'Configure a IA (seção acima) primeiro.' }, { status: 400 });
+      if (!c?.serper_key && !c?.tavily_key) return NextResponse.json({ erro: 'Configure o Serper ou o Tavily primeiro.' }, { status: 400 });
+      try {
+        const { nome } = await buscarDecisorGratis(c, { empresa: LEAD_EXEMPLO.empresa, endereco: LEAD_EXEMPLO.endereco });
+        return NextResponse.json({ ok: true, recado: nome ? `Achou "${nome}" pro exemplo.` : 'Rodou sem erro. Não achou decisor pro exemplo (esperado, é empresa fictícia).' });
+      } catch (e: any) {
+        return NextResponse.json({ erro: e?.message ?? 'Não respondeu.' }, { status: 400 });
       }
     }
 

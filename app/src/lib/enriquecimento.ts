@@ -1,16 +1,24 @@
-/** Enriquecimento de lead: decisor (Perplexity) → LinkedIn (Serper) → e-mail
- *  (Anymail Finder). Cada etapa é opcional — sem a chave, ou se a etapa
- *  falhar, segue sem ela e devolve um aviso. Achar o decisor é pré-requisito
- *  das outras duas (não faz sentido buscar LinkedIn/e-mail de ninguém). */
+/** Enriquecimento de lead: decisor (Perplexity ou busca+IA grátis) →
+ *  LinkedIn (Serper ou Tavily) → e-mail (Anymail Finder). Cada etapa é
+ *  opcional — sem a chave, ou se a etapa falhar, segue sem ela e devolve um
+ *  aviso. Achar o decisor é pré-requisito das outras duas (não faz sentido
+ *  buscar LinkedIn/e-mail de ninguém). */
+
+import { gerarComIA, type ProvedorIA } from '@/lib/ia';
 
 export type ProvedorLinkedin = 'serper' | 'tavily';
+export type ProvedorDecisor = 'perplexity' | 'gratis';
 
 export type CredenciaisEnriquecimento = {
   perplexity_key?: string | null;
+  decisor_provedor?: ProvedorDecisor | string | null;
   serper_key?: string | null;
   tavily_key?: string | null;
   linkedin_provedor?: ProvedorLinkedin | string | null;
   anymail_key?: string | null;
+  ia_provedor?: string | null;
+  ia_key?: string | null;
+  ia_modelo?: string | null;
 };
 
 export type LeadParaEnriquecer = {
@@ -39,7 +47,19 @@ export async function enriquecerLead(
   let email: string | null = null;
   let emailStatus: string | null = null;
 
-  if (cred.perplexity_key) {
+  if (cred.decisor_provedor === 'gratis') {
+    if (cred.ia_key && (cred.serper_key || cred.tavily_key)) {
+      try {
+        const r = await buscarDecisorGratis(cred, lead);
+        decisorNome = r.nome;
+        cnpj = r.cnpj;
+      } catch (e: any) {
+        avisos.push(`Decisor: ${e?.message ?? 'falhou'}`);
+      }
+    } else {
+      avisos.push('Decisor: configure a IA e o Serper/Tavily em Configurações pra usar o modo grátis.');
+    }
+  } else if (cred.perplexity_key) {
     try {
       const r = await buscarDecisor(cred.perplexity_key, lead);
       decisorNome = r.nome;
@@ -115,6 +135,81 @@ export async function buscarDecisor(
   } catch {
     return { nome: null, cnpj: null };
   }
+}
+
+/** Mesma missão do buscarDecisor, sem gastar da Perplexity: busca a web
+ *  aberta (Serper ou Tavily, o que a conta já tiver configurado pro
+ *  LinkedIn) e manda os resultados pra IA já configurada (Groq/Gemini/etc)
+ *  extrair o nome. Menos preciso que a Perplexity — ela é feita sob medida
+ *  pra pesquisa com raciocínio — mas roda de graça em cima do que a conta
+ *  já tem cadastrado. */
+export async function buscarDecisorGratis(
+  cred: { serper_key?: string | null; tavily_key?: string | null; linkedin_provedor?: string | null;
+          ia_provedor?: string | null; ia_key?: string | null; ia_modelo?: string | null },
+  lead: { empresa: string; endereco: string | null },
+): Promise<{ nome: string | null; cnpj: string | null }> {
+  const usarTavily = cred.linkedin_provedor === 'tavily' && !!cred.tavily_key;
+  const consulta = `"${lead.empresa}" ${lead.endereco ?? ''} sócio proprietário administrador CNPJ`.trim();
+
+  const resultados = usarTavily
+    ? await buscarNaWebTavily(cred.tavily_key!, consulta)
+    : cred.serper_key ? await buscarNaWebSerper(cred.serper_key, consulta) : [];
+  if (!resultados.length) return { nome: null, cnpj: null };
+
+  const contexto = resultados
+    .slice(0, 5)
+    .map((r, i) => `[${i + 1}] ${r.titulo}\n${r.resumo}\n${r.url}`)
+    .join('\n\n');
+
+  const system =
+    'Você identifica o decisor (sócio-administrador, proprietário ou CEO) de uma empresa a ' +
+    'partir de resultados de busca. Não invente: se os resultados não mostrarem um nome com ' +
+    'confiança, diga que não encontrou. ' +
+    'Responda SOMENTE com um JSON no formato {"encontrado": true|false, "nome": string|null, "cnpj": string|null}, ' +
+    'sem nenhum texto antes ou depois, sem bloco de código markdown.';
+  const user = `Empresa: ${lead.empresa}\nEndereço: ${lead.endereco ?? 'não informado'}\n\nResultados de busca:\n${contexto}`;
+
+  const texto = await gerarComIA(
+    (cred.ia_provedor ?? 'groq') as ProvedorIA, cred.ia_key!, system, user, cred.ia_modelo,
+  );
+  const bruto = texto.replace(/```json|```/gi, '').match(/\{[\s\S]*\}/)?.[0];
+  if (!bruto) return { nome: null, cnpj: null };
+
+  try {
+    const j = JSON.parse(bruto);
+    return {
+      nome: j.encontrado && typeof j.nome === 'string' ? j.nome.trim() || null : null,
+      cnpj: typeof j.cnpj === 'string' ? j.cnpj.trim() || null : null,
+    };
+  } catch {
+    return { nome: null, cnpj: null };
+  }
+}
+
+async function buscarNaWebSerper(chave: string, consulta: string): Promise<{ titulo: string; resumo: string; url: string }[]> {
+  const r = await fetch('https://google.serper.dev/search', {
+    method: 'POST',
+    headers: { 'X-API-KEY': chave, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ q: consulta, gl: 'br', num: 5 }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!r.ok) throw new Error(r.status === 403 ? 'Chave recusada pelo Serper.' : `Serper respondeu ${r.status}.`);
+  const d = await r.json();
+  const organico = Array.isArray(d.organic) ? d.organic : [];
+  return organico.map((o: any) => ({ titulo: o.title ?? '', resumo: o.snippet ?? '', url: o.link ?? '' }));
+}
+
+async function buscarNaWebTavily(chave: string, consulta: string): Promise<{ titulo: string; resumo: string; url: string }[]> {
+  const r = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chave}` },
+    body: JSON.stringify({ query: consulta, max_results: 5 }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'Chave recusada pelo Tavily.' : `Tavily respondeu ${r.status}.`);
+  const d = await r.json();
+  const resultados = Array.isArray(d.results) ? d.results : [];
+  return resultados.map((o: any) => ({ titulo: o.title ?? '', resumo: o.content ?? '', url: o.url ?? '' }));
 }
 
 /** Busca o LinkedIn pessoal restringindo a resultados de linkedin.com/in/. */

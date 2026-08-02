@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin();
   const [{ data: cred }, { data: lead }] = await Promise.all([
     admin.from('conta_credenciais')
-      .select('perplexity_key, serper_key, tavily_key, linkedin_provedor, anymail_key')
+      .select('perplexity_key, decisor_provedor, serper_key, tavily_key, linkedin_provedor, anymail_key, ia_provedor, ia_key, ia_modelo')
       .eq('conta_id', perfil.conta_id).single(),
     admin.from('prospecta_leads')
       .select('id, empresa, endereco, site, place_id')
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   ]);
 
   if (!lead) return NextResponse.json({ erro: 'Lead não encontrado nesta conta.' }, { status: 404 });
-  if (!cred?.perplexity_key && !cred?.serper_key && !cred?.tavily_key && !cred?.anymail_key) {
+  if (!cred?.perplexity_key && !cred?.ia_key && !cred?.serper_key && !cred?.tavily_key && !cred?.anymail_key) {
     return NextResponse.json(
       { erro: 'Cadastre pelo menos uma chave de enriquecimento em Configurações.' }, { status: 400 },
     );

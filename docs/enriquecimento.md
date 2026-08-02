@@ -256,6 +256,18 @@ resultados da Prospecção. Falta reiniciar o `rest` do Supabase antes de testar
 que tinha ficado pendente não chegou a ser escrita como documento separado — a decisão de
 pilha acima já é, na prática, essa junção.
 
+**Atualização (02/08/2026) — dois provedores por etapa, pra rodar sem gastar nada até fechar
+venda.** O Guilherme pediu: "não estou com grana pra investir agora" (o modelo de negócio é
+oferecer o enriquecimento como parte paga só depois que fecha um cliente). Adicionado
+`decisor_provedor` (`perplexity` | `gratis`) em `conta_credenciais`, reaproveitando o que a
+conta já tem: no modo grátis, `buscarDecisorGratis()` faz a mesma busca-web que já fazíamos
+pro LinkedIn (Serper/Tavily) e manda o resultado pra IA já configurada (Groq/Gemini, que já
+são grátis) extrair o nome do decisor — sem chave nova, sem custo. Fica documentado que é
+**menos preciso** que a Perplexity de propósito: ela é feita sob medida pra pesquisa com
+raciocínio, um LLM genérico lendo snippet de busca não tem a mesma qualidade. O caminho
+natural: testar/demonstrar com o modo grátis, trocar pra Perplexity quando o cliente pagante
+justificar o custo.
+
 ---
 
 ## 7. Controle de custo

@@ -14,6 +14,7 @@ type Props = {
   iaProvedor: string;
   iaModelo: string;
   temPerplexity: boolean;
+  decisorProvedor: string;
   temSerper: boolean;
   temTavily: boolean;
   linkedinProvedor: string;
@@ -36,6 +37,7 @@ export default function Configuracoes(p: Props) {
   const [iaProvedor, setIaProvedor] = useState(p.iaProvedor);
   const [iaKey, setIaKey] = useState('');
   const [iaModelo, setIaModelo] = useState(p.iaModelo);
+  const [decisorProvedor, setDecisorProvedor] = useState(p.decisorProvedor);
   const [perplexityKey, setPerplexityKey] = useState('');
   const [serperKey, setSerperKey] = useState('');
   const [tavilyKey, setTavilyKey] = useState('');
@@ -94,6 +96,7 @@ export default function Configuracoes(p: Props) {
         ia_provedor: iaProvedor,
         ia_key: iaKey || undefined,
         ia_modelo: iaModelo,
+        decisor_provedor: decisorProvedor,
         perplexity_key: perplexityKey || undefined,
         serper_key: serperKey || undefined,
         tavily_key: tavilyKey || undefined,
@@ -217,12 +220,29 @@ export default function Configuracoes(p: Props) {
             </p>
             <div className="cartaocfg">
               <div className="grupo">
-                <label className="label" htmlFor="perplexity-key">Perplexity (acha o sócio/decisor)</label>
-                <input id="perplexity-key" type="password" value={perplexityKey}
-                       onChange={(e) => setPerplexityKey(e.target.value)}
-                       placeholder={p.temPerplexity ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
-                <p className="ajuda">Pegue em perplexity.ai/settings/api. Cobra por consulta, sem plano grátis.</p>
+                <label className="label" htmlFor="decisor-provedor">Serviço que acha o sócio/decisor</label>
+                <select id="decisor-provedor" value={decisorProvedor} onChange={(e) => setDecisorProvedor(e.target.value)}
+                        style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)',
+                                 border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
+                  <option value="perplexity">Perplexity — mais preciso, cobra por consulta</option>
+                  <option value="gratis">Grátis — usa a IA e o Serper/Tavily já cadastrados</option>
+                </select>
               </div>
+              {decisorProvedor === 'gratis' ? (
+                <p className="ajuda" style={{ marginTop: -6, marginBottom: 4 }}>
+                  Não precisa de chave nova: busca pelo Serper/Tavily configurado ali embaixo e manda
+                  pra IA da seção "Inteligência artificial" (ali em cima) interpretar. Menos preciso
+                  que a Perplexity, mas roda sem gastar nada.
+                </p>
+              ) : (
+                <div className="grupo">
+                  <label className="label" htmlFor="perplexity-key">Chave da Perplexity</label>
+                  <input id="perplexity-key" type="password" value={perplexityKey}
+                         onChange={(e) => setPerplexityKey(e.target.value)}
+                         placeholder={p.temPerplexity ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                  <p className="ajuda">Pegue em perplexity.ai/settings/api. Cobra por consulta, sem plano grátis.</p>
+                </div>
+              )}
               <div className="grupo">
                 <label className="label" htmlFor="linkedin-provedor">Serviço que acha o LinkedIn pessoal</label>
                 <select id="linkedin-provedor" value={linkedinProvedor} onChange={(e) => setLinkedinProvedor(e.target.value)}
@@ -272,7 +292,7 @@ export default function Configuracoes(p: Props) {
                   ['serpapi', 'Testar busca'],
                   ['whatsapp', 'Testar WhatsApp'],
                   ['ia', 'Testar IA'],
-                  ['perplexity', 'Testar Perplexity'],
+                  decisorProvedor === 'gratis' ? ['decisor-gratis', 'Testar decisor grátis'] : ['perplexity', 'Testar Perplexity'],
                   linkedinProvedor === 'tavily' ? ['tavily', 'Testar Tavily'] : ['serper', 'Testar Serper'],
                   ['anymail', 'Testar Anymail Finder'],
                 ].map(([qual, rotulo]) => (
@@ -288,7 +308,8 @@ export default function Configuracoes(p: Props) {
                 <p key={qual} className="resultado-teste" style={{ marginTop: 10 }}>
                   <b>{
                     qual === 'serpapi' ? 'Busca' : qual === 'whatsapp' ? 'WhatsApp' : qual === 'ia' ? 'IA'
-                    : qual === 'perplexity' ? 'Perplexity' : qual === 'serper' ? 'Serper' : qual === 'tavily' ? 'Tavily' : 'Anymail Finder'
+                    : qual === 'perplexity' ? 'Perplexity' : qual === 'decisor-gratis' ? 'Decisor grátis'
+                    : qual === 'serper' ? 'Serper' : qual === 'tavily' ? 'Tavily' : 'Anymail Finder'
                   }:</b> {r.recado}
                 </p>
               ))}
