@@ -46,3 +46,23 @@ export async function PATCH(req: Request) {
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+/** Apaga a campanha — nunca os leads dela. Só desvincula (campanha_id=null),
+ *  porque o lead já pode ter recebido mensagem e tem histórico que vale
+ *  manter mesmo sem a campanha original existir mais. */
+export async function DELETE(req: Request) {
+  const perfil = await perfilAtual();
+  if (!perfil?.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
+  if (perfil.papel === 'operador') {
+    return NextResponse.json({ erro: 'Seu perfil não exclui campanhas.' }, { status: 403 });
+  }
+
+  const { id } = await req.json().catch(() => ({}) as any);
+  if (!id) return NextResponse.json({ erro: 'Falta a campanha.' }, { status: 400 });
+
+  const admin = supabaseAdmin();
+  await admin.from('prospecta_leads').update({ campanha_id: null }).eq('campanha_id', id).eq('conta_id', perfil.conta_id);
+  const { error } = await admin.from('prospecta_campanhas').delete().eq('id', id).eq('conta_id', perfil.conta_id);
+  if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}

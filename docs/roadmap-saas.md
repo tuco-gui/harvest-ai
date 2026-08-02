@@ -354,6 +354,13 @@ escopado por conta pra não colidir entre clientes); nova rota
 importação**, não só no disparo. Com isso os três (busca, planilha, manual)
 passam a ter exatamente o mesmo tratamento.
 
+**Mais duas pequenas, empacotadas na mesma leva (02/08/2026):** "Limpar
+histórico" de pesquisas (`DELETE /api/buscas`) e editar/excluir campanha
+(`DELETE /api/campanhas` — desvincula os leads, nunca apaga eles), as duas
+só pra quem não é operador. Pendente ainda: a hierarquia `/contas/[id]` com
+abas (Usuários · Integrações · Campanhas · Log de erros · Chamados) que
+ficou combinada e não foi construída — fica pra próxima leva.
+
 ---
 
 ### Fase 10 — Os pendentes menores

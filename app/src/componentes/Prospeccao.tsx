@@ -56,8 +56,15 @@ function zoomParaRaio(km: number): number {
 }
 
 export default function Prospeccao({
-  podeConfigurar, intervaloMin = 30, intervaloMax = 60, historico = [],
+  podeConfigurar, intervaloMin = 30, intervaloMax = 60, historico: historicoInicial = [],
 }: { podeConfigurar: boolean; intervaloMin?: number; intervaloMax?: number; historico?: Historico[] }) {
+  const [historico, setHistorico] = useState(historicoInicial);
+
+  async function limparHistorico() {
+    if (!confirm('Limpar todo o histórico de pesquisas desta conta?')) return;
+    const r = await fetch('/api/buscas', { method: 'DELETE' });
+    if (r.ok) setHistorico([]);
+  }
   const [termo, setTermo] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
@@ -655,21 +662,28 @@ export default function Prospeccao({
               {mostrarHistorico ? 'ocultar histórico de pesquisas' : `ver histórico de pesquisas (${historico.length})`}
             </button>
             {mostrarHistorico && (
-              <table className="tabela" style={{ marginBottom: 16 }}>
-                <thead>
-                  <tr><th>Termo</th><th>Quando</th><th>Resultados</th><th>Novos</th></tr>
-                </thead>
-                <tbody>
-                  {historico.map((h, i) => (
-                    <tr key={i}>
-                      <td>{h.termo}</td>
-                      <td style={{ color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{h.quando}</td>
-                      <td>{h.totalResultados}</td>
-                      <td style={{ color: h.novosLeads ? 'var(--ink)' : 'var(--ink-3)' }}>{h.novosLeads}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <table className="tabela" style={{ marginBottom: 8 }}>
+                  <thead>
+                    <tr><th>Termo</th><th>Quando</th><th>Resultados</th><th>Novos</th></tr>
+                  </thead>
+                  <tbody>
+                    {historico.map((h, i) => (
+                      <tr key={i}>
+                        <td>{h.termo}</td>
+                        <td style={{ color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{h.quando}</td>
+                        <td>{h.totalResultados}</td>
+                        <td style={{ color: h.novosLeads ? 'var(--ink)' : 'var(--ink-3)' }}>{h.novosLeads}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {podeConfigurar && (
+                  <button type="button" className="ver-detalhes" style={{ marginBottom: 16 }} onClick={limparHistorico}>
+                    Limpar histórico
+                  </button>
+                )}
+              </>
             )}
           </>
         )}

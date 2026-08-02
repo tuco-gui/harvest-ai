@@ -40,5 +40,5 @@ export default async function Pagina() {
     erros: contagem[c.id]?.erros ?? 0,
   }));
 
-  return <Campanhas campanhas={comFunil} />;
+  return <Campanhas campanhas={comFunil} podeConfigurar={perfil.papel !== 'operador'} />;
 }
