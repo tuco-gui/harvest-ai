@@ -281,11 +281,36 @@ resposta) existir.
 
 ---
 
+### ✅ Fase 9c — Enriquecimento de lead: decisor, LinkedIn e e-mail
+
+Entregue em 01/08/2026, depois de analisar dois workflows n8n de referência
+(Kipflow e Playbook Lab — ver `docs/enriquecimento.md` item 6) e comparar as
+alternativas gratuitas sugeridas contra a documentação real de cada API antes
+de escolher.
+
+- **Perplexity** (`sonar-reasoning-pro`) acha o nome do sócio/decisor cruzando
+  nome+endereço na web aberta — não depende do lead ter site nem CNPJ em mãos
+  de antemão (era a limitação da Kipflow)
+- **Serper** acha o LinkedIn pessoal (busca restrita a `linkedin.com/in/`)
+- **Anymail Finder** acha e **valida** o e-mail corporativo por nome+domínio
+- Tudo sob demanda por lead, botão "Enriquecer" na lista de resultados —
+  nunca automático, mesmo padrão de custo controlado do crédito de SerpAPI
+- `lib/enriquecimento.ts` segue o mesmo desenho de `lib/ia.ts`: uma função por
+  capacidade, chamador decide o que mostrar no erro
+
+**Não fiz**, por decisão explícita de escopo: seletor multi-provedor por
+capacidade (ex.: trocar Perplexity por CNPJ.ws) — só um provedor pago por
+etapa por enquanto, igual o padrão de `ia_provedor` cobre depois se algum
+cliente pedir. Score/temperatura (item 4 do `enriquecimento.md`) e reviews
+como gancho (item 1) continuam não construídos.
+
+---
+
 ### Fase 10 — Os pendentes menores
 
 - **Paginação da busca** — só traz 20; a rota já aceita `pagina`, falta o botão. **P**
 - **Consumo por conta, agregado por período** — campanhas já mostram o funil por leva; falta somar por mês. **P**
-- **Enriquecimento** — ver `docs/enriquecimento.md`. **G**
+- **Enriquecimento — o resto** — score/temperatura, reviews como gancho, sinais de maturidade digital, presença em busca (itens 1–4 de `docs/enriquecimento.md`); e a análise unificada Kipflow + Playbook Lab ainda não escrita. **G**
 
 ---
 

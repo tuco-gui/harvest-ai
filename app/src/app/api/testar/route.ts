@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
+import { buscarDecisor, buscarLinkedin } from '@/lib/enriquecimento';
 
 const LEAD_EXEMPLO = {
   empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
@@ -72,6 +73,39 @@ export async function POST(req: Request) {
       } catch (e: any) {
         return NextResponse.json({ erro: e?.message ?? 'A IA não respondeu.' }, { status: 400 });
       }
+    }
+
+    if (qual === 'perplexity') {
+      if (!c?.perplexity_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
+      try {
+        const { nome } = await buscarDecisor(c.perplexity_key, {
+          empresa: LEAD_EXEMPLO.empresa, endereco: LEAD_EXEMPLO.endereco, place_id: null,
+        });
+        return NextResponse.json({ ok: true, recado: nome ? `Chave válida. Achou "${nome}" pro exemplo.` : 'Chave válida. Não achou decisor pro exemplo (esperado, é empresa fictícia).' });
+      } catch (e: any) {
+        return NextResponse.json({ erro: e?.message ?? 'A Perplexity não respondeu.' }, { status: 400 });
+      }
+    }
+
+    if (qual === 'serper') {
+      if (!c?.serper_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
+      try {
+        await buscarLinkedin(c.serper_key, 'Satya Nadella', 'Microsoft');
+        return NextResponse.json({ ok: true, recado: 'Chave válida.' });
+      } catch (e: any) {
+        return NextResponse.json({ erro: e?.message ?? 'O Serper não respondeu.' }, { status: 400 });
+      }
+    }
+
+    if (qual === 'anymail') {
+      if (!c?.anymail_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
+      const r = await fetch('https://api.anymailfinder.com/v5.1/account', {
+        headers: { Authorization: `Bearer ${c.anymail_key}` },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!r.ok) return NextResponse.json({ erro: 'Chave recusada pelo Anymail Finder.' }, { status: 400 });
+      const d = await r.json();
+      return NextResponse.json({ ok: true, recado: `Chave válida. ${d.credits_left ?? '?'} créditos restantes.` });
     }
   } catch {
     return NextResponse.json({ erro: 'Não consegui alcançar o serviço.' }, { status: 502 });

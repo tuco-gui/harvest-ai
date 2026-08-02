@@ -22,6 +22,9 @@ export async function POST(req: Request) {
   if (typeof b.serpapi_key === 'string' && b.serpapi_key) cred.serpapi_key = b.serpapi_key.trim();
   if (typeof b.evolution_key === 'string' && b.evolution_key) cred.evolution_key = b.evolution_key.trim();
   if (typeof b.ia_key === 'string' && b.ia_key) cred.ia_key = b.ia_key.trim();
+  if (typeof b.perplexity_key === 'string' && b.perplexity_key) cred.perplexity_key = b.perplexity_key.trim();
+  if (typeof b.serper_key === 'string' && b.serper_key) cred.serper_key = b.serper_key.trim();
+  if (typeof b.anymail_key === 'string' && b.anymail_key) cred.anymail_key = b.anymail_key.trim();
   if (['groq', 'gemini', 'ollama', 'openai', 'claude'].includes(String(b.ia_provedor))) cred.ia_provedor = b.ia_provedor;
   if (typeof b.ia_modelo === 'string') cred.ia_modelo = b.ia_modelo.trim() || null;
   if (typeof b.evolution_url === 'string') cred.evolution_url = b.evolution_url.trim() || null;

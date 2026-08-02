@@ -22,6 +22,14 @@ type Lead = {
   dentro_do_raio?: boolean | null;
 };
 
+type ResultadoEnriquecimento = {
+  decisorNome: string | null;
+  linkedin: string | null;
+  email: string | null;
+  emailStatus: string | null;
+  erro?: string;
+};
+
 type Estado = 'parado' | 'correndo' | 'pausado';
 type PainelExtra = 'mapa' | 'planilha' | 'manual' | null;
 
@@ -64,6 +72,8 @@ export default function Prospeccao({
   const [errosDisparo, setErrosDisparo] = useState<{ empresa: string; motivo: string }[]>([]);
   const [avisoRegiao, setAvisoRegiao] = useState<string | null>(null);
   const [raioCustom, setRaioCustom] = useState('');
+  const [enriquecendo, setEnriquecendo] = useState<Set<string>>(new Set());
+  const [enriquecidos, setEnriquecidos] = useState<Record<string, ResultadoEnriquecimento>>({});
 
   const [campanhaId, setCampanhaId] = useState<number | null>(null);
   const [campanhaNome, setCampanhaNome] = useState('');
@@ -166,6 +176,23 @@ export default function Prospeccao({
       novo.has(k) ? novo.delete(k) : novo.add(k);
       return novo;
     });
+  }
+
+  async function enriquecer(placeId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setEnriquecendo((s) => new Set(s).add(placeId));
+    const r = await fetch('/api/enriquecer', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ placeId }),
+    });
+    const d = await r.json();
+    setEnriquecendo((s) => { const n = new Set(s); n.delete(placeId); return n; });
+    setEnriquecidos((m) => ({
+      ...m,
+      [placeId]: r.ok
+        ? { decisorNome: d.decisorNome, linkedin: d.linkedin, email: d.email, emailStatus: d.emailStatus }
+        : { decisorNome: null, linkedin: null, email: null, emailStatus: null, erro: d.erro ?? 'Não consegui enriquecer.' },
+    }));
   }
 
   const todas = () => setEscolhidos(new Set(leads.map(chave)));
@@ -725,6 +752,33 @@ export default function Prospeccao({
                       <span className="nome">{l.empresa}</span>
                       <span className="onde">{l.endereco ?? 'Endereço não informado'}</span>
                       {l.especialidades && <span className="selo selo-ramo">{l.especialidades}</span>}
+                      {l.place_id && (() => {
+                        const res = enriquecidos[l.place_id];
+                        if (enriquecendo.has(l.place_id)) {
+                          return <span className="ajuda" style={{ display: 'block' }}>Enriquecendo…</span>;
+                        }
+                        if (res?.erro) {
+                          return <span className="ajuda" style={{ display: 'block', color: 'var(--red)' }}>{res.erro}</span>;
+                        }
+                        if (res && res.decisorNome) {
+                          return (
+                            <span className="ajuda" style={{ display: 'block' }}>
+                              {res.decisorNome}
+                              {res.linkedin && ' · LinkedIn'}
+                              {res.emailStatus === 'valid' && res.email ? ` · ${res.email}` : ''}
+                            </span>
+                          );
+                        }
+                        if (res) {
+                          return <span className="ajuda" style={{ display: 'block' }}>Decisor não encontrado.</span>;
+                        }
+                        return (
+                          <button type="button" className="btn-teste" style={{ marginTop: 6, height: 26, fontSize: 11 }}
+                                  onClick={(e) => enriquecer(l.place_id!, e)}>
+                            Enriquecer
+                          </button>
+                        );
+                      })()}
                     </span>
                     <span className="nota">
                       {l.rating ? (

@@ -13,6 +13,9 @@ type Props = {
   temIa: boolean;
   iaProvedor: string;
   iaModelo: string;
+  temPerplexity: boolean;
+  temSerper: boolean;
+  temAnymail: boolean;
   modo: string;
   mensagens: string[];
   contexto: string;
@@ -31,6 +34,9 @@ export default function Configuracoes(p: Props) {
   const [iaProvedor, setIaProvedor] = useState(p.iaProvedor);
   const [iaKey, setIaKey] = useState('');
   const [iaModelo, setIaModelo] = useState(p.iaModelo);
+  const [perplexityKey, setPerplexityKey] = useState('');
+  const [serperKey, setSerperKey] = useState('');
+  const [anymailKey, setAnymailKey] = useState('');
 
   const [modo, setModo] = useState(p.modo);
   const [textos, setTextos] = useState(p.mensagens.join('\n---\n'));
@@ -84,6 +90,9 @@ export default function Configuracoes(p: Props) {
         ia_provedor: iaProvedor,
         ia_key: iaKey || undefined,
         ia_modelo: iaModelo,
+        perplexity_key: perplexityKey || undefined,
+        serper_key: serperKey || undefined,
+        anymail_key: anymailKey || undefined,
         modo,
         mensagens: lista,
         contexto,
@@ -94,7 +103,7 @@ export default function Configuracoes(p: Props) {
     const dados = await r.json();
     setSalvando(false);
     setAviso(r.ok ? 'Configurações salvas.' : (dados.erro ?? 'Não consegui salvar.'));
-    if (r.ok) { setSerpapi(''); setEvoKey(''); setIaKey(''); }
+    if (r.ok) { setSerpapi(''); setEvoKey(''); setIaKey(''); setPerplexityKey(''); setSerperKey(''); setAnymailKey(''); }
   }
 
   return (
@@ -195,6 +204,37 @@ export default function Configuracoes(p: Props) {
           </section>
 
           <section className="secao">
+            <h2>Enriquecimento de lead</h2>
+            <p className="resumo-secao">
+              Opcional. Sem chave, o botão "Enriquecer" some da lista de resultados. Cada chave é
+              uma etapa independente — pode cadastrar só uma, as outras ficam puladas.
+            </p>
+            <div className="cartaocfg">
+              <div className="grupo">
+                <label className="label" htmlFor="perplexity-key">Perplexity (acha o sócio/decisor)</label>
+                <input id="perplexity-key" type="password" value={perplexityKey}
+                       onChange={(e) => setPerplexityKey(e.target.value)}
+                       placeholder={p.temPerplexity ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                <p className="ajuda">Pegue em perplexity.ai/settings/api. Cobra por consulta, sem plano grátis.</p>
+              </div>
+              <div className="grupo">
+                <label className="label" htmlFor="serper-key">Serper (acha o LinkedIn pessoal)</label>
+                <input id="serper-key" type="password" value={serperKey}
+                       onChange={(e) => setSerperKey(e.target.value)}
+                       placeholder={p.temSerper ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                <p className="ajuda">Pegue em serper.dev. 2.500 buscas grátis pra começar.</p>
+              </div>
+              <div className="grupo">
+                <label className="label" htmlFor="anymail-key">Anymail Finder (acha e valida o e-mail)</label>
+                <input id="anymail-key" type="password" value={anymailKey}
+                       onChange={(e) => setAnymailKey(e.target.value)}
+                       placeholder={p.temAnymail ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                <p className="ajuda">Pegue em anymailfinder.com. 100 créditos grátis nos primeiros 14 dias.</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="secao">
             <h2>Testar as conexões</h2>
             <p className="resumo-secao">
               Nenhum destes testes envia mensagem pro WhatsApp. Testar busca e WhatsApp não gasta
@@ -207,6 +247,9 @@ export default function Configuracoes(p: Props) {
                   ['serpapi', 'Testar busca'],
                   ['whatsapp', 'Testar WhatsApp'],
                   ['ia', 'Testar IA'],
+                  ['perplexity', 'Testar Perplexity'],
+                  ['serper', 'Testar Serper'],
+                  ['anymail', 'Testar Anymail Finder'],
                 ].map(([qual, rotulo]) => (
                   <button key={qual} type="button" className="btn-teste"
                           data-r={testes[qual]?.ok === undefined ? undefined : testes[qual].ok ? 'ok' : 'erro'}
@@ -218,7 +261,10 @@ export default function Configuracoes(p: Props) {
               </div>
               {Object.entries(testes).map(([qual, r]) => (
                 <p key={qual} className="resultado-teste" style={{ marginTop: 10 }}>
-                  <b>{qual === 'serpapi' ? 'Busca' : qual === 'whatsapp' ? 'WhatsApp' : 'IA'}:</b> {r.recado}
+                  <b>{
+                    qual === 'serpapi' ? 'Busca' : qual === 'whatsapp' ? 'WhatsApp' : qual === 'ia' ? 'IA'
+                    : qual === 'perplexity' ? 'Perplexity' : qual === 'serper' ? 'Serper' : 'Anymail Finder'
+                  }:</b> {r.recado}
                 </p>
               ))}
             </div>

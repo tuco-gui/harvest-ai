@@ -169,6 +169,93 @@ Isso é decisão comercial — depende de quanto cada lead vale para o cliente q
 pagando pelo Harvest AI. Não construí nada disso ainda; fica para quando essa decisão
 estiver tomada.
 
+**Atualização (01/08/2026) — segundo workflow, Playbook Lab (Victor Baggio), resolve a
+limitação da Kipflow.** O Guilherme trouxe um segundo workflow n8n (`[Lead Magnet] Google
+Maps Scraping Tool`) + vídeo explicativo. Abri o JSON de verdade (não só a descrição) e
+testei cada endpoint contra a documentação oficial de cada ferramenta antes de confiar:
+
+- **Sem a flag `aiBuilderAssisted` no metadata** (diferente da Kipflow) — sinal de que foi
+  montado por um humano, não gerado por IA numa tacada. Prompts dos agentes são longos e
+  bem específicos (temperatura 0.2, âncora por cidade/CEP pra não bater na empresa errada).
+- **Apify** roda o ator `Google Maps Scraper` (`compass/crawler-google-places`,
+  `nwua9Gu5YrADL7ZDj`) — confirmado, é o ator público real. Plano free dá **US$5/mês em
+  créditos que renovam todo mês** (recorrente, não único).
+- **Perplexity API** (`sonar-reasoning-pro`) faz o papel de achar o decisor — cruza
+  CNPJ/QSA/site/diretórios/LinkedIn num agente com prompt próprio. **Não depende do lead
+  ter site** (tem um branch `Website?`: se tem site, extrai o conteúdo com o Tavily e passa
+  pro prompt; se não tem, busca só com nome/endereço) — isso resolve exatamente a limitação
+  que a Kipflow tinha ("só enriquece quem tem site"). Custo: sem free tier, mas a taxa por
+  requisição (US$5–14/1.000, [doc oficial](https://docs.perplexity.ai/docs/getting-started/pricing))
+  sai mais barato que os R$0,49/consulta da Kipflow.
+- **Tavily** acha o LinkedIn pessoal (busca restrita a `linkedin.com/in/`) — nó dedicado
+  real (`@tavily/n8n-nodes-tavily`). **Free tier real: 1.000 créditos/mês, sem cartão**
+  ([doc oficial](https://docs.tavily.com/documentation/api-credits)).
+- **Anymail Finder** acha e valida o e-mail por nome+domínio. Endpoint (`POST
+  /v5.1/find-email/person`), parâmetros e formato de resposta batem 100% com a
+  [doc oficial](https://anymailfinder.com/email-finder-api/docs/find-person-email) —
+  diferente da Kipflow, aqui não achei nenhum endpoint estranho. Cobra 1 crédito só quando
+  acha e-mail válido; trial de 100 créditos grátis por 14 dias, pago a partir de ~US$29/mês.
+- **Duas coisas que o vídeo narra mas o JSON baixável não faz** (só percebi comparando os
+  dois): (1) o vídeo fala em usar o **Unipile** pra raspar o perfil completo do LinkedIn —
+  não existe nenhum nó de Unipile no workflow real, ele só guarda a URL achada pelo Tavily;
+  (2) o vídeo diz que quando acha o LinkedIn usa o LinkedIn pra achar o e-mail e quando não
+  acha usa nome+domínio — no JSON os dois nós de Anymail Finder são idênticos, sempre
+  nome+domínio, nunca usam a URL do LinkedIn. Não muda a conclusão de que o workflow é real,
+  só mostra que o vídeo é uma versão simplificada/narrada, não 1:1 com o arquivo.
+
+**Não construí nada disso ainda.** Essa foi só a análise do Workflow 2 sozinho comparado
+com o Harvest AI, como pedido. A próxima etapa é juntar Kipflow + esse workflow + Harvest AI
+numa arquitetura só, pensando no plano básico (busca) vs. premium (decisor + LinkedIn +
+e-mail) que o Guilherme quer vender.
+
+**Atualização (01/08/2026) — decisão final da pilha, depois de checar as alternativas
+gratuitas sugeridas pelo Gemini contra a documentação real de cada uma:**
+
+- **CNPJ.ws / Minha Receita (grátis) não substitui a Perplexity.** Resolve só metade do
+  problema: busca por CNPJ, não por nome de empresa. O Google Maps não devolve CNPJ, então
+  ainda precisaríamos achar o CNPJ a partir do nome primeiro — o mesmo risco de fuzzy-match
+  já registrado no início deste item. Além disso, o plano grátis é limitado a **3
+  requisições/minuto**. Fica como complemento (confirmar razão social depois de já ter o
+  CNPJ), não como substituto do passo de descoberta.
+- **Google Custom Search API está sendo descontinuada** (fecha pra usuários novos em 2026,
+  desliga em 01/01/2027) — não vale construir em cima dela.
+- **DuckDuckGo scraper é contra os Termos de Uso do DuckDuckGo** e quebra com frequência —
+  não é uma opção séria pra um SaaS pago.
+- **Groq/Gemini** já resolvido, já em produção (`lib/ia.ts`) — sem mudança necessária.
+- **Achado que o Gemini não sugeriu**: **Serper.dev** é melhor que a Tavily pra achar
+  LinkedIn — 2.500 buscas grátis (crédito único, não mensal) e depois US$0,30–1 a cada 1.000
+  buscas, contra US$8/1.000 da Tavily fora do free tier.
+- **Gerar e-mail por tentativa de padrão MX sem validar é pior que não ter e-mail** —
+  queima reputação de domínio/IP mandando pra endereço que pode não existir, o mesmo
+  cuidado do item 5 (Supressão e cadência) pro WhatsApp.
+
+**Pilha decidida:**
+
+| Etapa | Provedor | Por quê |
+|---|---|---|
+| Decisor (CNPJ/sócio) | **Perplexity** (`sonar-reasoning-pro`) | Único que resolve nome→decisor num passo só. Sem free tier, mas barato por lookup (~R$0,03–0,08 de taxa + tokens). |
+| LinkedIn pessoal | **Serper.dev** | Mais barato que Tavily em escala, sem os problemas de ToS/descontinuação das opções grátis. |
+| E-mail do decisor | **Anymail Finder** | Único da lista que valida de verdade (não é chute de padrão). |
+| Filtro de categoria / mensagens | **Groq/Gemini** | Já em produção, grátis. |
+
+Custo estimado num volume baixo (~100 leads enriquecidos/mês): Perplexity ~R$6–10, Serper
+R$0 (dentro do free), e-mail R$0–150 dependendo do volume. Nessa escala o módulo quase não
+pesa — a escolha grátis-vs-pago importa mais quando o volume crescer.
+
+**Decisão de escopo (01/08/2026):** implementar com **um provedor por etapa agora**
+(Perplexity + Serper + Anymail Finder), sob demanda por lead — não construir o seletor
+multi-provedor por conta (como em `ia_provedor`/`ia_key`) já de início. Adicionar
+alternativas depois reaproveitando o mesmo padrão de schema, se algum cliente pedir.
+
+**Construído (01/08/2026)** — ver Fase 9c em `docs/roadmap-saas.md`. `sql/009_enriquecimento.sql`
+(colunas de chave em `conta_credenciais`, colunas de decisor em `prospecta_leads`),
+`lib/enriquecimento.ts` (as três chamadas), `/api/enriquecer` (rota sob demanda, por
+`place_id`), seção de chaves + testes em Configurações, botão "Enriquecer" na lista de
+resultados da Prospecção. Falta reiniciar o `rest` do Supabase antes de testar de verdade
+(ver aviso no topo do `ESTADO.md`). A análise unificada Kipflow + Playbook Lab + Harvest AI
+que tinha ficado pendente não chegou a ser escrita como documento separado — a decisão de
+pilha acima já é, na prática, essa junção.
+
 ---
 
 ## 7. Controle de custo

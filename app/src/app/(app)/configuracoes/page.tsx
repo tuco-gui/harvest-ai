@@ -58,6 +58,9 @@ export default async function Pagina() {
       temIa={!!cred?.ia_key}
       iaProvedor={cred?.ia_provedor ?? 'groq'}
       iaModelo={cred?.ia_modelo ?? ''}
+      temPerplexity={!!cred?.perplexity_key}
+      temSerper={!!cred?.serper_key}
+      temAnymail={!!cred?.anymail_key}
       modo={envio?.modo ?? 'ia'}
       mensagens={(envio?.mensagens as string[]) ?? []}
       contexto={envio?.contexto ?? ''}
