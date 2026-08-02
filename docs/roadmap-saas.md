@@ -342,6 +342,18 @@ sem avisar nada.
 **Não fiz**: telefone pessoal do decisor (nenhum provedor configurado hoje
 faz isso; Apollo.io tem `reveal_phone_number`, dá pra ligar depois se pedir).
 
+**Atualização (02/08/2026) — a Fase 9d só valia pra busca do Google Maps.**
+O Guilherme notou: planilha e entrada manual nunca tiveram `place_id` (só o
+Google Maps dá isso), e por causa disso nada do que foi construído na 9d
+funcionava pra elas — sem enriquecer, sem duplicado avisado, sem persistir
+antes do disparo. Corrigido: `lib/leads.ts` extraiu a lógica de
+novos/duplicados da busca pra um lugar só; `gerarPlaceIdSintetico()` cria um
+id estável (`csv:<conta>:<telefone>` / `manual:<conta>:<telefone>`,
+escopado por conta pra não colidir entre clientes); nova rota
+`/api/leads/importar` persiste planilha e manual **no momento da
+importação**, não só no disparo. Com isso os três (busca, planilha, manual)
+passam a ter exatamente o mesmo tratamento.
+
 ---
 
 ### Fase 10 — Os pendentes menores

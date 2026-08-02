@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+import { salvarLeads } from '@/lib/leads';
 
 /**
  * Ponte de busca. O navegador manda só o termo — a chave da SerpAPI fica aqui.
@@ -122,55 +123,14 @@ export async function POST(req: Request) {
 
   const podeValidar = cred.evolution_url && cred.evolution_instancia && cred.evolution_key;
   const zap = podeValidar ? await validarWhatsApp(cred, leads.map((l) => l.telefone)) : {};
-
-  // Guarda os leads da conta. on_conflict=place_id evita duplicar entre buscas.
-  //
-  // Mas place_id repetido não pode simplesmente reescrever campanha_id: se
-  // "Joalheria X" já estava na campanha "Busca de terça" e a mesma busca
-  // roda de novo hoje, ela não pode "sumir" de terça só porque apareceu de
-  // novo — por isso os que já existem são atualizados sem tocar campanha_id,
-  // e viram avisados como duplicado pra tela poder excluir se quiser.
-  const comId = leads.filter((l) => l.place_id);
-  let existentes: Record<string, number | null> = {};
-  if (comId.length) {
-    const { data: jaExistiam } = await admin
-      .from('prospecta_leads')
-      .select('place_id, campanha_id')
-      .eq('conta_id', perfil.conta_id)
-      .in('place_id', comId.map((l) => l.place_id!));
-    existentes = Object.fromEntries((jaExistiam ?? []).map((r: any) => [r.place_id, r.campanha_id]));
-  }
-
-  const novosLeads = comId.filter((l) => !(l.place_id! in existentes));
-  const duplicados = comId.filter((l) => l.place_id! in existentes);
-
   const zapDe = (l: (typeof leads)[number]) =>
     l.telefone ? (zap[l.telefone] === true ? 'sim' : zap[l.telefone] === false ? 'nao' : 'nao_verificado') : 'nao_verificado';
 
-  if (novosLeads.length) {
-    await admin.from('prospecta_leads').upsert(novosLeads.map((l) => ({
-      ...l,
-      conta_id: perfil.conta_id,
-      origem: 'serpapi',
-      campanha_id: typeof campanhaId === 'number' ? campanhaId : null,
-      tem_whatsapp: zapDe(l),
-    })), { onConflict: 'place_id', ignoreDuplicates: false });
-  }
-  await Promise.all(duplicados.map((l) => admin
-    .from('prospecta_leads')
-    .update({
-      telefone: l.telefone, telefone_original: l.telefone_original, endereco: l.endereco,
-      rating: l.rating, reviews: l.reviews, site: l.site, latitude: l.latitude, longitude: l.longitude,
-      tem_whatsapp: zapDe(l),
-    })
-    .eq('place_id', l.place_id!).eq('conta_id', perfil.conta_id)));
-
-  const idsCampanhaAnterior = [...new Set(duplicados.map((l) => existentes[l.place_id!]).filter((id): id is number => !!id))];
-  let nomesCampanha: Record<number, string> = {};
-  if (idsCampanhaAnterior.length) {
-    const { data: campanhasAnteriores } = await admin.from('prospecta_campanhas').select('id, nome').in('id', idsCampanhaAnterior);
-    nomesCampanha = Object.fromEntries((campanhasAnteriores ?? []).map((c: any) => [c.id, c.nome]));
-  }
+  const comId = leads.filter((l): l is typeof l & { place_id: string } => !!l.place_id);
+  const { porPlaceId, novos } = await salvarLeads(
+    admin, perfil.conta_id, comId.map((l) => ({ ...l, tem_whatsapp: zapDe(l) })),
+    typeof campanhaId === 'number' ? campanhaId : null, 'serpapi',
+  );
 
   await admin.from('prospecta_buscas').insert({
     conta_id: perfil.conta_id,
@@ -178,14 +138,14 @@ export async function POST(req: Request) {
     ll: typeof ll === 'string' ? ll : null,
     pagina: Number(pagina) || 1,
     total_resultados: achados.length,
-    novos_leads: novosLeads.length,
+    novos_leads: novos,
     origem: 'app',
   });
 
   const comExtras = leads.map((l, i) => ({
     ...l,
-    duplicado: l.place_id ? l.place_id in existentes : false,
-    campanhaAnterior: l.place_id && existentes[l.place_id] ? (nomesCampanha[existentes[l.place_id]!] ?? null) : null,
+    duplicado: l.place_id ? (porPlaceId[l.place_id]?.duplicado ?? false) : false,
+    campanhaAnterior: l.place_id ? (porPlaceId[l.place_id]?.campanhaAnterior ?? null) : null,
     tem_whatsapp: l.telefone ? (zap[l.telefone] ?? null) : null,
     distancia_km: raio ? (distancias.get(i) ?? null) : null,
     dentro_do_raio: raio ? (distancias.get(i) !== null && distancias.get(i)! <= raio.km) : null,

@@ -428,20 +428,40 @@ export default function Prospeccao({
           } as Lead;
         }).filter((l) => l.telefone);
 
+        if (!importados.length) {
+          setImportando(false);
+          setErro('Nenhuma linha com telefone válido. Confira a coluna de telefone.');
+          return;
+        }
+
         const validacao = await validarLeva(importados.map((l) => l.telefone));
         const comValidacao = importados.map((l) => ({ ...l, tem_whatsapp: l.telefone ? (validacao[l.telefone] ?? null) : null }));
 
-        setLeads(comValidacao);
+        const idCampanha = await campanhaAntes('planilha', `Planilha ${new Date().toLocaleDateString('pt-BR')}`);
+        const r = await fetch('/api/leads/importar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origem: 'csv', campanhaId: idCampanha,
+            leads: comValidacao.map((l) => ({
+              empresa: l.empresa, telefone: l.telefone, telefone_original: l.telefone_original,
+              endereco: l.endereco, especialidades: l.especialidades, site: l.site, temWhatsapp: l.tem_whatsapp,
+            })),
+          }),
+        });
+        const d = await r.json().catch(() => ({}));
+        const porTelefone = new Map((d.leads ?? []).map((x: any) => [x.telefone, x]));
+        const finais = comValidacao.map((l) => {
+          const salvo = l.telefone ? (porTelefone.get(l.telefone) as any) : undefined;
+          return salvo ? { ...l, place_id: salvo.place_id, duplicado: salvo.duplicado, campanhaAnterior: salvo.campanhaAnterior } : l;
+        });
+
+        setLeads(finais);
         setEscolhidos(new Set());
         setJaBuscou(true);
         setVista('lista');
         setPainelExtra(null);
         setImportando(false);
-        if (!importados.length) setErro('Nenhuma linha com telefone válido. Confira a coluna de telefone.');
-        else {
-          await campanhaAntes('planilha', `Planilha ${new Date().toLocaleDateString('pt-BR')}`);
-          campanhaDepois(comValidacao.length, comValidacao.filter((l) => l.tem_whatsapp === true).length);
-        }
+        if (idCampanha) campanhaDepois(finais.length, finais.filter((l) => l.tem_whatsapp === true).length);
       },
       error: () => { setImportando(false); setErro('Não consegui ler o arquivo. Salve como CSV UTF-8.'); },
     });
@@ -473,8 +493,26 @@ export default function Prospeccao({
       tem_whatsapp: c.telefone ? (validacao[c.telefone] ?? null) : null, dados_extras: null,
     }));
 
+    const idCampanha = await campanhaAntes('manual', `Manual ${new Date().toLocaleDateString('pt-BR')}`);
+    const r = await fetch('/api/leads/importar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        origem: 'manual', campanhaId: idCampanha,
+        leads: novos.map((l) => ({
+          empresa: l.empresa, telefone: l.telefone, telefone_original: l.telefone_original,
+          especialidades: l.especialidades, temWhatsapp: l.tem_whatsapp,
+        })),
+      }),
+    });
+    const d = await r.json().catch(() => ({}));
+    const porTelefone = new Map((d.leads ?? []).map((x: any) => [x.telefone, x]));
+    const novosSalvos = novos.map((l) => {
+      const salvo = l.telefone ? (porTelefone.get(l.telefone) as any) : undefined;
+      return salvo ? { ...l, place_id: salvo.place_id, duplicado: salvo.duplicado, campanhaAnterior: salvo.campanhaAnterior } : l;
+    });
+
     const existentes = new Set(leads.map((l) => l.telefone));
-    const mesclados = [...leads, ...novos.filter((n) => !existentes.has(n.telefone))];
+    const mesclados = [...leads, ...novosSalvos.filter((n) => !existentes.has(n.telefone))];
     setLeads(mesclados);
     setJaBuscou(true);
     setVista('lista');
@@ -482,8 +520,7 @@ export default function Prospeccao({
     setAdicionandoManual(false);
     setPainelExtra(null);
 
-    await campanhaAntes('manual', `Manual ${new Date().toLocaleDateString('pt-BR')}`);
-    campanhaDepois(mesclados.length, mesclados.filter((l) => l.tem_whatsapp === true).length);
+    if (idCampanha) campanhaDepois(mesclados.length, mesclados.filter((l) => l.tem_whatsapp === true).length);
   }
 
   /* ---------------------------------------------------------- o CEP */
