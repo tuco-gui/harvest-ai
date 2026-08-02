@@ -186,6 +186,14 @@ a{color:inherit}
 .selo[data-zap-selo="incerto"]{color:var(--ink-3);border-style:dashed}
 .zap-numero{color:var(--ink-3);font-size:12px}
 
+.ver-detalhes{margin-top:2px;font-size:11px;color:var(--ink-3);text-decoration:underline}
+.ver-detalhes:hover{color:var(--ink)}
+.detalhes-lead{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px 24px;
+  margin-top:12px;padding-top:12px;border-top:1px solid var(--rule);cursor:default;
+}
+.detalhes-lead a{color:var(--ink);text-decoration:underline;word-break:break-all}
+
 .vazio{padding:64px 0;text-align:center;color:var(--ink-3);font-size:13px}
 
 /* -------------------------------------------- régua de cadência */

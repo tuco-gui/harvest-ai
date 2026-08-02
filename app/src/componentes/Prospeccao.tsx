@@ -20,9 +20,14 @@ type Lead = {
   dados_extras?: Record<string, string> | null;
   distancia_km?: number | null;
   dentro_do_raio?: boolean | null;
+  duplicado?: boolean;
+  campanhaAnterior?: string | null;
 };
 
+type Historico = { termo: string; quando: string; totalResultados: number; novosLeads: number };
+
 type ResultadoEnriquecimento = {
+  cnpj?: string | null;
   decisorNome: string | null;
   linkedin: string | null;
   email: string | null;
@@ -51,8 +56,8 @@ function zoomParaRaio(km: number): number {
 }
 
 export default function Prospeccao({
-  podeConfigurar, intervaloMin = 30, intervaloMax = 60,
-}: { podeConfigurar: boolean; intervaloMin?: number; intervaloMax?: number }) {
+  podeConfigurar, intervaloMin = 30, intervaloMax = 60, historico = [],
+}: { podeConfigurar: boolean; intervaloMin?: number; intervaloMax?: number; historico?: Historico[] }) {
   const [termo, setTermo] = useState('');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
@@ -73,8 +78,10 @@ export default function Prospeccao({
   const [errosDisparo, setErrosDisparo] = useState<{ empresa: string; motivo: string }[]>([]);
   const [avisoRegiao, setAvisoRegiao] = useState<string | null>(null);
   const [raioCustom, setRaioCustom] = useState('');
+  const [mostrarHistorico, setMostrarHistorico] = useState(false);
   const [enriquecendo, setEnriquecendo] = useState<Set<string>>(new Set());
   const [enriquecidos, setEnriquecidos] = useState<Record<string, ResultadoEnriquecimento>>({});
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
 
   const [campanhaId, setCampanhaId] = useState<number | null>(null);
   const [campanhaNome, setCampanhaNome] = useState('');
@@ -190,7 +197,7 @@ export default function Prospeccao({
     setEnriquecidos((m) => ({
       ...m,
       [placeId]: r.ok
-        ? { decisorNome: d.decisorNome, linkedin: d.linkedin, email: d.email, emailStatus: d.emailStatus, avisos: d.avisos }
+        ? { cnpj: d.cnpj, decisorNome: d.decisorNome, linkedin: d.linkedin, email: d.email, emailStatus: d.emailStatus, avisos: d.avisos }
         : { decisorNome: null, linkedin: null, email: null, emailStatus: null, erro: d.erro ?? 'Não consegui enriquecer.' },
     }));
   }
@@ -198,6 +205,15 @@ export default function Prospeccao({
   function enriquecer(placeId: string, e: React.MouseEvent) {
     e.stopPropagation();
     enriquecerUm(placeId);
+  }
+
+  function alternarDetalhes(k: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setExpandidos((s) => {
+      const n = new Set(s);
+      n.has(k) ? n.delete(k) : n.add(k);
+      return n;
+    });
   }
 
   /** Sequencial de propósito — em lote, várias chamadas simultâneas podem
@@ -211,6 +227,15 @@ export default function Prospeccao({
       // eslint-disable-next-line no-await-in-loop
       await enriquecerUm(l.place_id!);
     }
+  }
+
+  function excluirDuplicados() {
+    const restantes = leads.filter((l) => !l.duplicado);
+    const removidos = leads.length - restantes.length;
+    if (!removidos) return;
+    setLeads(restantes);
+    setEscolhidos(new Set(restantes.filter((l) => escolhidos.has(chave(l, leads.indexOf(l)))).map(chave)));
+    campanhaDepois(restantes.length, restantes.filter((l) => l.tem_whatsapp === true).length);
   }
 
   const todas = () => setEscolhidos(new Set(leads.map(chave)));
@@ -579,6 +604,39 @@ export default function Prospeccao({
           busca consome um crédito.
         </p>
 
+        {termo.trim() && historico.some((h) => h.termo.toLowerCase() === termo.trim().toLowerCase()) && (
+          <p className="aviso-suave">
+            Você já buscou "{termo.trim()}" antes — confira o histórico ali embaixo antes de gastar
+            crédito de novo.
+          </p>
+        )}
+
+        {historico.length > 0 && (
+          <>
+            <button type="button" className="ver-detalhes" style={{ marginBottom: 8 }}
+                    onClick={() => setMostrarHistorico((v) => !v)}>
+              {mostrarHistorico ? 'ocultar histórico de pesquisas' : `ver histórico de pesquisas (${historico.length})`}
+            </button>
+            {mostrarHistorico && (
+              <table className="tabela" style={{ marginBottom: 16 }}>
+                <thead>
+                  <tr><th>Termo</th><th>Quando</th><th>Resultados</th><th>Novos</th></tr>
+                </thead>
+                <tbody>
+                  {historico.map((h, i) => (
+                    <tr key={i}>
+                      <td>{h.termo}</td>
+                      <td style={{ color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{h.quando}</td>
+                      <td>{h.totalResultados}</td>
+                      <td style={{ color: h.novosLeads ? 'var(--ink)' : 'var(--ink-3)' }}>{h.novosLeads}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+
         <div className="modos" style={{ marginTop: 4 }}>
           <button type="button" aria-pressed={painelExtra === 'mapa'}
                   onClick={() => setPainelExtra((p) => (p === 'mapa' ? null : 'mapa'))}>
@@ -669,6 +727,11 @@ export default function Prospeccao({
                     <button type="button" onClick={soZap}>Só com WhatsApp</button>
                     <button type="button" onClick={limparLista}>Limpar lista</button>
                 <button type="button" onClick={enriquecerLista}>Enriquecer lista</button>
+                {leads.some((l) => l.duplicado) && (
+                  <button type="button" onClick={excluirDuplicados}>
+                    Excluir duplicados ({leads.filter((l) => l.duplicado).length})
+                  </button>
+                )}
                   </div>
                   <div className="modos" style={{ marginTop: 10 }}>
                     <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>Lista</button>
@@ -736,6 +799,11 @@ export default function Prospeccao({
                 <button type="button" onClick={limparLista}>Limpar lista</button>
                 <div className="sep" />
                 <button type="button" onClick={enriquecerLista}>Enriquecer lista</button>
+                {leads.some((l) => l.duplicado) && (
+                  <button type="button" onClick={excluirDuplicados}>
+                    Excluir duplicados ({leads.filter((l) => l.duplicado).length})
+                  </button>
+                )}
               </div>
               <div className="modos">
                 <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>Lista</button>
@@ -773,6 +841,11 @@ export default function Prospeccao({
                       <span className="nome">{l.empresa}</span>
                       <span className="onde">{l.endereco ?? 'Endereço não informado'}</span>
                       {l.especialidades && <span className="selo selo-ramo">{l.especialidades}</span>}
+                      {l.duplicado && (
+                        <span className="ajuda" style={{ display: 'block', color: 'var(--red)' }}>
+                          Já está em {l.campanhaAnterior ? `"${l.campanhaAnterior}"` : 'outra campanha'}
+                        </span>
+                      )}
                       {l.place_id && (() => {
                         const res = enriquecidos[l.place_id];
                         if (enriquecendo.has(l.place_id)) {
@@ -819,7 +892,39 @@ export default function Prospeccao({
                         {l.tem_whatsapp === true ? 'WhatsApp' : l.tem_whatsapp === false ? 'Sem WhatsApp' : 'Não verificado'}
                       </span>
                       <span className="zap-numero">{l.telefone_original ?? 'sem telefone'}</span>
+                      <button type="button" className="ver-detalhes" onClick={(e) => alternarDetalhes(k, e)}>
+                        {expandidos.has(k) ? 'ocultar detalhes' : 'ver detalhes'}
+                      </button>
                     </span>
+
+                    {expandidos.has(k) && (() => {
+                      const res = l.place_id ? enriquecidos[l.place_id] : undefined;
+                      const campo = (rotulo: string, valor: React.ReactNode) =>
+                        valor ? (
+                          <div>
+                            <span style={{ color: 'var(--ink-3)', fontSize: 11 }}>{rotulo}</span>
+                            <div style={{ fontSize: 13 }}>{valor}</div>
+                          </div>
+                        ) : null;
+                      return (
+                        <div className="detalhes-lead" style={{ gridColumn: '1 / -1' }} onClick={(e) => e.stopPropagation()}>
+                          {campo('Empresa', l.empresa)}
+                          {campo('Endereço', l.endereco)}
+                          {campo('Categoria', l.especialidades)}
+                          {campo('Telefone', l.telefone_original)}
+                          {campo('Site', l.site && <a href={l.site} target="_blank" rel="noreferrer">{l.site}</a>)}
+                          {campo('CNPJ', res?.cnpj)}
+                          {campo('Decisor', res?.decisorNome)}
+                          {campo('LinkedIn', res?.linkedin && <a href={res.linkedin} target="_blank" rel="noreferrer">{res.linkedin}</a>)}
+                          {campo('E-mail', res?.email && `${res.email}${res.emailStatus && res.emailStatus !== 'valid' ? ` (${res.emailStatus})` : ''}`)}
+                          {!res && l.place_id && (
+                            <p className="ajuda" style={{ gridColumn: '1 / -1' }}>
+                              Ainda não enriquecido — use o botão "Enriquecer" ali em cima.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </li>
                 );
               })}

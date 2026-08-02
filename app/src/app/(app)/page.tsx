@@ -6,11 +6,22 @@ export default async function Pagina() {
 
   let intervaloMin = 30;
   let intervaloMax = 60;
+  let historico: { termo: string; quando: string; totalResultados: number; novosLeads: number }[] = [];
   if (perfil?.conta_id) {
-    const { data } = await supabaseAdmin()
-      .from('conta_config_envio').select('intervalo_min, intervalo_max').eq('conta_id', perfil.conta_id).maybeSingle();
-    if (data?.intervalo_min) intervaloMin = data.intervalo_min;
-    if (data?.intervalo_max) intervaloMax = data.intervalo_max;
+    const admin = supabaseAdmin();
+    const [{ data: envio }, { data: buscas }] = await Promise.all([
+      admin.from('conta_config_envio').select('intervalo_min, intervalo_max').eq('conta_id', perfil.conta_id).maybeSingle(),
+      admin.from('prospecta_buscas').select('termo, criado_em, total_resultados, novos_leads')
+        .eq('conta_id', perfil.conta_id).order('criado_em', { ascending: false }).limit(15),
+    ]);
+    if (envio?.intervalo_min) intervaloMin = envio.intervalo_min;
+    if (envio?.intervalo_max) intervaloMax = envio.intervalo_max;
+    historico = (buscas ?? []).map((b) => ({
+      termo: b.termo,
+      quando: new Date(b.criado_em).toLocaleString('pt-BR'),
+      totalResultados: b.total_resultados ?? 0,
+      novosLeads: b.novos_leads ?? 0,
+    }));
   }
 
   return (
@@ -18,6 +29,7 @@ export default async function Pagina() {
       podeConfigurar={perfil?.papel !== 'operador'}
       intervaloMin={intervaloMin}
       intervaloMax={intervaloMax}
+      historico={historico}
     />
   );
 }

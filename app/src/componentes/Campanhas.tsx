@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 type Campanha = {
   id: number;
   nome: string;
@@ -33,7 +35,11 @@ export default function Campanhas({ campanhas }: { campanhas: Campanha[] }) {
           <tbody>
             {campanhas.map((c) => (
               <tr key={c.id}>
-                <td><b style={{ fontWeight: 600 }}>{c.nome}</b></td>
+                <td>
+                  <Link href={`/campanhas/${c.id}`} style={{ fontWeight: 600, textDecoration: 'underline' }}>
+                    {c.nome}
+                  </Link>
+                </td>
                 <td style={{ color: 'var(--ink-2)' }}>{NOME_ORIGEM[c.origem] ?? c.origem}</td>
                 <td style={{ color: 'var(--ink-3)' }}>{new Date(c.criado_em).toLocaleString('pt-BR')}</td>
                 <td>{c.encontradas}</td>

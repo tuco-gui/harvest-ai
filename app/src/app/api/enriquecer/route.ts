@@ -55,6 +55,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
+    cnpj: resultado.cnpj,
     decisorNome: resultado.decisorNome,
     linkedin: resultado.linkedin,
     email: resultado.email,

@@ -306,6 +306,44 @@ como gancho (item 1) continuam não construídos.
 
 ---
 
+### ✅ Fase 9d — Campanha navegável, lead expansível, duplicado avisado
+
+Entregue em 02/08/2026, por reclamação direta do Guilherme depois de testar o
+enriquecimento na prática: campanha era uma folha morta (clicar não levava a
+lugar nenhum), o dado enriquecido sumia depois de aparecer uma vez, e buscar o
+mesmo termo três vezes no mesmo dia criava três campanhas com os mesmos leads,
+sem avisar nada.
+
+- **Linha expansível** (Prospecção e dentro da campanha): "ver detalhes" abre
+  todos os dados agregados daquele lead — empresa, endereço, telefone, site,
+  categoria, CNPJ, decisor, LinkedIn, e-mail — num painel só, em vez de sumir
+  depois do resultado inline.
+- **`/campanhas/[id]`**: clicar numa campanha agora abre a lista de leads
+  dela, com seleção, "Enriquecer selecionados" e "Disparar selecionados"
+  (dispara sequencial, respeitando o intervalo configurado em Configurações
+  → Tempo de envio) — a campanha deixou de ser só um número na tabela.
+- **Duplicado não rouba mais campanha antiga.** O bug real: toda busca criava
+  uma campanha nova, e o `upsert` por `place_id` reescrevia `campanha_id` do
+  lead pra campanha nova — a mesma empresa "sumia" de uma campanha e
+  reaparecia em outra, silenciosamente. Agora um lead que já existe só tem os
+  dados atualizados (rating, telefone, WhatsApp); `campanha_id` não é mais
+  tocado. A tela marca esses leads como "Já está em [campanha]" e ganha um
+  botão **Excluir duplicados**.
+- **Histórico de pesquisas** em Prospecção, usando `prospecta_buscas` (já
+  existia, só não aparecia) — mostra termo/quando/resultados/novos, e avisa
+  em cima da caixa de busca quando o termo digitado já foi buscado antes.
+- **Corrigido de brinde**: quando o provedor do decisor era Perplexity sem
+  chave cadastrada, a etapa era pulada sem gerar aviso nenhum — por isso
+  "decisor não encontrado" aparecia pra tudo, sem pista do motivo real. Os
+  avisos de enriquecimento agora aparecem na tela e ficam salvos em
+  `prospecta_leads.erro_enriquecimento`, somados ao log de erros de disparo
+  na mesma aba de Configurações.
+
+**Não fiz**: telefone pessoal do decisor (nenhum provedor configurado hoje
+faz isso; Apollo.io tem `reveal_phone_number`, dá pra ligar depois se pedir).
+
+---
+
 ### Fase 10 — Os pendentes menores
 
 - **Paginação da busca** — só traz 20; a rota já aceita `pagina`, falta o botão. **P**
