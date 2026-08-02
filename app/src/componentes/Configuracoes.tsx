@@ -18,7 +18,10 @@ type Props = {
   temSerper: boolean;
   temTavily: boolean;
   linkedinProvedor: string;
+  emailProvedor: string;
   temAnymail: boolean;
+  temApollo: boolean;
+  temSnov: boolean;
   modo: string;
   mensagens: string[];
   contexto: string;
@@ -42,7 +45,11 @@ export default function Configuracoes(p: Props) {
   const [serperKey, setSerperKey] = useState('');
   const [tavilyKey, setTavilyKey] = useState('');
   const [linkedinProvedor, setLinkedinProvedor] = useState(p.linkedinProvedor);
+  const [emailProvedor, setEmailProvedor] = useState(p.emailProvedor);
   const [anymailKey, setAnymailKey] = useState('');
+  const [apolloKey, setApolloKey] = useState('');
+  const [snovClientId, setSnovClientId] = useState('');
+  const [snovClientSecret, setSnovClientSecret] = useState('');
 
   const [modo, setModo] = useState(p.modo);
   const [textos, setTextos] = useState(p.mensagens.join('\n---\n'));
@@ -101,7 +108,11 @@ export default function Configuracoes(p: Props) {
         serper_key: serperKey || undefined,
         tavily_key: tavilyKey || undefined,
         linkedin_provedor: linkedinProvedor,
+        email_provedor: emailProvedor,
         anymail_key: anymailKey || undefined,
+        apollo_key: apolloKey || undefined,
+        snov_client_id: snovClientId || undefined,
+        snov_client_secret: snovClientSecret || undefined,
         modo,
         mensagens: lista,
         contexto,
@@ -112,7 +123,10 @@ export default function Configuracoes(p: Props) {
     const dados = await r.json();
     setSalvando(false);
     setAviso(r.ok ? 'Configurações salvas.' : (dados.erro ?? 'Não consegui salvar.'));
-    if (r.ok) { setSerpapi(''); setEvoKey(''); setIaKey(''); setPerplexityKey(''); setSerperKey(''); setTavilyKey(''); setAnymailKey(''); }
+    if (r.ok) {
+      setSerpapi(''); setEvoKey(''); setIaKey(''); setPerplexityKey(''); setSerperKey(''); setTavilyKey('');
+      setAnymailKey(''); setApolloKey(''); setSnovClientId(''); setSnovClientSecret('');
+    }
   }
 
   return (
@@ -270,12 +284,48 @@ export default function Configuracoes(p: Props) {
                 </div>
               )}
               <div className="grupo">
-                <label className="label" htmlFor="anymail-key">Anymail Finder (acha e valida o e-mail)</label>
-                <input id="anymail-key" type="password" value={anymailKey}
-                       onChange={(e) => setAnymailKey(e.target.value)}
-                       placeholder={p.temAnymail ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
-                <p className="ajuda">Pegue em anymailfinder.com. 100 créditos grátis nos primeiros 14 dias.</p>
+                <label className="label" htmlFor="email-provedor">Serviço que acha e valida o e-mail</label>
+                <select id="email-provedor" value={emailProvedor} onChange={(e) => setEmailProvedor(e.target.value)}
+                        style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)',
+                                 border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
+                  <option value="anymail">Anymail Finder — 100 créditos grátis por 14 dias</option>
+                  <option value="apollo">Apollo.io — cota grátis variável, verificar direto</option>
+                  <option value="snov">Snov.io — plano grátis com limite mensal</option>
+                </select>
               </div>
+              {emailProvedor === 'apollo' ? (
+                <div className="grupo">
+                  <label className="label" htmlFor="apollo-key">Chave da Apollo.io</label>
+                  <input id="apollo-key" type="password" value={apolloKey}
+                         onChange={(e) => setApolloKey(e.target.value)}
+                         placeholder={p.temApollo ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                  <p className="ajuda">Pegue em app.apollo.io (Settings → API).</p>
+                </div>
+              ) : emailProvedor === 'snov' ? (
+                <>
+                  <div className="grupo">
+                    <label className="label" htmlFor="snov-id">Snov.io — API User ID</label>
+                    <input id="snov-id" type="password" value={snovClientId}
+                           onChange={(e) => setSnovClientId(e.target.value)}
+                           placeholder={p.temSnov ? '•••••••• já cadastrado' : 'cole o ID aqui'} />
+                  </div>
+                  <div className="grupo">
+                    <label className="label" htmlFor="snov-secret">Snov.io — API Secret</label>
+                    <input id="snov-secret" type="password" value={snovClientSecret}
+                           onChange={(e) => setSnovClientSecret(e.target.value)}
+                           placeholder={p.temSnov ? '•••••••• já cadastrado' : 'cole o secret aqui'} />
+                    <p className="ajuda">Os dois em snov.io, aba API das configurações da conta.</p>
+                  </div>
+                </>
+              ) : (
+                <div className="grupo">
+                  <label className="label" htmlFor="anymail-key">Chave da Anymail Finder</label>
+                  <input id="anymail-key" type="password" value={anymailKey}
+                         onChange={(e) => setAnymailKey(e.target.value)}
+                         placeholder={p.temAnymail ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                  <p className="ajuda">Pegue em anymailfinder.com.</p>
+                </div>
+              )}
             </div>
           </section>
 
@@ -294,7 +344,9 @@ export default function Configuracoes(p: Props) {
                   ['ia', 'Testar IA'],
                   decisorProvedor === 'gratis' ? ['decisor-gratis', 'Testar decisor grátis'] : ['perplexity', 'Testar Perplexity'],
                   linkedinProvedor === 'tavily' ? ['tavily', 'Testar Tavily'] : ['serper', 'Testar Serper'],
-                  ['anymail', 'Testar Anymail Finder'],
+                  emailProvedor === 'apollo' ? ['apollo', 'Testar Apollo.io']
+                    : emailProvedor === 'snov' ? ['snov', 'Testar Snov.io']
+                    : ['anymail', 'Testar Anymail Finder'],
                 ].map(([qual, rotulo]) => (
                   <button key={qual} type="button" className="btn-teste"
                           data-r={testes[qual]?.ok === undefined ? undefined : testes[qual].ok ? 'ok' : 'erro'}
@@ -309,7 +361,8 @@ export default function Configuracoes(p: Props) {
                   <b>{
                     qual === 'serpapi' ? 'Busca' : qual === 'whatsapp' ? 'WhatsApp' : qual === 'ia' ? 'IA'
                     : qual === 'perplexity' ? 'Perplexity' : qual === 'decisor-gratis' ? 'Decisor grátis'
-                    : qual === 'serper' ? 'Serper' : qual === 'tavily' ? 'Tavily' : 'Anymail Finder'
+                    : qual === 'serper' ? 'Serper' : qual === 'tavily' ? 'Tavily'
+                    : qual === 'apollo' ? 'Apollo.io' : qual === 'snov' ? 'Snov.io' : 'Anymail Finder'
                   }:</b> {r.recado}
                 </p>
               ))}

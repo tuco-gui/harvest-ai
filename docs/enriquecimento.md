@@ -268,6 +268,20 @@ raciocínio, um LLM genérico lendo snippet de busca não tem a mesma qualidade.
 natural: testar/demonstrar com o modo grátis, trocar pra Perplexity quando o cliente pagante
 justificar o custo.
 
+**Atualização (02/08/2026) — Apollo.io e Snov.io como opção pra e-mail, ao lado da Anymail
+Finder (nenhuma sai).** `email_provedor` (`anymail` | `apollo` | `snov`) em
+`conta_credenciais`. Verificado antes de implementar:
+
+- **Apollo.io**: `POST api.apollo.io/api/v1/people/match`, header `X-Api-Key`, precisa do
+  parâmetro `reveal_personal_emails: true` — sem ele a API nem devolve o e-mail. Cota grátis
+  é instável (relatos de queda de 10.000 pra ~720 créditos/mês); documentei isso na tela
+  em vez de prometer um número.
+- **Snov.io**: bem mais complexo que os outros três — autentica por **client_id + client_secret**
+  (OAuth2 `client_credentials`, token de 1h), e a busca de e-mail é **assíncrona**: `POST
+  /v2/emails-by-domain-by-name/start` devolve um `task_hash`, que precisa ser consultado em
+  `GET /v2/emails-by-domain-by-name/result` até sair (implementei um polling de até 10x/2s =
+  20s). Exige domínio — não aceita nome de empresa como a Anymail Finder aceita.
+
 ---
 
 ## 7. Controle de custo

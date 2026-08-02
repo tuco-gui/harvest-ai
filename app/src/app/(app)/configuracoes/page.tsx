@@ -63,7 +63,10 @@ export default async function Pagina() {
       temSerper={!!cred?.serper_key}
       temTavily={!!cred?.tavily_key}
       linkedinProvedor={cred?.linkedin_provedor ?? 'serper'}
+      emailProvedor={cred?.email_provedor ?? 'anymail'}
       temAnymail={!!cred?.anymail_key}
+      temApollo={!!cred?.apollo_key}
+      temSnov={!!cred?.snov_client_id && !!cred?.snov_client_secret}
       modo={envio?.modo ?? 'ia'}
       mensagens={(envio?.mensagens as string[]) ?? []}
       contexto={envio?.contexto ?? ''}

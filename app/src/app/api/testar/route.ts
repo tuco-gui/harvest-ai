@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
-import { buscarDecisor, buscarDecisorGratis, buscarLinkedin, buscarLinkedinTavily } from '@/lib/enriquecimento';
+import {
+  buscarDecisor, buscarDecisorGratis, buscarLinkedin, buscarLinkedinTavily,
+  buscarEmailApollo, buscarEmailSnov,
+} from '@/lib/enriquecimento';
 
 const LEAD_EXEMPLO = {
   empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
@@ -115,6 +118,26 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, recado: 'Chave válida.' });
       } catch (e: any) {
         return NextResponse.json({ erro: e?.message ?? 'O Tavily não respondeu.' }, { status: 400 });
+      }
+    }
+
+    if (qual === 'apollo') {
+      if (!c?.apollo_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
+      try {
+        await buscarEmailApollo(c.apollo_key, 'Satya Nadella', 'microsoft.com', 'Microsoft');
+        return NextResponse.json({ ok: true, recado: 'Chave válida.' });
+      } catch (e: any) {
+        return NextResponse.json({ erro: e?.message ?? 'O Apollo não respondeu.' }, { status: 400 });
+      }
+    }
+
+    if (qual === 'snov') {
+      if (!c?.snov_client_id || !c?.snov_client_secret) return NextResponse.json({ erro: 'Preencha o API User ID e o API Secret.' }, { status: 400 });
+      try {
+        await buscarEmailSnov(c.snov_client_id, c.snov_client_secret, 'Satya Nadella', 'microsoft.com');
+        return NextResponse.json({ ok: true, recado: 'Client ID/secret válidos.' });
+      } catch (e: any) {
+        return NextResponse.json({ erro: e?.message ?? 'O Snov.io não respondeu.' }, { status: 400 });
       }
     }
 

@@ -8,6 +8,7 @@ import { gerarComIA, type ProvedorIA } from '@/lib/ia';
 
 export type ProvedorLinkedin = 'serper' | 'tavily';
 export type ProvedorDecisor = 'perplexity' | 'gratis';
+export type ProvedorEmail = 'anymail' | 'apollo' | 'snov';
 
 export type CredenciaisEnriquecimento = {
   perplexity_key?: string | null;
@@ -15,7 +16,11 @@ export type CredenciaisEnriquecimento = {
   serper_key?: string | null;
   tavily_key?: string | null;
   linkedin_provedor?: ProvedorLinkedin | string | null;
+  email_provedor?: ProvedorEmail | string | null;
   anymail_key?: string | null;
+  apollo_key?: string | null;
+  snov_client_id?: string | null;
+  snov_client_secret?: string | null;
   ia_provedor?: string | null;
   ia_key?: string | null;
   ia_modelo?: string | null;
@@ -77,10 +82,8 @@ export async function enriquecerLead(
         ? (usarTavily ? buscarLinkedinTavily : buscarLinkedin)(chaveLinkedin, decisorNome, lead.empresa)
             .catch((e: any) => { avisos.push(`LinkedIn: ${e?.message ?? 'falhou'}`); return null; })
         : Promise.resolve(null),
-      cred.anymail_key
-        ? buscarEmail(cred.anymail_key, decisorNome, extrairDominio(lead.site), lead.empresa)
-            .catch((e: any) => { avisos.push(`E-mail: ${e?.message ?? 'falhou'}`); return { email: null, status: null }; })
-        : Promise.resolve({ email: null, status: null }),
+      buscarEmailComProvedor(cred, decisorNome, extrairDominio(lead.site), lead.empresa)
+        .catch((e: any) => { avisos.push(`E-mail: ${e?.message ?? 'falhou'}`); return { email: null, status: null }; }),
     ]);
     linkedin = linkedinResult;
     email = emailResult.email;
@@ -247,6 +250,22 @@ export async function buscarLinkedinTavily(chave: string, nomeDecisor: string, e
   return achado?.url ?? null;
 }
 
+/** Escolhe entre Anymail Finder, Apollo.io e Snov.io conforme a conta. */
+async function buscarEmailComProvedor(
+  cred: CredenciaisEnriquecimento, nomeDecisor: string, dominio: string | null, empresa: string,
+): Promise<{ email: string | null; status: string | null }> {
+  if (cred.email_provedor === 'apollo' && cred.apollo_key) {
+    return buscarEmailApollo(cred.apollo_key, nomeDecisor, dominio, empresa);
+  }
+  if (cred.email_provedor === 'snov' && cred.snov_client_id && cred.snov_client_secret) {
+    return buscarEmailSnov(cred.snov_client_id, cred.snov_client_secret, nomeDecisor, dominio);
+  }
+  if (cred.anymail_key) {
+    return buscarEmail(cred.anymail_key, nomeDecisor, dominio, empresa);
+  }
+  return { email: null, status: null };
+}
+
 /** Acha e valida o e-mail corporativo. Prioriza domínio do site (mais
  *  preciso, segundo a doc do Anymail Finder); sem site, cai pro nome da
  *  empresa. `status !== 'valid'` significa não confiar no e-mail devolvido. */
@@ -265,6 +284,77 @@ export async function buscarEmail(
   if (!r.ok && r.status !== 404) throw new Error(await mensagemErro(r));
   const d = await r.json().catch(() => ({}) as any);
   return { email: d.email ?? null, status: d.email_status ?? (r.status === 404 ? 'not_found' : null) };
+}
+
+/** Mesma missão via Apollo.io. `reveal_personal_emails` é obrigatório —
+ *  sem ele a API nem devolve o campo de e-mail. */
+export async function buscarEmailApollo(
+  chave: string, nomeDecisor: string, dominio: string | null, empresa: string,
+): Promise<{ email: string | null; status: string | null }> {
+  const [primeiroNome, ...resto] = nomeDecisor.trim().split(/\s+/);
+  const corpo: Record<string, unknown> = {
+    first_name: primeiroNome, last_name: resto.join(' ') || undefined,
+    reveal_personal_emails: true,
+  };
+  if (dominio) corpo.domain = dominio; else corpo.organization_name = empresa;
+
+  const r = await fetch('https://api.apollo.io/api/v1/people/match', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': chave },
+    body: JSON.stringify(corpo),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'Chave recusada pelo Apollo.' : `Apollo respondeu ${r.status}.`);
+  const d = await r.json();
+  const pessoa = d.person ?? d;
+  const email = typeof pessoa?.email === 'string' && pessoa.email !== 'email_not_unlocked@domain.com' ? pessoa.email : null;
+  return { email, status: email ? (pessoa.email_status ?? 'valid') : 'not_found' };
+}
+
+/** Mesma missão via Snov.io. Diferente das outras: autentica por
+ *  client_id+client_secret (OAuth2, token de 1h) e a busca é assíncrona —
+ *  inicia com /start e fica consultando /result até sair ou dar timeout. */
+export async function buscarEmailSnov(
+  clientId: string, clientSecret: string, nomeDecisor: string, dominio: string | null,
+): Promise<{ email: string | null; status: string | null }> {
+  if (!dominio) return { email: null, status: 'not_found' }; // Snov exige domínio, não aceita nome de empresa
+
+  const tokenResp = await fetch('https://api.snov.io/v1/oauth/access_token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!tokenResp.ok) throw new Error('Client ID/secret recusados pelo Snov.io.');
+  const { access_token: token } = await tokenResp.json();
+
+  const [primeiroNome, ...resto] = nomeDecisor.trim().split(/\s+/);
+  const startResp = await fetch('https://api.snov.io/v2/emails-by-domain-by-name/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ rows: [{ first_name: primeiroNome, last_name: resto.join(' ') || primeiroNome, domain: dominio }] }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!startResp.ok) throw new Error(`Snov.io respondeu ${startResp.status} ao iniciar a busca.`);
+  const { task_hash: taskHash } = await startResp.json();
+  if (!taskHash) return { email: null, status: null };
+
+  // Busca assíncrona: consulta o resultado até sair ou dar 20s (10 tentativas de 2s).
+  for (let tentativa = 0; tentativa < 10; tentativa++) {
+    await new Promise((res) => setTimeout(res, 2000));
+    const r = await fetch(`https://api.snov.io/v2/emails-by-domain-by-name/result?task_hash=${taskHash}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!r.ok) continue;
+    const d = await r.json();
+    const linha = Array.isArray(d?.data) ? d.data[0] : null;
+    if (!linha || linha.status === 'in_progress') continue;
+    const emails = Array.isArray(linha.emails) ? linha.emails : [];
+    const valido = emails.find((e: any) => e.smtp_status === 'valid') ?? emails[0];
+    return { email: valido?.email ?? null, status: valido?.smtp_status ?? 'not_found' };
+  }
+  return { email: null, status: null };
 }
 
 function extrairDominio(site: string | null): string | null {
