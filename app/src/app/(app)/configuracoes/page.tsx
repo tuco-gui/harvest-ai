@@ -60,6 +60,8 @@ export default async function Pagina() {
       iaModelo={cred?.ia_modelo ?? ''}
       temPerplexity={!!cred?.perplexity_key}
       temSerper={!!cred?.serper_key}
+      temTavily={!!cred?.tavily_key}
+      linkedinProvedor={cred?.linkedin_provedor ?? 'serper'}
       temAnymail={!!cred?.anymail_key}
       modo={envio?.modo ?? 'ia'}
       mensagens={(envio?.mensagens as string[]) ?? []}

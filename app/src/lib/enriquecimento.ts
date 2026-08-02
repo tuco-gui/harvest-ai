@@ -3,9 +3,13 @@
  *  falhar, segue sem ela e devolve um aviso. Achar o decisor é pré-requisito
  *  das outras duas (não faz sentido buscar LinkedIn/e-mail de ninguém). */
 
+export type ProvedorLinkedin = 'serper' | 'tavily';
+
 export type CredenciaisEnriquecimento = {
   perplexity_key?: string | null;
   serper_key?: string | null;
+  tavily_key?: string | null;
+  linkedin_provedor?: ProvedorLinkedin | string | null;
   anymail_key?: string | null;
 };
 
@@ -46,9 +50,11 @@ export async function enriquecerLead(
   }
 
   if (decisorNome) {
+    const usarTavily = cred.linkedin_provedor === 'tavily';
+    const chaveLinkedin = usarTavily ? cred.tavily_key : cred.serper_key;
     const [linkedinResult, emailResult] = await Promise.all([
-      cred.serper_key
-        ? buscarLinkedin(cred.serper_key, decisorNome, lead.empresa)
+      chaveLinkedin
+        ? (usarTavily ? buscarLinkedinTavily : buscarLinkedin)(chaveLinkedin, decisorNome, lead.empresa)
             .catch((e: any) => { avisos.push(`LinkedIn: ${e?.message ?? 'falhou'}`); return null; })
         : Promise.resolve(null),
       cred.anymail_key
@@ -124,6 +130,26 @@ export async function buscarLinkedin(chave: string, nomeDecisor: string, empresa
   const organico = Array.isArray(d.organic) ? d.organic : [];
   const achado = organico.find((o: any) => typeof o.link === 'string' && o.link.includes('linkedin.com/in/'));
   return achado?.link ?? null;
+}
+
+/** Mesmo papel do buscarLinkedin, via Tavily em vez de Serper — 1.000
+ *  buscas grátis por mês (recorrente), contra o crédito único do Serper. */
+export async function buscarLinkedinTavily(chave: string, nomeDecisor: string, empresa: string): Promise<string | null> {
+  const r = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chave}` },
+    body: JSON.stringify({
+      query: `${nomeDecisor} ${empresa}`,
+      include_domains: ['linkedin.com/in'],
+      max_results: 5,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'Chave recusada pelo Tavily.' : `Tavily respondeu ${r.status}.`);
+  const d = await r.json();
+  const resultados = Array.isArray(d.results) ? d.results : [];
+  const achado = resultados.find((o: any) => typeof o.url === 'string' && o.url.includes('linkedin.com/in/'));
+  return achado?.url ?? null;
 }
 
 /** Acha e valida o e-mail corporativo. Prioriza domínio do site (mais

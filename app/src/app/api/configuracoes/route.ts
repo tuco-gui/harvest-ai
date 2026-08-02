@@ -24,6 +24,8 @@ export async function POST(req: Request) {
   if (typeof b.ia_key === 'string' && b.ia_key) cred.ia_key = b.ia_key.trim();
   if (typeof b.perplexity_key === 'string' && b.perplexity_key) cred.perplexity_key = b.perplexity_key.trim();
   if (typeof b.serper_key === 'string' && b.serper_key) cred.serper_key = b.serper_key.trim();
+  if (typeof b.tavily_key === 'string' && b.tavily_key) cred.tavily_key = b.tavily_key.trim();
+  if (['serper', 'tavily'].includes(String(b.linkedin_provedor))) cred.linkedin_provedor = b.linkedin_provedor;
   if (typeof b.anymail_key === 'string' && b.anymail_key) cred.anymail_key = b.anymail_key.trim();
   if (['groq', 'gemini', 'ollama', 'openai', 'claude'].includes(String(b.ia_provedor))) cred.ia_provedor = b.ia_provedor;
   if (typeof b.ia_modelo === 'string') cred.ia_modelo = b.ia_modelo.trim() || null;

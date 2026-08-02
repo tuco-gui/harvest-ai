@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
-import { buscarDecisor, buscarLinkedin } from '@/lib/enriquecimento';
+import { buscarDecisor, buscarLinkedin, buscarLinkedinTavily } from '@/lib/enriquecimento';
 
 const LEAD_EXEMPLO = {
   empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
@@ -94,6 +94,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, recado: 'Chave válida.' });
       } catch (e: any) {
         return NextResponse.json({ erro: e?.message ?? 'O Serper não respondeu.' }, { status: 400 });
+      }
+    }
+
+    if (qual === 'tavily') {
+      if (!c?.tavily_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
+      try {
+        await buscarLinkedinTavily(c.tavily_key, 'Satya Nadella', 'Microsoft');
+        return NextResponse.json({ ok: true, recado: 'Chave válida.' });
+      } catch (e: any) {
+        return NextResponse.json({ erro: e?.message ?? 'O Tavily não respondeu.' }, { status: 400 });
       }
     }
 

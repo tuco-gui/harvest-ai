@@ -15,6 +15,8 @@ type Props = {
   iaModelo: string;
   temPerplexity: boolean;
   temSerper: boolean;
+  temTavily: boolean;
+  linkedinProvedor: string;
   temAnymail: boolean;
   modo: string;
   mensagens: string[];
@@ -36,6 +38,8 @@ export default function Configuracoes(p: Props) {
   const [iaModelo, setIaModelo] = useState(p.iaModelo);
   const [perplexityKey, setPerplexityKey] = useState('');
   const [serperKey, setSerperKey] = useState('');
+  const [tavilyKey, setTavilyKey] = useState('');
+  const [linkedinProvedor, setLinkedinProvedor] = useState(p.linkedinProvedor);
   const [anymailKey, setAnymailKey] = useState('');
 
   const [modo, setModo] = useState(p.modo);
@@ -92,6 +96,8 @@ export default function Configuracoes(p: Props) {
         ia_modelo: iaModelo,
         perplexity_key: perplexityKey || undefined,
         serper_key: serperKey || undefined,
+        tavily_key: tavilyKey || undefined,
+        linkedin_provedor: linkedinProvedor,
         anymail_key: anymailKey || undefined,
         modo,
         mensagens: lista,
@@ -103,7 +109,7 @@ export default function Configuracoes(p: Props) {
     const dados = await r.json();
     setSalvando(false);
     setAviso(r.ok ? 'Configurações salvas.' : (dados.erro ?? 'Não consegui salvar.'));
-    if (r.ok) { setSerpapi(''); setEvoKey(''); setIaKey(''); setPerplexityKey(''); setSerperKey(''); setAnymailKey(''); }
+    if (r.ok) { setSerpapi(''); setEvoKey(''); setIaKey(''); setPerplexityKey(''); setSerperKey(''); setTavilyKey(''); setAnymailKey(''); }
   }
 
   return (
@@ -218,12 +224,31 @@ export default function Configuracoes(p: Props) {
                 <p className="ajuda">Pegue em perplexity.ai/settings/api. Cobra por consulta, sem plano grátis.</p>
               </div>
               <div className="grupo">
-                <label className="label" htmlFor="serper-key">Serper (acha o LinkedIn pessoal)</label>
-                <input id="serper-key" type="password" value={serperKey}
-                       onChange={(e) => setSerperKey(e.target.value)}
-                       placeholder={p.temSerper ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
-                <p className="ajuda">Pegue em serper.dev. 2.500 buscas grátis pra começar.</p>
+                <label className="label" htmlFor="linkedin-provedor">Serviço que acha o LinkedIn pessoal</label>
+                <select id="linkedin-provedor" value={linkedinProvedor} onChange={(e) => setLinkedinProvedor(e.target.value)}
+                        style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)',
+                                 border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
+                  <option value="serper">Serper — 2.500 buscas grátis (crédito único)</option>
+                  <option value="tavily">Tavily — 1.000 buscas grátis por mês (recorrente)</option>
+                </select>
               </div>
+              {linkedinProvedor === 'tavily' ? (
+                <div className="grupo">
+                  <label className="label" htmlFor="tavily-key">Chave da Tavily</label>
+                  <input id="tavily-key" type="password" value={tavilyKey}
+                         onChange={(e) => setTavilyKey(e.target.value)}
+                         placeholder={p.temTavily ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                  <p className="ajuda">Pegue em app.tavily.com.</p>
+                </div>
+              ) : (
+                <div className="grupo">
+                  <label className="label" htmlFor="serper-key">Chave do Serper</label>
+                  <input id="serper-key" type="password" value={serperKey}
+                         onChange={(e) => setSerperKey(e.target.value)}
+                         placeholder={p.temSerper ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                  <p className="ajuda">Pegue em serper.dev.</p>
+                </div>
+              )}
               <div className="grupo">
                 <label className="label" htmlFor="anymail-key">Anymail Finder (acha e valida o e-mail)</label>
                 <input id="anymail-key" type="password" value={anymailKey}
@@ -248,7 +273,7 @@ export default function Configuracoes(p: Props) {
                   ['whatsapp', 'Testar WhatsApp'],
                   ['ia', 'Testar IA'],
                   ['perplexity', 'Testar Perplexity'],
-                  ['serper', 'Testar Serper'],
+                  linkedinProvedor === 'tavily' ? ['tavily', 'Testar Tavily'] : ['serper', 'Testar Serper'],
                   ['anymail', 'Testar Anymail Finder'],
                 ].map(([qual, rotulo]) => (
                   <button key={qual} type="button" className="btn-teste"
@@ -263,7 +288,7 @@ export default function Configuracoes(p: Props) {
                 <p key={qual} className="resultado-teste" style={{ marginTop: 10 }}>
                   <b>{
                     qual === 'serpapi' ? 'Busca' : qual === 'whatsapp' ? 'WhatsApp' : qual === 'ia' ? 'IA'
-                    : qual === 'perplexity' ? 'Perplexity' : qual === 'serper' ? 'Serper' : 'Anymail Finder'
+                    : qual === 'perplexity' ? 'Perplexity' : qual === 'serper' ? 'Serper' : qual === 'tavily' ? 'Tavily' : 'Anymail Finder'
                   }:</b> {r.recado}
                 </p>
               ))}
