@@ -72,6 +72,8 @@ export async function enriquecerLead(
     } catch (e: any) {
       avisos.push(`Decisor: ${e?.message ?? 'falhou'}`);
     }
+  } else {
+    avisos.push('Decisor: cadastre a chave da Perplexity ou troque para "Grátis" em Configurações.');
   }
 
   if (decisorNome) {

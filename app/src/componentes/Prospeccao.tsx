@@ -27,6 +27,7 @@ type ResultadoEnriquecimento = {
   linkedin: string | null;
   email: string | null;
   emailStatus: string | null;
+  avisos?: string[];
   erro?: string;
 };
 
@@ -178,8 +179,7 @@ export default function Prospeccao({
     });
   }
 
-  async function enriquecer(placeId: string, e: React.MouseEvent) {
-    e.stopPropagation();
+  async function enriquecerUm(placeId: string) {
     setEnriquecendo((s) => new Set(s).add(placeId));
     const r = await fetch('/api/enriquecer', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -190,9 +190,27 @@ export default function Prospeccao({
     setEnriquecidos((m) => ({
       ...m,
       [placeId]: r.ok
-        ? { decisorNome: d.decisorNome, linkedin: d.linkedin, email: d.email, emailStatus: d.emailStatus }
+        ? { decisorNome: d.decisorNome, linkedin: d.linkedin, email: d.email, emailStatus: d.emailStatus, avisos: d.avisos }
         : { decisorNome: null, linkedin: null, email: null, emailStatus: null, erro: d.erro ?? 'Não consegui enriquecer.' },
     }));
+  }
+
+  function enriquecer(placeId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    enriquecerUm(placeId);
+  }
+
+  /** Sequencial de propósito — em lote, várias chamadas simultâneas podem
+   *  estourar limite de requisições por minuto de provedor free (Snov.io,
+   *  por exemplo, é 60/min). */
+  async function enriquecerLista() {
+    const alvos = leads.filter((l) => l.place_id && !enriquecidos[l.place_id] && !enriquecendo.has(l.place_id));
+    if (!alvos.length) return;
+    if (!confirm(`Enriquecer ${alvos.length} lead(s)? Cada um gasta crédito das APIs configuradas em Configurações.`)) return;
+    for (const l of alvos) {
+      // eslint-disable-next-line no-await-in-loop
+      await enriquecerUm(l.place_id!);
+    }
   }
 
   const todas = () => setEscolhidos(new Set(leads.map(chave)));
@@ -650,6 +668,7 @@ export default function Prospeccao({
                     <button type="button" onClick={nenhuma}>Limpar seleção</button>
                     <button type="button" onClick={soZap}>Só com WhatsApp</button>
                     <button type="button" onClick={limparLista}>Limpar lista</button>
+                <button type="button" onClick={enriquecerLista}>Enriquecer lista</button>
                   </div>
                   <div className="modos" style={{ marginTop: 10 }}>
                     <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>Lista</button>
@@ -715,6 +734,8 @@ export default function Prospeccao({
                 <button type="button" onClick={soZap}>Só com WhatsApp</button>
                 <div className="sep" />
                 <button type="button" onClick={limparLista}>Limpar lista</button>
+                <div className="sep" />
+                <button type="button" onClick={enriquecerLista}>Enriquecer lista</button>
               </div>
               <div className="modos">
                 <button type="button" aria-pressed={vista === 'lista'} onClick={() => setVista('lista')}>Lista</button>
@@ -768,6 +789,9 @@ export default function Prospeccao({
                               {res.emailStatus === 'valid' && res.email ? ` · ${res.email}` : ''}
                             </span>
                           );
+                        }
+                        if (res && res.avisos?.length) {
+                          return <span className="ajuda" style={{ display: 'block', color: 'var(--red)' }}>{res.avisos.join(' · ')}</span>;
                         }
                         if (res) {
                           return <span className="ajuda" style={{ display: 'block' }}>Decisor não encontrado.</span>;

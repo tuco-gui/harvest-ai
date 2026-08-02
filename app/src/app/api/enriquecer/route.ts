@@ -46,6 +46,7 @@ export async function POST(req: Request) {
     linkedin: resultado.linkedin,
     email: resultado.email,
     email_status: resultado.emailStatus,
+    erro_enriquecimento: resultado.avisos.length ? resultado.avisos.join(' · ') : null,
   };
   if (resultado.decisorNome) dados.status = 'enriquecido';
 

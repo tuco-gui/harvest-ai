@@ -34,20 +34,35 @@ export default async function Pagina() {
   }
 
   const admin = supabaseAdmin();
-  const [{ data: cred }, { data: envio }, { data: mensagensErro }] = await Promise.all([
+  const [{ data: cred }, { data: envio }, { data: mensagensErro }, { data: leadsComErro }] = await Promise.all([
     admin.from('conta_credenciais').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('prospecta_mensagens')
       .select('criado_em, erro, prospecta_leads(empresa)')
       .eq('conta_id', perfil.conta_id).eq('status', 'erro')
       .order('criado_em', { ascending: false }).limit(50),
+    admin.from('prospecta_leads')
+      .select('empresa, erro_enriquecimento, enriquecido_em')
+      .eq('conta_id', perfil.conta_id).not('erro_enriquecimento', 'is', null)
+      .order('enriquecido_em', { ascending: false }).limit(50),
   ]);
 
-  const erros = (mensagensErro ?? []).map((m: any) => ({
-    empresa: m.prospecta_leads?.empresa ?? 'Lead removido',
-    erro: m.erro ?? 'Sem detalhe.',
-    quando: new Date(m.criado_em).toLocaleString('pt-BR'),
-  }));
+  const erros = [
+    ...(mensagensErro ?? []).map((m: any) => ({
+      tipo: 'Disparo',
+      empresa: m.prospecta_leads?.empresa ?? 'Lead removido',
+      erro: m.erro ?? 'Sem detalhe.',
+      quando: new Date(m.criado_em).toLocaleString('pt-BR'),
+      quandoOrdenar: m.criado_em,
+    })),
+    ...(leadsComErro ?? []).map((l: any) => ({
+      tipo: 'Enriquecimento',
+      empresa: l.empresa,
+      erro: l.erro_enriquecimento,
+      quando: l.enriquecido_em ? new Date(l.enriquecido_em).toLocaleString('pt-BR') : '—',
+      quandoOrdenar: l.enriquecido_em ?? '',
+    })),
+  ].sort((a, b) => (a.quandoOrdenar < b.quandoOrdenar ? 1 : -1));
 
   return (
     <Configuracoes

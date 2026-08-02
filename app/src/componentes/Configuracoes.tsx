@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { PROVEDORES } from '@/lib/ia';
 
-type ErroMensagem = { empresa: string; erro: string; quando: string };
+type ErroMensagem = { tipo: string; empresa: string; erro: string; quando: string };
 
 type Props = {
   temSerpapi: boolean;
@@ -476,22 +476,23 @@ export default function Configuracoes(p: Props) {
         <section className="secao">
           <h2>Erros de envio</h2>
           <p className="resumo-secao">
-            Os últimos disparos que falharam nesta conta, mais recentes primeiro.
+            Disparos e enriquecimentos que falharam nesta conta, mais recentes primeiro.
           </p>
           <table className="tabela">
             <thead>
-              <tr><th>Quando</th><th>Empresa</th><th>Motivo</th></tr>
+              <tr><th>Quando</th><th>Tipo</th><th>Empresa</th><th>Motivo</th></tr>
             </thead>
             <tbody>
               {p.erros.map((e, i) => (
                 <tr key={i}>
                   <td style={{ color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{e.quando}</td>
+                  <td style={{ color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>{e.tipo}</td>
                   <td>{e.empresa}</td>
                   <td style={{ color: 'var(--ink-2)' }}>{e.erro}</td>
                 </tr>
               ))}
               {!p.erros.length && (
-                <tr><td colSpan={3} style={{ color: 'var(--ink-3)' }}>Nenhum erro registrado.</td></tr>
+                <tr><td colSpan={4} style={{ color: 'var(--ink-3)' }}>Nenhum erro registrado.</td></tr>
               )}
             </tbody>
           </table>
