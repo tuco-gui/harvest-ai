@@ -357,9 +357,19 @@ passam a ter exatamente o mesmo tratamento.
 **Mais duas pequenas, empacotadas na mesma leva (02/08/2026):** "Limpar
 histórico" de pesquisas (`DELETE /api/buscas`) e editar/excluir campanha
 (`DELETE /api/campanhas` — desvincula os leads, nunca apaga eles), as duas
-só pra quem não é operador. Pendente ainda: a hierarquia `/contas/[id]` com
-abas (Usuários · Integrações · Campanhas · Log de erros · Chamados) que
-ficou combinada e não foi construída — fica pra próxima leva.
+só pra quem não é operador.
+
+**Atualização (02/08/2026) — a hierarquia `/contas/[id]` que ficou combinada
+lá no início foi construída.** Só pro super admin: clicar no nome do cliente
+em Contas abre uma página com abas — Usuários, Integrações (mostra só se
+cada chave está cadastrada, não os valores), Campanhas, Log de erros e
+Chamados — sem precisar "trabalhar nessa conta" antes. É overview: pra
+editar qualquer coisa, ainda usa "Trabalhar nesta conta" e as telas normais
+(decisão de escopo pra não duplicar rota seguindo `conta_id` explícito nas
+APIs de escrita, que hoje sempre confiam na conta ativa da sessão). De
+brinde, `/campanhas/[id]` passou a deixar o super admin ver campanha de
+qualquer cliente sem trocar de conta ativa — antes só funcionava pra conta
+ativa, então o link não abria vindo da página nova.
 
 ---
 

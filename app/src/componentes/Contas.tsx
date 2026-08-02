@@ -83,7 +83,9 @@ export default function Contas({
             {contas.map((c) => (
               <tr key={c.id}>
                 <td>
-                  <b style={{ fontWeight: 600 }}>{c.nome}</b>
+                  <Link href={`/contas/${c.id}`} style={{ fontWeight: 600, textDecoration: 'underline' }}>
+                    {c.nome}
+                  </Link>
                   {contaAtiva === c.id && (
                     <span className="selo" style={{ marginLeft: 10 }}>trabalhando aqui</span>
                   )}
