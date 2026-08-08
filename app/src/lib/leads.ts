@@ -47,7 +47,7 @@ export async function salvarLeads(
   if (novosLeads.length) {
     await admin.from('prospecta_leads').upsert(novosLeads.map((l) => ({
       ...l, conta_id: contaId, origem, campanha_id: campanhaId,
-    })), { onConflict: 'place_id', ignoreDuplicates: false });
+    })), { onConflict: 'conta_id, place_id', ignoreDuplicates: false });
   }
   await Promise.all(duplicados.map((l) => admin
     .from('prospecta_leads')
@@ -77,9 +77,9 @@ export async function salvarLeads(
 }
 
 /** CSV e entrada manual não têm place_id do Google — geramos um estável a
- *  partir do telefone, escopado pela conta (place_id é único no banco
- *  inteiro, então sem o conta_id dois clientes com o mesmo telefone na
- *  planilha colidiriam um no place_id do outro). */
+ *  partir do telefone, escopado pela conta (place_id é único por conta, então
+ *  sem o conta_id dois clientes com o mesmo telefone na planilha colidiriam um
+ *  no place_id do outro — ver 014_isolamento_place_id.sql). */
 export function gerarPlaceIdSintetico(contaId: string, origem: 'csv' | 'manual', telefone: string): string {
   return `${origem}:${contaId}:${telefone}`;
 }

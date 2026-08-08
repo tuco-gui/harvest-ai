@@ -9,3 +9,4 @@ app/node_modules/
 app/.next/
 app/tsconfig.tsbuildinfo
 ESTADO.md
+._*
