@@ -91,7 +91,7 @@ export async function POST(req: Request) {
         ...(typeof campanhaId === 'number' ? { campanha_id: campanhaId } : {}),
         ...(entregue ? { disparo: 'sim', status: 'disparado', disparado_em: new Date().toISOString() } : {}),
       },
-      { onConflict: 'place_id' },
+      { onConflict: 'conta_id, place_id' },
     )
     .select('id')
     .maybeSingle();
