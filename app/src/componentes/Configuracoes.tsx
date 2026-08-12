@@ -79,15 +79,21 @@ export default function Configuracoes(p: Props) {
 
   async function conectarWaha() {
     setWahaCarregando(true);
+    let tentativas = 0;
+    const MAX_TENTATIVAS = 60; // ~2min a 2s por poll — teto pra um WAHA quebrado não pollar pra sempre
     const poll = async () => {
+      tentativas++;
       const r = await fetch('/api/waha/session');
       const d = await r.json();
       if (!r.ok) { setWahaCarregando(false); setWahaStatus(null); return; }
       setWahaStatus(d);
-      if (d.status !== 'WORKING' && d.status !== 'FAILED') {
-        setTimeout(poll, 2000);
-      } else {
+      if (d.status === 'WORKING' || d.status === 'FAILED' || d.status === 'ERRO') {
         setWahaCarregando(false);
+      } else if (tentativas >= MAX_TENTATIVAS) {
+        setWahaCarregando(false);
+        setWahaStatus({ ...d, status: 'ERRO' });
+      } else {
+        setTimeout(poll, 2000);
       }
     };
     poll();
@@ -240,7 +246,16 @@ export default function Configuracoes(p: Props) {
                       </button>
                     </>
                   )}
-                  {wahaStatus && wahaStatus.status !== 'SCAN_QR_CODE' && wahaStatus.status !== 'WORKING' && (
+                  {wahaStatus && (wahaStatus.status === 'FAILED' || wahaStatus.status === 'ERRO') && (
+                    <>
+                      <p className="ajuda">Não consegui conectar ao WAHA. Verifique o servidor e tente de novo.</p>
+                      <button type="button" className="btn-teste" disabled={wahaCarregando} onClick={conectarWaha}>
+                        Tentar de novo
+                      </button>
+                    </>
+                  )}
+                  {wahaStatus && wahaStatus.status !== 'SCAN_QR_CODE' && wahaStatus.status !== 'WORKING'
+                    && wahaStatus.status !== 'FAILED' && wahaStatus.status !== 'ERRO' && (
                     <p className="ajuda">Status: {wahaStatus.status}. Aguarde…</p>
                   )}
                 </div>

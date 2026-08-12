@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin();
   const { data: cred } = await admin
     .from('conta_credenciais')
-    .select('serpapi_key, evolution_url, evolution_instancia, evolution_key, whatsapp_provider')
+    .select('*')
     .eq('conta_id', perfil.conta_id)
     .single();
 

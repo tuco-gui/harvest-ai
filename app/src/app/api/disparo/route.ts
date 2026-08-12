@@ -31,7 +31,42 @@ export async function POST(req: Request) {
 
   const usaWaha = cred?.whatsapp_provider === 'waha';
   if (usaWaha) {
-    const status = await getOrCreateSession(wahaSessionName(perfil.conta_id));
+    let status;
+    try {
+      status = await getOrCreateSession(wahaSessionName(perfil.conta_id));
+    } catch {
+      // WAHA fora do ar: registra a falha no lead, igual ao caminho de erro
+      // da Evolution mais abaixo, em vez de deixar o lead sem nenhum rastro.
+      const falha = 'Não consegui falar com o WAHA. Verifique se o servidor está no ar.';
+      const { data: salvo } = await admin
+        .from('prospecta_leads')
+        .upsert(
+          {
+            conta_id: perfil.conta_id,
+            place_id: lead.place_id ?? null,
+            empresa: lead.empresa,
+            telefone: lead.telefone,
+            telefone_original: lead.telefone_original ?? null,
+            ...(typeof campanhaId === 'number' ? { campanha_id: campanhaId } : {}),
+          },
+          { onConflict: 'conta_id, place_id' },
+        )
+        .select('id')
+        .maybeSingle();
+      if (salvo?.id) {
+        await admin.from('prospecta_mensagens').insert({
+          conta_id: perfil.conta_id,
+          lead_id: salvo.id,
+          parte: 1,
+          direcao: 'saida',
+          conteudo: '',
+          status: 'erro',
+          enviado_em: null,
+          erro: falha,
+        });
+      }
+      return NextResponse.json({ erro: falha }, { status: 400 });
+    }
     if (status.status !== 'WORKING') {
       return NextResponse.json(
         { erro: 'Conecte o WhatsApp (WAHA) em Configurações → Conexões.' },

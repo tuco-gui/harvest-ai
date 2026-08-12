@@ -9,6 +9,9 @@ import { wahaSessionName, getOrCreateSession, getQrCode, logoutSession } from '@
 export async function GET() {
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
+  if (perfil.papel === 'operador') {
+    return NextResponse.json({ erro: 'Seu perfil não acessa a conexão do WhatsApp.' }, { status: 403 });
+  }
 
   const sessionName = wahaSessionName(perfil.conta_id);
   try {
@@ -23,6 +26,9 @@ export async function GET() {
 export async function DELETE() {
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
+  if (perfil.papel === 'operador') {
+    return NextResponse.json({ erro: 'Seu perfil não acessa a conexão do WhatsApp.' }, { status: 403 });
+  }
 
   try {
     await logoutSession(wahaSessionName(perfil.conta_id));

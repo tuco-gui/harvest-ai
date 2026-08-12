@@ -19,6 +19,11 @@ export async function POST(req: Request) {
   if (c?.whatsapp_provider === 'waha') {
     try {
       const validacao = await checkNumbers(wahaSessionName(perfil.conta_id), lista as string[]);
+      // Se nenhuma chave voltou, o WAHA não respondeu pra nenhum número —
+      // não é uma validação real, então não afirma que validou.
+      if (Object.keys(validacao).length === 0) {
+        return NextResponse.json({ validacao: {}, validou: false });
+      }
       return NextResponse.json({ validacao, validou: true });
     } catch {
       return NextResponse.json({ validacao: {}, validou: false });
