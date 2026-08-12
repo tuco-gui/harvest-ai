@@ -10,3 +10,5 @@ app/.next/
 app/tsconfig.tsbuildinfo
 ESTADO.md
 ._*
+
+.worktrees/
