@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
-import { wahaSessionName, checkNumbers } from '@/lib/waha';
+import { wahaSessionName, checkNumbers, usaWaha } from '@/lib/waha';
 
 /** Valida uma leva de números na Evolution ou no WAHA, conforme o provedor da conta. */
 export async function POST(req: Request) {
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     .select('whatsapp_provider, evolution_url, evolution_instancia, evolution_key')
     .eq('conta_id', perfil.conta_id).single();
 
-  if (c?.whatsapp_provider === 'waha') {
+  if (usaWaha(c)) {
     try {
       const validacao = await checkNumbers(wahaSessionName(perfil.conta_id), lista as string[]);
       // Se nenhuma chave voltou, o WAHA não respondeu pra nenhum número —

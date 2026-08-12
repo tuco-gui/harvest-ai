@@ -114,15 +114,10 @@ export default function Configuracoes(p: Props) {
     setAviso(null);
 
     const lista = lerMensagens(textos);
-    if (modo !== 'ia' && !lista.length) {
-      setAviso('Cadastre pelo menos uma mensagem, ou escolha "A IA escreve".');
-      return;
-    }
-    if (min < 5 || min >= max) {
-      setAviso('O intervalo mínimo precisa ser de pelo menos 5s e menor que o máximo.');
-      return;
-    }
 
+    // Sem early-return por mensagens/intervalo: o back-end grava as credenciais
+    // (inclui whatsapp_provider) antes de validar essa parte do formulário, então
+    // trocar de provedor não pode ficar refém de uma validação de outra aba.
     setSalvando(true);
     const r = await fetch('/api/configuracoes', {
       method: 'POST',

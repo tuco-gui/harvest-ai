@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
-import { wahaSessionName, getOrCreateSession, sendText as wahaSendText } from '@/lib/waha';
+import { wahaSessionName, getOrCreateSession, sendText as wahaSendText, usaWaha as ehWaha } from '@/lib/waha';
 
 /**
  * Envia UMA mensagem. O navegador chama uma vez por lead e controla o
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
   ]);
 
-  const usaWaha = cred?.whatsapp_provider === 'waha';
+  const usaWaha = ehWaha(cred);
   if (usaWaha) {
     let status;
     try {
@@ -69,13 +69,13 @@ export async function POST(req: Request) {
     }
     if (status.status !== 'WORKING') {
       return NextResponse.json(
-        { erro: 'Conecte o WhatsApp (WAHA) em Configurações → Conexões.' },
+        { erro: 'WAHA está configurado como provider desta conta, mas a sessão não está conectada. Conecte pelo QR Code em Configurações → Conexões.' },
         { status: 400 },
       );
     }
   } else if (!cred?.evolution_url || !cred?.evolution_instancia || !cred?.evolution_key) {
     return NextResponse.json(
-      { erro: 'Falta configurar o WhatsApp em Configurações → Conexões.' },
+      { erro: 'Evolution está configurado como provider desta conta, mas não está conectada. Preencha endereço, instância e token em Configurações → Conexões.' },
       { status: 400 },
     );
   }

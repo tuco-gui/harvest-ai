@@ -38,6 +38,19 @@ export async function POST(req: Request) {
   if (typeof b.evolution_instancia === 'string') cred.evolution_instancia = b.evolution_instancia.trim() || null;
   if (['evolution', 'waha'].includes(String(b.whatsapp_provider))) cred.whatsapp_provider = b.whatsapp_provider;
 
+  // Credenciais (inclui whatsapp_provider) gravam sempre primeiro — provider
+  // não pode ficar refém da validação de mensagens/intervalo, que é de outra
+  // seção do formulário. Se a migração da coluna whatsapp_provider ainda não
+  // rodou no banco ao vivo, tenta de novo sem ela.
+  let a = await admin.from('conta_credenciais').upsert(cred, { onConflict: 'conta_id' });
+  if (a.error && 'whatsapp_provider' in cred && /whatsapp_provider/i.test(a.error.message)) {
+    const { whatsapp_provider: _omitido, ...credSemProvider } = cred;
+    a = await admin.from('conta_credenciais').upsert(credSemProvider, { onConflict: 'conta_id' });
+  }
+  if (a.error) {
+    return NextResponse.json({ erro: a.error.message }, { status: 500 });
+  }
+
   const min = Number(b.intervalo_min) || 30;
   const max = Number(b.intervalo_max) || 60;
   if (min < 5 || min >= max) {
@@ -50,29 +63,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Cadastre pelo menos uma mensagem.' }, { status: 400 });
   }
 
-  let [a, c] = await Promise.all([
-    admin.from('conta_credenciais').upsert(cred, { onConflict: 'conta_id' }),
-    admin.from('conta_config_envio').upsert({
-      conta_id: conta,
-      atualizado_em: new Date().toISOString(),
-      modo,
-      mensagens,
-      contexto: typeof b.contexto === 'string' ? b.contexto : null,
-      intervalo_min: min,
-      intervalo_max: max,
-    }, { onConflict: 'conta_id' }),
-  ]);
+  const c = await admin.from('conta_config_envio').upsert({
+    conta_id: conta,
+    atualizado_em: new Date().toISOString(),
+    modo,
+    mensagens,
+    contexto: typeof b.contexto === 'string' ? b.contexto : null,
+    intervalo_min: min,
+    intervalo_max: max,
+  }, { onConflict: 'conta_id' });
 
-  // Se a migração da coluna whatsapp_provider ainda não rodou no banco ao
-  // vivo, não deixa isso derrubar o salvamento inteiro — tenta de novo sem
-  // ela. O resto das credenciais (SerpAPI, IA, Evolution etc.) continua sendo salvo.
-  if (a.error && 'whatsapp_provider' in cred && /whatsapp_provider/i.test(a.error.message)) {
-    const { whatsapp_provider: _omitido, ...credSemProvider } = cred;
-    a = await admin.from('conta_credenciais').upsert(credSemProvider, { onConflict: 'conta_id' });
-  }
-
-  if (a.error || c.error) {
-    return NextResponse.json({ erro: a.error?.message ?? c.error?.message }, { status: 500 });
+  if (c.error) {
+    return NextResponse.json({ erro: c.error.message }, { status: 500 });
   }
   return NextResponse.json({ ok: true });
 }

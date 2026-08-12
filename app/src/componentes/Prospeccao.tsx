@@ -308,7 +308,7 @@ export default function Prospeccao({
         else {
           erro++; setFalhas(erro);
           const d = await r.json().catch(() => ({}));
-          const motivo = d.erro ?? `Evolution respondeu ${r.status}.`;
+          const motivo = d.erro ?? `Falha no envio (${r.status}).`;
           setErrosDisparo((antes) => [...antes, { empresa: fila[i].empresa, motivo }]);
           // erro de configuração não adianta repetir 20 vezes
           if (r.status === 400) { setRecado(motivo); break; }

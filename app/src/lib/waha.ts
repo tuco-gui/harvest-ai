@@ -14,6 +14,14 @@ export function wahaSessionName(contaId: string): string {
   return `conta_${contaId.replace(/-/g, '')}`;
 }
 
+/**
+ * Única fonte de verdade sobre qual provedor de WhatsApp a conta usa.
+ * Nunca infira pelo que está configurado/conectado — sempre leia esta coluna.
+ */
+export function usaWaha(cred: { whatsapp_provider?: string | null } | null | undefined): boolean {
+  return cred?.whatsapp_provider === 'waha';
+}
+
 function base() {
   return (process.env.WAHA_API_URL ?? '').replace(/\/+$/, '');
 }

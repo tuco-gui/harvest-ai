@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { salvarLeads } from '@/lib/leads';
-import { wahaSessionName, checkNumbers } from '@/lib/waha';
+import { wahaSessionName, checkNumbers, usaWaha } from '@/lib/waha';
 
 /**
  * Ponte de busca. O navegador manda só o termo — a chave da SerpAPI fica aqui.
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const podeValidar = cred.whatsapp_provider === 'waha' || !!(cred.evolution_url && cred.evolution_instancia && cred.evolution_key);
+  const podeValidar = usaWaha(cred) || !!(cred.evolution_url && cred.evolution_instancia && cred.evolution_key);
   const zap = podeValidar ? await validarWhatsApp({ ...cred, conta_id: perfil.conta_id }, leads.map((l) => l.telefone)) : {};
   const zapDe = (l: (typeof leads)[number]) =>
     l.telefone ? (zap[l.telefone] === true ? 'sim' : zap[l.telefone] === false ? 'nao' : 'nao_verificado') : 'nao_verificado';
@@ -193,7 +193,7 @@ async function validarWhatsApp(
   const lista = [...new Set(numeros.filter((n): n is string => !!n))];
   if (!lista.length) return {};
 
-  if (cred.whatsapp_provider === 'waha') {
+  if (usaWaha(cred)) {
     try {
       return await checkNumbers(wahaSessionName(cred.conta_id), lista);
     } catch {
