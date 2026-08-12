@@ -70,6 +70,7 @@ export default async function Pagina() {
       evolutionUrl={cred?.evolution_url ?? ''}
       evolutionInstancia={cred?.evolution_instancia ?? ''}
       temEvolutionKey={!!cred?.evolution_key}
+      whatsappProvider={cred?.whatsapp_provider ?? 'evolution'}
       temIa={!!cred?.ia_key}
       iaProvedor={cred?.ia_provedor ?? 'groq'}
       iaModelo={cred?.ia_modelo ?? ''}

@@ -36,6 +36,7 @@ export async function POST(req: Request) {
   if (typeof b.ia_modelo === 'string') cred.ia_modelo = b.ia_modelo.trim() || null;
   if (typeof b.evolution_url === 'string') cred.evolution_url = b.evolution_url.trim() || null;
   if (typeof b.evolution_instancia === 'string') cred.evolution_instancia = b.evolution_instancia.trim() || null;
+  if (['evolution', 'waha'].includes(String(b.whatsapp_provider))) cred.whatsapp_provider = b.whatsapp_provider;
 
   const min = Number(b.intervalo_min) || 30;
   const max = Number(b.intervalo_max) || 60;

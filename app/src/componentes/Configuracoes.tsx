@@ -10,6 +10,7 @@ type Props = {
   evolutionUrl: string;
   evolutionInstancia: string;
   temEvolutionKey: boolean;
+  whatsappProvider: string;
   temIa: boolean;
   iaProvedor: string;
   iaModelo: string;
@@ -37,6 +38,9 @@ export default function Configuracoes(p: Props) {
   const [evoUrl, setEvoUrl] = useState(p.evolutionUrl);
   const [evoInst, setEvoInst] = useState(p.evolutionInstancia);
   const [evoKey, setEvoKey] = useState('');
+  const [whatsappProvider, setWhatsappProvider] = useState(p.whatsappProvider);
+  const [wahaStatus, setWahaStatus] = useState<{ status: string; qr: string | null; numero: string | null } | null>(null);
+  const [wahaCarregando, setWahaCarregando] = useState(false);
   const [iaProvedor, setIaProvedor] = useState(p.iaProvedor);
   const [iaKey, setIaKey] = useState('');
   const [iaModelo, setIaModelo] = useState(p.iaModelo);
@@ -73,6 +77,29 @@ export default function Configuracoes(p: Props) {
     setTestando(null);
   }
 
+  async function conectarWaha() {
+    setWahaCarregando(true);
+    const poll = async () => {
+      const r = await fetch('/api/waha/session');
+      const d = await r.json();
+      if (!r.ok) { setWahaCarregando(false); setWahaStatus(null); return; }
+      setWahaStatus(d);
+      if (d.status !== 'WORKING' && d.status !== 'FAILED') {
+        setTimeout(poll, 2000);
+      } else {
+        setWahaCarregando(false);
+      }
+    };
+    poll();
+  }
+
+  async function desconectarWaha() {
+    setWahaCarregando(true);
+    await fetch('/api/waha/session', { method: 'DELETE' });
+    setWahaStatus(null);
+    setWahaCarregando(false);
+  }
+
   function lerMensagens(bruto: string) {
     return bruto.split(/^\s*---\s*$/m).map((m) => m.trim()).filter(Boolean);
   }
@@ -100,6 +127,7 @@ export default function Configuracoes(p: Props) {
         evolution_url: evoUrl,
         evolution_instancia: evoInst,
         evolution_key: evoKey || undefined,
+        whatsapp_provider: whatsappProvider,
         ia_provedor: iaProvedor,
         ia_key: iaKey || undefined,
         ia_modelo: iaModelo,
@@ -161,22 +189,62 @@ export default function Configuracoes(p: Props) {
 
           <section className="secao">
             <h2>WhatsApp</h2>
-            <p className="resumo-secao">Evolution API. Sem ela os números aparecem como não verificados.</p>
+            <p className="resumo-secao">Escolha o provedor. Sem ele os números aparecem como não verificados.</p>
             <div className="cartaocfg">
               <div className="grupo">
-                <label className="label" htmlFor="evourl">Endereço da Evolution</label>
-                <input id="evourl" value={evoUrl} onChange={(e) => setEvoUrl(e.target.value)}
-                       placeholder="https://evolution.seudominio.com.br" />
+                <label className="label" htmlFor="wa-provedor">Provedor</label>
+                <select id="wa-provedor" value={whatsappProvider}
+                        onChange={(e) => { setWhatsappProvider(e.target.value); setWahaStatus(null); }}
+                        style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)',
+                                 border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
+                  <option value="evolution">Evolution API — instância própria</option>
+                  <option value="waha">WAHA — conecta por QR Code aqui mesmo</option>
+                </select>
               </div>
-              <div className="grupo">
-                <label className="label" htmlFor="evoinst">Instância</label>
-                <input id="evoinst" value={evoInst} onChange={(e) => setEvoInst(e.target.value)} />
-              </div>
-              <div className="grupo">
-                <label className="label" htmlFor="evokey">Token</label>
-                <input id="evokey" type="password" value={evoKey} onChange={(e) => setEvoKey(e.target.value)}
-                       placeholder={p.temEvolutionKey ? '•••••••• já cadastrado' : 'cole o token aqui'} />
-              </div>
+
+              {whatsappProvider === 'evolution' ? (
+                <>
+                  <div className="grupo">
+                    <label className="label" htmlFor="evourl">Endereço da Evolution</label>
+                    <input id="evourl" value={evoUrl} onChange={(e) => setEvoUrl(e.target.value)}
+                           placeholder="https://evolution.seudominio.com.br" />
+                  </div>
+                  <div className="grupo">
+                    <label className="label" htmlFor="evoinst">Instância</label>
+                    <input id="evoinst" value={evoInst} onChange={(e) => setEvoInst(e.target.value)} />
+                  </div>
+                  <div className="grupo">
+                    <label className="label" htmlFor="evokey">Token</label>
+                    <input id="evokey" type="password" value={evoKey} onChange={(e) => setEvoKey(e.target.value)}
+                           placeholder={p.temEvolutionKey ? '•••••••• já cadastrado' : 'cole o token aqui'} />
+                  </div>
+                </>
+              ) : (
+                <div className="grupo">
+                  {!wahaStatus && (
+                    <button type="button" className="btn-teste" disabled={wahaCarregando} onClick={conectarWaha}>
+                      {wahaCarregando ? 'Conectando…' : 'Conectar WhatsApp'}
+                    </button>
+                  )}
+                  {wahaStatus?.status === 'SCAN_QR_CODE' && wahaStatus.qr && (
+                    <>
+                      <p className="ajuda">Escaneie no WhatsApp do celular: Aparelhos conectados → Conectar um aparelho.</p>
+                      <img src={wahaStatus.qr} alt="QR Code do WhatsApp" style={{ maxWidth: 260 }} />
+                    </>
+                  )}
+                  {wahaStatus?.status === 'WORKING' && (
+                    <>
+                      <p className="ajuda">Conectado{wahaStatus.numero ? ` — ${wahaStatus.numero}` : ''}.</p>
+                      <button type="button" className="btn-teste" disabled={wahaCarregando} onClick={desconectarWaha}>
+                        Desconectar
+                      </button>
+                    </>
+                  )}
+                  {wahaStatus && wahaStatus.status !== 'SCAN_QR_CODE' && wahaStatus.status !== 'WORKING' && (
+                    <p className="ajuda">Status: {wahaStatus.status}. Aguarde…</p>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 
