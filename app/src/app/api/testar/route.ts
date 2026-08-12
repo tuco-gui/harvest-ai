@@ -5,6 +5,7 @@ import {
   buscarDecisor, buscarDecisorGratis, buscarLinkedin, buscarLinkedinTavily,
   buscarEmailApollo, buscarEmailSnov,
 } from '@/lib/enriquecimento';
+import { wahaSessionName, getOrCreateSession, checkNumbers } from '@/lib/waha';
 
 const LEAD_EXEMPLO = {
   empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
@@ -41,6 +42,17 @@ export async function POST(req: Request) {
     }
 
     if (qual === 'whatsapp') {
+      if (c?.whatsapp_provider === 'waha') {
+        const status = await getOrCreateSession(wahaSessionName(perfil.conta_id));
+        if (status.status !== 'WORKING') {
+          return NextResponse.json({ erro: `WAHA não está conectado (status: ${status.status}). Conecte pelo QR Code acima.` }, { status: 400 });
+        }
+        const chk = await checkNumbers(wahaSessionName(perfil.conta_id), ['5511999999999']);
+        if (!('5511999999999' in chk)) {
+          return NextResponse.json({ erro: 'WAHA não respondeu à consulta.' }, { status: 400 });
+        }
+        return NextResponse.json({ ok: true, recado: 'Conectado. O número está respondendo.' });
+      }
       if (!c?.evolution_url || !c?.evolution_instancia || !c?.evolution_key) {
         return NextResponse.json({ erro: 'Preencha endereço, instância e token.' }, { status: 400 });
       }

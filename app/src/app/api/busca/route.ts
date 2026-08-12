@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { salvarLeads } from '@/lib/leads';
+import { wahaSessionName, checkNumbers } from '@/lib/waha';
 
 /**
  * Ponte de busca. O navegador manda só o termo — a chave da SerpAPI fica aqui.
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin();
   const { data: cred } = await admin
     .from('conta_credenciais')
-    .select('serpapi_key, evolution_url, evolution_instancia, evolution_key')
+    .select('serpapi_key, evolution_url, evolution_instancia, evolution_key, whatsapp_provider')
     .eq('conta_id', perfil.conta_id)
     .single();
 
@@ -121,8 +122,8 @@ export async function POST(req: Request) {
     }
   }
 
-  const podeValidar = cred.evolution_url && cred.evolution_instancia && cred.evolution_key;
-  const zap = podeValidar ? await validarWhatsApp(cred, leads.map((l) => l.telefone)) : {};
+  const podeValidar = cred.whatsapp_provider === 'waha' || !!(cred.evolution_url && cred.evolution_instancia && cred.evolution_key);
+  const zap = podeValidar ? await validarWhatsApp({ ...cred, conta_id: perfil.conta_id }, leads.map((l) => l.telefone)) : {};
   const zapDe = (l: (typeof leads)[number]) =>
     l.telefone ? (zap[l.telefone] === true ? 'sim' : zap[l.telefone] === false ? 'nao' : 'nao_verificado') : 'nao_verificado';
 
@@ -180,11 +181,25 @@ function normalizarTelefone(bruto?: string | null): string | null {
 }
 
 async function validarWhatsApp(
-  cred: { evolution_url: string | null; evolution_instancia: string | null; evolution_key: string | null },
+  cred: {
+    conta_id: string;
+    whatsapp_provider: string | null;
+    evolution_url: string | null;
+    evolution_instancia: string | null;
+    evolution_key: string | null;
+  },
   numeros: (string | null)[],
 ): Promise<Record<string, boolean>> {
   const lista = [...new Set(numeros.filter((n): n is string => !!n))];
   if (!lista.length) return {};
+
+  if (cred.whatsapp_provider === 'waha') {
+    try {
+      return await checkNumbers(wahaSessionName(cred.conta_id), lista);
+    } catch {
+      return {};
+    }
+  }
 
   try {
     const base = cred.evolution_url!.replace(/\/+$/, '');

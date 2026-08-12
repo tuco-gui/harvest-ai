@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+import { wahaSessionName, checkNumbers } from '@/lib/waha';
 
-/** Valida uma leva de números na Evolution. Usado pela importação de lista. */
+/** Valida uma leva de números na Evolution ou no WAHA, conforme o provedor da conta. */
 export async function POST(req: Request) {
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
@@ -12,8 +13,17 @@ export async function POST(req: Request) {
 
   const { data: c } = await supabaseAdmin()
     .from('conta_credenciais')
-    .select('evolution_url, evolution_instancia, evolution_key')
+    .select('whatsapp_provider, evolution_url, evolution_instancia, evolution_key')
     .eq('conta_id', perfil.conta_id).single();
+
+  if (c?.whatsapp_provider === 'waha') {
+    try {
+      const validacao = await checkNumbers(wahaSessionName(perfil.conta_id), lista as string[]);
+      return NextResponse.json({ validacao, validou: true });
+    } catch {
+      return NextResponse.json({ validacao: {}, validou: false });
+    }
+  }
 
   if (!c?.evolution_url || !c?.evolution_instancia || !c?.evolution_key) {
     return NextResponse.json({ validacao: {}, validou: false });

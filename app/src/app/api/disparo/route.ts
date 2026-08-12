@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
+import { wahaSessionName, getOrCreateSession, sendText as wahaSendText } from '@/lib/waha';
 
 /**
  * Envia UMA mensagem. O navegador chama uma vez por lead e controla o
@@ -28,7 +29,16 @@ export async function POST(req: Request) {
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
   ]);
 
-  if (!cred?.evolution_url || !cred?.evolution_instancia || !cred?.evolution_key) {
+  const usaWaha = cred?.whatsapp_provider === 'waha';
+  if (usaWaha) {
+    const status = await getOrCreateSession(wahaSessionName(perfil.conta_id));
+    if (status.status !== 'WORKING') {
+      return NextResponse.json(
+        { erro: 'Conecte o WhatsApp (WAHA) em Configurações → Conexões.' },
+        { status: 400 },
+      );
+    }
+  } else if (!cred?.evolution_url || !cred?.evolution_instancia || !cred?.evolution_key) {
     return NextResponse.json(
       { erro: 'Falta configurar o WhatsApp em Configurações → Conexões.' },
       { status: 400 },
@@ -60,21 +70,26 @@ export async function POST(req: Request) {
     mensagem = modo === 'rodizio' ? textos[Number(indice) % textos.length] : textos[0];
   }
 
-  const base = cred.evolution_url.replace(/\/+$/, '');
   let entregue = false;
   let falha: string | null = null;
 
-  try {
-    const r = await fetch(`${base}/message/sendText/${cred.evolution_instancia}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: cred.evolution_key },
-      body: JSON.stringify({ number: lead.telefone, text: mensagem }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    entregue = r.ok;
-    if (!r.ok) falha = `Evolution respondeu ${r.status}`;
-  } catch {
-    falha = 'Não consegui falar com a Evolution.';
+  if (usaWaha) {
+    entregue = await wahaSendText(wahaSessionName(perfil.conta_id), lead.telefone, mensagem);
+    if (!entregue) falha = 'Não consegui falar com o WAHA.';
+  } else {
+    const base = cred.evolution_url.replace(/\/+$/, '');
+    try {
+      const r = await fetch(`${base}/message/sendText/${cred.evolution_instancia}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: cred.evolution_key },
+        body: JSON.stringify({ number: lead.telefone, text: mensagem }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      entregue = r.ok;
+      if (!r.ok) falha = `Evolution respondeu ${r.status}`;
+    } catch {
+      falha = 'Não consegui falar com a Evolution.';
+    }
   }
 
   // Registra o que aconteceu, mesmo quando falhou — é o histórico que
