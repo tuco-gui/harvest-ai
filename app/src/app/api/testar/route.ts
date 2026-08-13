@@ -6,7 +6,7 @@ import {
   buscarEmailApollo, buscarEmailSnov,
 } from '@/lib/enriquecimento';
 import { wahaSessionName, getOrCreateSession, checkNumbers, usaWaha } from '@/lib/waha';
-import { chamarPonte } from '@/lib/ponteBusca';
+import { chamarSerpApi } from '@/lib/serpapi';
 
 const LEAD_EXEMPLO = {
   empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
@@ -15,7 +15,7 @@ const LEAD_EXEMPLO = {
 
 /**
  * Testa uma conexão sem gastar nada:
- *  - serpapi  -> consulta a conta, não faz busca (busca custaria 1 crédito)
+ *  - serpapi  -> valida a chave e faz 1 busca de prova pelo caminho real (custa 1 crédito)
  *  - whatsapp -> valida um número qualquer, que a Evolution não cobra
  *  - ia       -> gera de verdade uma mensagem de exemplo, pra dar pra ver o
  *                resultado real antes de soltar pro cliente. Custa um token,
@@ -40,17 +40,18 @@ export async function POST(req: Request) {
         { signal: AbortSignal.timeout(20_000) });
       const d = await r.json();
       if (d.error) return NextResponse.json({ erro: 'Chave recusada pela SerpAPI.' }, { status: 400 });
-      // 2) ponte n8n (mesmo caminho da busca REAL — sem isso o teste passava
-      //    mesmo com a ponte quebrada, que era o bug reportado)
+      // 2) busca real de teste (mesmo caminho direto da busca de verdade —
+      //    lib/serpapi.ts — sem isso o teste passava mesmo com o caminho
+      //    real quebrado, que era o bug reportado. Custa 1 crédito, igual
+      //    a uma busca normal — não tem como testar o caminho real de graça.)
       const admin = supabaseAdmin();
-      const ponte = process.env.N8N_WEBHOOK_BUSCA;
-      const prova = await chamarPonte(admin, perfil.conta_id, ponte,
+      const prova = await chamarSerpApi(admin, perfil.conta_id, c.serpapi_key,
         { engine: 'google_maps', type: 'search', q: 'padaria', hl: 'pt', gl: 'br' },
         { modo: 'prova' });
       if (!prova.ok) {
-        return NextResponse.json({ erro: `Chave ok, mas a ponte de busca falhou: ${prova.motivo}` }, { status: 502 });
+        return NextResponse.json({ erro: `Chave ok, mas a busca de teste falhou: ${prova.motivo}` }, { status: 502 });
       }
-      return NextResponse.json({ ok: true, recado: `Chave válida e ponte de busca respondendo. ${d.total_searches_left ?? '?'} buscas restantes no mês.` });
+      return NextResponse.json({ ok: true, recado: `Chave válida e busca respondendo. ${d.total_searches_left ?? '?'} buscas restantes no mês.` });
     }
 
     if (qual === 'whatsapp') {

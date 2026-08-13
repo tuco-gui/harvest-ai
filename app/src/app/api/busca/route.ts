@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { salvarLeads } from '@/lib/leads';
 import { wahaSessionName, checkNumbers, usaWaha } from '@/lib/waha';
-import { chamarPonte } from '@/lib/ponteBusca';
+import { chamarSerpApi } from '@/lib/serpapi';
 
 /**
- * Ponte de busca. O navegador manda só o termo — a chave da SerpAPI fica aqui.
+ * Busca no Google Maps via SerpAPI, chamada direta (sem n8n — ver lib/serpapi.ts).
+ * O navegador manda só o termo — a chave da SerpAPI fica no servidor.
  *
  * A conta vem SEMPRE da sessão verificada, nunca do corpo da requisição.
  * É isso que impede alguém de trocar o conta_id e usar o crédito de outro.
@@ -42,26 +43,21 @@ export async function POST(req: Request) {
     );
   }
 
-  const ponte = process.env.N8N_WEBHOOK_BUSCA;
-  if (!ponte) {
-    return NextResponse.json({ erro: 'Ponte de busca não configurada no servidor.' }, { status: 500 });
-  }
-
   // A SerpAPI ignora `num` no engine google_maps e pagina de 20 em 20.
   const params: Record<string, string> = {
     engine: 'google_maps',
     type: 'search',
     q: termo.trim(),
-    api_key: cred.serpapi_key,
     hl: 'pt',
     gl: 'br',
   };
   if (Number(pagina) > 1) params.start = String((Number(pagina) - 1) * 20);
   if (typeof ll === 'string' && ll) params.ll = ll;
 
-  // Mesma ponte usada por "Testar busca" (lib/ponteBusca) — um único caminho
-  // real, sem divergência entre teste e busca de verdade.
-  const resultado = await chamarPonte(admin, perfil.conta_id, ponte, params, { modo: 'busca' });
+  // Chamada direta à SerpAPI (sem ponte n8n) — mesma função usada por
+  // "Testar busca" (lib/serpapi.ts) — um único caminho real, sem divergência
+  // entre teste e busca de verdade. A chave nunca entra em `params`.
+  const resultado = await chamarSerpApi(admin, perfil.conta_id, cred.serpapi_key, params, { modo: 'busca' });
   if (!resultado.ok) {
     return NextResponse.json({ erro: resultado.motivo }, { status: resultado.status });
   }
