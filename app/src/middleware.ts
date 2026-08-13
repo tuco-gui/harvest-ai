@@ -6,6 +6,17 @@ type CookieNovo = { name: string; value: string; options?: CookieOptions };
 
 /** Renova a sessão a cada requisição e barra quem não entrou. */
 export async function middleware(req: NextRequest) {
+  // Webhooks inbound (Fase 3B) são chamados pelo WAHA/Evolution — não têm
+  // (e não podem ter) cookie de sessão do Harvest. Autenticação deles é
+  // própria (HMAC/token, ver lib/inboundSeguranca.ts), verificada dentro da
+  // própria rota. Sem este bypass, o redirect de "não logado" abaixo
+  // interceptava a chamada antes de chegar na rota — webhook nunca seria
+  // processado, só redirecionado para /entrar. Descoberto no QA de
+  // produção da Fase 3B.
+  if (req.nextUrl.pathname.startsWith('/api/webhook/')) {
+    return NextResponse.next();
+  }
+
   let res = NextResponse.next({ request: req });
 
   const sb = createServerClient(
