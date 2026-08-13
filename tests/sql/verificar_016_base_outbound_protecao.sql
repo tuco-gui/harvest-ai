@@ -1,9 +1,18 @@
 -- Fase 3A — Verificação não destrutiva de 016_base_outbound_protecao.sql.
 -- Rode com: ./scripts/sql.sh -f tests/sql/verificar_016_base_outbound_protecao.sql
 --
--- Cria conta/campanhas/leads de teste, valida o comportamento e sobe exceção
--- se qualquer assert falhar. NÃO faz rollback sozinho — como HAI-001A, quem
--- roda decide se limpa os dados de teste depois (prefixo "3A Teste").
+-- Cria conta/campanhas/leads de teste DENTRO DE UMA TRANSAÇÃO e termina com
+-- ROLLBACK — nada fica gravado em produção, falhando ou passando. Se algum
+-- assert falhar, o DO block sobe exceção; o ROLLBACK final ainda roda (é
+-- válido mesmo com a transação em estado abortado) e limpa tudo.
+--
+-- Diferença proposital do padrão de tests/sql/verificar_hai_001a.sql (que
+-- não embrulha em transação): aqui os dados de teste ("3A Teste") não têm
+-- por que sobreviver à verificação — todo o comportamento testado (unique
+-- constraints, isolamento por conta) é visível e reproduzível só com
+-- INSERT/SELECT dentro da mesma transação, sem precisar de commit.
+
+begin;
 
 do $$
 declare
@@ -90,3 +99,8 @@ begin
 
   raise notice 'OK: Fase 3A validada — campanha_leads N:N, historico_contato por telefone, conta_supressao isolada por conta.';
 end $$;
+
+-- Sempre roda, mesmo se o DO acima subiu exceção (a transação fica "abortada"
+-- mas ROLLBACK continua sendo o único comando aceito nesse estado). Zero
+-- dados de teste sobrevivem em produção.
+rollback;
