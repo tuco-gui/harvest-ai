@@ -167,9 +167,11 @@ um sistema multi-cliente.
    com `user_metadata` contendo `papel: "super_admin"`.
 4. **App** — copie `app/.env.example` para `app/.env.local`, preencha, e
    `cd app && npm install && npm run dev`.
-5. **Ponte da busca** — a SerpAPI não aceita chamada direta do navegador
-   (CORS). Suba um webhook no n8n que só repassa a chamada e aponte
-   `N8N_WEBHOOK_BUSCA` para ele.
+5. **Busca** — `/api/busca` chama a SerpAPI direto do servidor (Next.js API
+   route), sem intermediário. Não precisa de n8n nem de `N8N_WEBHOOK_BUSCA`
+   (essa ponte existia só no painel HTML antigo, que rodava no navegador e
+   esbarrava em CORS — o backend atual não tem essa limitação; decisão
+   registrada em 2026-08-13, ver `00_ADMIN/RELATORIO_ENTREGAS.md`).
 6. **Chaves do cliente** — entram pela tela, em Configurações → Conexões:
    SerpAPI, Evolution (endereço, instância e token) e a IA de sua escolha
    (Groq, Gemini, Ollama Cloud, OpenAI ou Claude). Ficam em
