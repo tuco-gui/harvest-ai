@@ -39,6 +39,11 @@ export async function PATCH(req: Request) {
   if (typeof b.nome === 'string' && b.nome.trim()) dados.nome = b.nome.trim();
   if (typeof b.encontradas === 'number') dados.encontradas = b.encontradas;
   if (typeof b.comWhatsapp === 'number') dados.com_whatsapp = b.comWhatsapp;
+  // Número de envio (Fase 3B.1): fixo num canal ou rodízio entre canais.
+  if (b.modoEnvio === 'fixo' || b.modoEnvio === 'rodizio') dados.modo_envio_numero = b.modoEnvio;
+  if (Array.isArray(b.canalIds)) {
+    dados.canal_ids = b.canalIds.filter((n: unknown) => Number.isInteger(n)) as number[];
+  }
   if (!Object.keys(dados).length) return NextResponse.json({ ok: true });
 
   const { error } = await supabaseAdmin()

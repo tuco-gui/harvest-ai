@@ -4,16 +4,22 @@ import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
 import { wahaSessionName, getOrCreateSession, sendText as wahaSendText, usaWaha as ehWaha } from '@/lib/waha';
 import { normalizarTelefone } from '@/lib/telefone';
 import { estaSuprimido } from '@/lib/supressao';
-import { contatoJaAbordado, registrarTentativaContato, type ProviderContato } from '@/lib/historicoContato';
+import {
+  contatoJaAbordado, registrarTentativaContato, type ProviderContato,
+} from '@/lib/historicoContato';
 import { vincularLeadACampanha } from '@/lib/campanhaLeads';
+import {
+  carregarCanais, resolverCanalDisparo, type CanalWhatsApp,
+} from '@/lib/whatsappCanais';
 
 /**
  * Envia UMA mensagem. O navegador chama uma vez por lead e controla o
  * intervalo entre as chamadas — é isso que faz Pausar e Parar valerem de
  * verdade: parar é simplesmente não chamar de novo.
  *
- * Vai direto na Evolution, sem passar pelo n8n. Um sistema em vez de dois,
- * e o registro de o que saiu fica no mesmo banco dos leads.
+ * Multicanal (Fase 3B.1): o número de envio é um CANAL (whatsapp_canais),
+ * não um provider global. A campanha define modo fixo ou rodízio; o lead
+ * seleciona o canal dentro da regra. O histórico registra o canal_id real.
  */
 export async function POST(req: Request) {
   const perfil = await perfilAtual();
@@ -22,7 +28,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Escolha uma conta antes de disparar.' }, { status: 400 });
   }
 
-  const { lead, indice = 0, campanhaId } = await req.json().catch(() => ({}) as any);
+  const {
+    lead, indice = 0, campanhaId, canalId = null, modoEnvio = null,
+  } = await req.json().catch(() => ({}) as any);
   if (!lead?.telefone) {
     return NextResponse.json({ erro: 'Lead sem telefone.' }, { status: 400 });
   }
@@ -33,21 +41,47 @@ export async function POST(req: Request) {
   const campanhaIdNum = typeof campanhaId === 'number' ? campanhaId : null;
 
   const admin = supabaseAdmin();
-  const [{ data: cred }, { data: envio }] = await Promise.all([
+
+  // ---- Resolução do canal (multicanal) ----
+  const [{ data: cred }, { data: envio }, { data: campanha }, canais] = await Promise.all([
     admin.from('conta_credenciais').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
+    campanhaIdNum !== null
+      ? admin.from('prospecta_campanhas').select('modo_envio_numero, canal_ids').eq('id', campanhaIdNum).single()
+      : Promise.resolve({ data: null }),
+    carregarCanais(admin, perfil.conta_id),
   ]);
 
-  const usaWaha = ehWaha(cred);
+  // modo de envio: prioriza o explícito no corpo, depois o da campanha, depois fixo.
+  const modo: 'fixo' | 'rodizio' =
+    modoEnvio === 'rodizio' || modoEnvio === 'fixo' ? modoEnvio
+      : campanha?.modo_envio_numero === 'rodizio' ? 'rodizio'
+      : 'fixo';
+
+  // No rodízio, se a campanha listou canais específicos, restringe a eles.
+  let canaisValidos = canais;
+  if (modo === 'rodizio' && Array.isArray(campanha?.canal_ids) && (campanha!.canal_ids as number[]).length) {
+    const ids = new Set(campanha!.canal_ids as number[]);
+    canaisValidos = canais.filter((c) => ids.has(c.id));
+  }
+
+  const canal: CanalWhatsApp | null = resolverCanalDisparo(canaisValidos, modo, canalId, Number(indice));
+  if (!canal) {
+    return NextResponse.json(
+      { erro: 'Nenhum canal de WhatsApp elegível para enviar. Conecte um número em Configurações → WhatsApp ou escolha um canal ativo.' },
+      { status: 400 },
+    );
+  }
+
+  const usaWaha = ehWaha({ whatsapp_provider: canal.provider });
   const provider: ProviderContato = usaWaha ? 'waha' : 'evolution';
 
   // Barreira de supressão — Fase 3A. Roda ANTES de qualquer chamada ao
-  // provider (WAHA/Evolution) ou à IA: um contato suprimido não deve nem
-  // custar uma geração de mensagem, muito menos um disparo.
+  // provider (WAHA/Evolution) ou à IA.
   if (await estaSuprimido(admin, perfil.conta_id, telefone)) {
     await registrarTentativaContato(admin, {
       contaId: perfil.conta_id, leadId: null, campanhaId: campanhaIdNum,
-      telefone, provider, status: 'bloqueado_supressao',
+      telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
       motivoBloqueio: 'Telefone suprimido (opt-out/supressão central da conta).',
     });
     return NextResponse.json(
@@ -56,8 +90,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Informativo, não bloqueia — a conta decide conscientemente se reenvia
-  // (ver Fase 3A: proteção contra contato duplicado).
+  // Informativo, não bloqueia.
   const contatoAnterior = await contatoJaAbordado(admin, perfil.conta_id, telefone);
 
   if (usaWaha) {
@@ -65,8 +98,6 @@ export async function POST(req: Request) {
     try {
       status = await getOrCreateSession(wahaSessionName(perfil.conta_id));
     } catch {
-      // WAHA fora do ar: registra a falha no lead, igual ao caminho de erro
-      // da Evolution mais abaixo, em vez de deixar o lead sem nenhum rastro.
       const falha = 'Não consegui falar com o WAHA. Verifique se o servidor está no ar.';
       const { data: salvo } = await admin
         .from('prospecta_leads')
@@ -99,28 +130,28 @@ export async function POST(req: Request) {
       }
       await registrarTentativaContato(admin, {
         contaId: perfil.conta_id, leadId: salvo?.id ?? null, campanhaId: campanhaIdNum,
-        mensagemId, telefone, provider, status: 'erro',
+        mensagemId, telefone, provider, canalId: canal.id, status: 'erro',
       });
       return NextResponse.json({ erro: falha }, { status: 400 });
     }
     if (status.status !== 'WORKING') {
       return NextResponse.json(
-        { erro: 'WAHA está configurado como provider desta conta, mas a sessão não está conectada. Conecte pelo QR Code em Configurações → Conexões.' },
+        { erro: 'O canal selecionado (WAHA) não está conectado. Conecte pelo QR Code em Configurações → WhatsApp.' },
         { status: 400 },
       );
     }
   } else if (!cred?.evolution_url || !cred?.evolution_instancia || !cred?.evolution_key) {
     return NextResponse.json(
-      { erro: 'Evolution está configurado como provider desta conta, mas não está conectada. Preencha endereço, instância e token em Configurações → Conexões.' },
+      { erro: 'O canal selecionado (Evolution) não está conectado. Preencha endereço, instância e token em Configurações → WhatsApp.' },
       { status: 400 },
     );
   }
 
-  const modo = envio?.modo ?? 'ia';
+  const modoMsg = envio?.modo ?? 'ia';
   const textos: string[] = Array.isArray(envio?.mensagens) ? envio!.mensagens : [];
 
   let mensagem: string;
-  if (modo === 'ia') {
+  if (modoMsg === 'ia') {
     if (!cred.ia_key) {
       return NextResponse.json(
         { erro: 'O modo "A IA escreve" precisa de uma chave de IA em Configurações.' },
@@ -138,17 +169,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ erro: 'Nenhuma mensagem cadastrada.' }, { status: 400 });
     }
     // rodízio alterna por lead; fixa usa sempre a primeira
-    mensagem = modo === 'rodizio' ? textos[Number(indice) % textos.length] : textos[0];
+    mensagem = modoMsg === 'rodizio' ? textos[Number(indice) % textos.length] : textos[0];
   }
 
-  // Barreira final pré-envio (Fase 3A) — repete a checagem de supressão
-  // imediatamente antes da chamada ao provider. Cobre o caso raro de o
-  // contato ter sido suprimido durante a geração da mensagem (IA pode levar
-  // segundos); sem isso a checagem lá em cima vira só "quase no início".
+  // Barreira final pré-envio (Fase 3A).
   if (await estaSuprimido(admin, perfil.conta_id, telefone)) {
     await registrarTentativaContato(admin, {
       contaId: perfil.conta_id, leadId: null, campanhaId: campanhaIdNum,
-      telefone, provider, status: 'bloqueado_supressao',
+      telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
       motivoBloqueio: 'Telefone suprimido (opt-out/supressão central da conta) — detectado na barreira final pré-envio.',
     });
     return NextResponse.json(
@@ -179,8 +207,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // Registra o que aconteceu, mesmo quando falhou — é o histórico que
-  // permite saber depois quem recebeu o quê, e quando.
+  // Registra o que aconteceu, mesmo quando falhou.
   const { data: salvo } = await admin
     .from('prospecta_leads')
     .upsert(
@@ -212,12 +239,9 @@ export async function POST(req: Request) {
     }).select('id').maybeSingle();
     mensagemId = msg?.id ?? null;
 
-    // Fase 3A: histórico de contato (por telefone, todo provider) e vínculo
-    // N:N com a campanha — mesmo lead pode acabar em duas campanhas ao longo
-    // do tempo, e isso não pode depender só de prospecta_leads.campanha_id.
     await registrarTentativaContato(admin, {
       contaId: perfil.conta_id, leadId: salvo.id, campanhaId: campanhaIdNum,
-      mensagemId, telefone, provider, status: entregue ? 'enviado' : 'erro',
+      mensagemId, telefone, provider, canalId: canal.id, status: entregue ? 'enviado' : 'erro',
     });
     if (campanhaIdNum !== null) {
       await vincularLeadACampanha(admin, perfil.conta_id, campanhaIdNum, salvo.id, 'disparo');
@@ -225,5 +249,8 @@ export async function POST(req: Request) {
   }
 
   if (!entregue) return NextResponse.json({ erro: falha }, { status: 502 });
-  return NextResponse.json({ ok: true, mensagem, contatoAnterior });
+  return NextResponse.json({
+    ok: true, mensagem, contatoAnterior,
+    canal: { id: canal.id, nome: canal.nome, provider: canal.provider },
+  });
 }

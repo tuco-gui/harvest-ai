@@ -24,13 +24,15 @@ type Lead = {
   disparo: string;
 };
 
+type Canal = { id: number; nome: string; provider: string; ativo: boolean; padrao: boolean };
+
 type Campanha = { id: number; nome: string; origem: string; encontradas: number; com_whatsapp: number };
 
 const NOME_ORIGEM: Record<string, string> = { busca: 'Busca', planilha: 'Planilha', manual: 'Manual' };
 
 export default function CampanhaDetalhe({
-  campanha, leads: leadsIniciais, intervaloMin, intervaloMax,
-}: { campanha: Campanha; leads: Lead[]; intervaloMin: number; intervaloMax: number }) {
+  campanha, leads: leadsIniciais, intervaloMin, intervaloMax, canais,
+}: { campanha: Campanha; leads: Lead[]; intervaloMin: number; intervaloMax: number; canais: Canal[] }) {
   const [leads, setLeads] = useState(leadsIniciais);
   const [escolhidos, setEscolhidos] = useState<Set<number>>(new Set());
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set());
@@ -38,6 +40,13 @@ export default function CampanhaDetalhe({
   const [disparando, setDisparando] = useState(false);
   const [pararRef] = useState({ atual: false });
   const [progresso, setProgresso] = useState<{ feito: number; total: number } | null>(null);
+
+  // Número de envio (Fase 3B.1): fixo num canal escolhido, ou rodízio entre os ativos.
+  const [modoEnvio, setModoEnvio] = useState<'fixo' | 'rodizio'>(
+    canais.length > 1 ? 'rodizio' : 'fixo',
+  );
+  const padrao = canais.find((c) => c.padrao && c.ativo) ?? canais.find((c) => c.ativo);
+  const [canalFixoId, setCanalFixoId] = useState<number | null>(padrao?.id ?? null);
 
   const comZap = leads.filter((l) => l.tem_whatsapp === 'sim').length;
 
@@ -89,10 +98,14 @@ export default function CampanhaDetalhe({
     for (let i = 0; i < alvos.length; i++) {
       if (pararRef.atual) break;
       const l = alvos[i];
+      const canalId = modoEnvio === 'fixo' ? canalFixoId : null;
       // eslint-disable-next-line no-await-in-loop
       await fetch('/api/disparo', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead: l, indice: i, campanhaId: campanha.id }),
+        body: JSON.stringify({
+          lead: l, indice: i, campanhaId: campanha.id,
+          canalId, modoEnvio,
+        }),
       }).catch(() => null);
       setLeads((atual) => atual.map((x) => (x.id === l.id ? { ...x, disparo: 'sim' } : x)));
       setProgresso({ feito: i + 1, total: alvos.length });
@@ -114,6 +127,42 @@ export default function CampanhaDetalhe({
       <p className="resumo-secao">
         {NOME_ORIGEM[campanha.origem] ?? campanha.origem} · {leads.length} lead(s) nesta campanha
       </p>
+
+      <div className="barra-lista">
+        <div className="acoes" style={{ flexWrap: 'wrap', rowGap: 8 }}>
+          <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>Número de envio:</span>
+          <select
+            value={modoEnvio}
+            onChange={(e) => setModoEnvio(e.target.value as 'fixo' | 'rodizio')}
+            style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}
+          >
+            <option value="fixo">Canal fixo</option>
+            <option value="rodizio">Rodízio entre canais</option>
+          </select>
+          {modoEnvio === 'fixo' && (
+            <select
+              value={canalFixoId ?? ''}
+              onChange={(e) => setCanalFixoId(e.target.value ? Number(e.target.value) : null)}
+              style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}
+            >
+              <option value="">Canal padrão</option>
+              {canais.map((c) => (
+                <option key={c.id} value={c.id} disabled={!c.ativo}>
+                  {c.nome} ({c.provider}){c.ativo ? '' : ' — inativo'}
+                </option>
+              ))}
+            </select>
+          )}
+          {modoEnvio === 'rodizio' && (
+            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+              {canais.filter((c) => c.ativo).length} canal(is) ativo(s) — alterna por lead
+            </span>
+          )}
+          {!canais.length && (
+            <span style={{ fontSize: 12, color: 'var(--red)' }}>Nenhum canal conectado em Configurações → WhatsApp</span>
+          )}
+        </div>
+      </div>
 
       <div className="barra-lista">
         <div className="acoes">

@@ -34,7 +34,7 @@ export default async function Pagina() {
   }
 
   const admin = supabaseAdmin();
-  const [{ data: cred }, { data: envio }, { data: mensagensErro }, { data: leadsComErro }] = await Promise.all([
+  const [{ data: cred }, { data: envio }, { data: mensagensErro }, { data: leadsComErro }, { data: canais }, { data: conta }] = await Promise.all([
     admin.from('conta_credenciais').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('prospecta_mensagens')
@@ -45,6 +45,9 @@ export default async function Pagina() {
       .select('empresa, erro_enriquecimento, enriquecido_em')
       .eq('conta_id', perfil.conta_id).not('erro_enriquecimento', 'is', null)
       .order('enriquecido_em', { ascending: false }).limit(50),
+    admin.from('whatsapp_canais').select('*').eq('conta_id', perfil.conta_id)
+      .order('padrao', { ascending: false }).order('id'),
+    admin.from('contas').select('modulos_habilitados').eq('id', perfil.conta_id).maybeSingle(),
   ]);
 
   const erros = [
@@ -63,6 +66,11 @@ export default async function Pagina() {
       quandoOrdenar: l.enriquecido_em ?? '',
     })),
   ].sort((a, b) => (a.quandoOrdenar < b.quandoOrdenar ? 1 : -1));
+
+  // Módulos habilitados: enriquecimento interno só para quem tem o módulo
+  // (super_admin sempre tem — definido em lib/autorizacao).
+  const modulos = new Set<string>((conta?.modulos_habilitados as string[] | null) ?? []);
+  const mostraEnriquecimento = perfil.papel === 'super_admin' || modulos.has('enriquecimento');
 
   return (
     <Configuracoes
@@ -89,6 +97,8 @@ export default async function Pagina() {
       intervaloMin={envio?.intervalo_min ?? 30}
       intervaloMax={envio?.intervalo_max ?? 60}
       erros={erros}
+      canais={canais ?? []}
+      mostraEnriquecimento={mostraEnriquecimento}
     />
   );
 }
