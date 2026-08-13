@@ -6,6 +6,7 @@ import {
   buscarEmailApollo, buscarEmailSnov,
 } from '@/lib/enriquecimento';
 import { wahaSessionName, getOrCreateSession, checkNumbers, usaWaha } from '@/lib/waha';
+import { chamarPonte } from '@/lib/ponteBusca';
 
 const LEAD_EXEMPLO = {
   empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
@@ -34,11 +35,22 @@ export async function POST(req: Request) {
   try {
     if (qual === 'serpapi') {
       if (!c?.serpapi_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
+      // 1) chave válida (barato, não gasta busca)
       const r = await fetch(`https://serpapi.com/account?api_key=${c.serpapi_key}`,
         { signal: AbortSignal.timeout(20_000) });
       const d = await r.json();
       if (d.error) return NextResponse.json({ erro: 'Chave recusada pela SerpAPI.' }, { status: 400 });
-      return NextResponse.json({ ok: true, recado: `Chave válida. ${d.total_searches_left ?? '?'} buscas restantes no mês.` });
+      // 2) ponte n8n (mesmo caminho da busca REAL — sem isso o teste passava
+      //    mesmo com a ponte quebrada, que era o bug reportado)
+      const admin = supabaseAdmin();
+      const ponte = process.env.N8N_WEBHOOK_BUSCA;
+      const prova = await chamarPonte(admin, perfil.conta_id, ponte,
+        { engine: 'google_maps', type: 'search', q: 'padaria', hl: 'pt', gl: 'br' },
+        { modo: 'prova' });
+      if (!prova.ok) {
+        return NextResponse.json({ erro: `Chave ok, mas a ponte de busca falhou: ${prova.motivo}` }, { status: 502 });
+      }
+      return NextResponse.json({ ok: true, recado: `Chave válida e ponte de busca respondendo. ${d.total_searches_left ?? '?'} buscas restantes no mês.` });
     }
 
     if (qual === 'whatsapp') {

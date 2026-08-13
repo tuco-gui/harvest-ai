@@ -36,6 +36,17 @@ export default async function Pagina() {
     .order('criado_em', { ascending: false })
     .limit(8);
 
+  // Logs operacionais sanitizados (Fase 3B.1.1): busca/whatsapp/inbound/ia/banco.
+  // origem='log' grava só texto seguro (lib/logOperacional); nunca tem segredo.
+  const { data: logsOp } = await admin
+    .from('historico_contato')
+    .select('criado_em, status, motivo_bloqueio')
+    .eq('conta_id', perfil.conta_id)
+    .eq('origem', 'log')
+    .eq('canal', 'log')
+    .order('criado_em', { ascending: false })
+    .limit(12);
+
   const inboundRecentes = perfil.conta_id
     ? await admin
         .from('inbound_eventos')
@@ -135,6 +146,41 @@ export default async function Pagina() {
             </ul>
           ) : (
             <p className="ajuda">Nenhum erro recente.</p>
+          )}
+        </div>
+      </section>
+
+      <section className="secao">
+        <h2>Logs operacionais</h2>
+        <p className="resumo-secao">
+          Eventos recentes de Busca, WhatsApp, Inbound, IA e Banco. Texto sanitizado — nenhuma
+          credencial ou dado sensível é exibido.
+          {perfil.papel !== 'super_admin' && ' Detalhe técnico adicional é restrito à equipe Figueira.'}
+        </p>
+        <div className="cartaocfg">
+          {logsOp?.length ? (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+              {logsOp.map((l, idx) => {
+                const texto = (l.motivo_bloqueio as string) ?? '';
+                const componente = texto.split(':')[0] ?? 'geral';
+                const soCliente = perfil.papel !== 'super_admin';
+                const resumo = soCliente
+                  ? texto.replace(/\[[^\]]*\]/g, '').replace(/cid:[^\s]*/g, '').slice(0, 160)
+                  : texto.slice(0, 240);
+                return (
+                  <li key={idx} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <span className="selo" style={{ borderColor: 'var(--rule-2)', color: 'var(--ink-2)' }}>
+                      {(componente as string).toUpperCase()}
+                    </span>
+                    <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>
+                      {new Date(l.criado_em).toLocaleString('pt-BR')} · {resumo || '(sem detalhe)'}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="ajuda">Nenhum evento registrado ainda.</p>
           )}
         </div>
       </section>

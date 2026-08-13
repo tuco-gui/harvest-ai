@@ -99,6 +99,7 @@ export default async function Pagina() {
       erros={erros}
       canais={canais ?? []}
       mostraEnriquecimento={mostraEnriquecimento}
+      eSuperAdmin={perfil.papel === 'super_admin'}
     />
   );
 }

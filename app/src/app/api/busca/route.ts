@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { salvarLeads } from '@/lib/leads';
 import { wahaSessionName, checkNumbers, usaWaha } from '@/lib/waha';
+import { chamarPonte } from '@/lib/ponteBusca';
 
 /**
  * Ponte de busca. O navegador manda só o termo — a chave da SerpAPI fica aqui.
@@ -58,27 +59,13 @@ export async function POST(req: Request) {
   if (Number(pagina) > 1) params.start = String((Number(pagina) - 1) * 20);
   if (typeof ll === 'string' && ll) params.ll = ll;
 
-  let bruto: { local_results?: unknown[]; error?: string };
-  try {
-    // uma segunda tentativa: o n8n devolve 5xx passageiro de vez em quando
-    let resposta: Response | undefined;
-    for (let tentativa = 1; tentativa <= 2; tentativa++) {
-      resposta = await fetch(ponte, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-        signal: AbortSignal.timeout(45_000),
-      });
-      if (resposta.ok || resposta.status < 500 || tentativa === 2) break;
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-    if (!resposta!.ok) {
-      return NextResponse.json({ erro: `A ponte de busca respondeu ${resposta!.status}.` }, { status: 502 });
-    }
-    bruto = await resposta!.json();
-  } catch {
-    return NextResponse.json({ erro: 'Não consegui falar com a ponte de busca.' }, { status: 502 });
+  // Mesma ponte usada por "Testar busca" (lib/ponteBusca) — um único caminho
+  // real, sem divergência entre teste e busca de verdade.
+  const resultado = await chamarPonte(admin, perfil.conta_id, ponte, params, { modo: 'busca' });
+  if (!resultado.ok) {
+    return NextResponse.json({ erro: resultado.motivo }, { status: resultado.status });
   }
+  const bruto = resultado.dados;
 
   if (bruto.error) {
     const chaveRuim = /invalid api key/i.test(bruto.error);

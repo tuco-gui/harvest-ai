@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { wahaSessionName, getStatus, getNumeroConectado } from './waha.ts';
 
 /**
  * Camada de canais WhatsApp (tabela whatsapp_canais, migration 018).
@@ -74,7 +75,11 @@ export async function carregarCanais(
     .eq('conta_id', contaId)
     .order('padrao', { ascending: false })
     .order('id');
-  return (data as CanalWhatsApp[] | null) ?? [];
+  const canais = (data as CanalWhatsApp[] | null) ?? [];
+  // Reconcilia status/número dos canais WAHA com a sessão real (corrige o
+  // backfill, que não tinha o número/status da sessão). Evolution só fica
+  // conectado se a instância existir de verdade — validado no disparo.
+  return Promise.all(canais.map((c) => reconciliarStatusWaha(admin, c)));
 }
 
 /**
@@ -92,4 +97,51 @@ export function resolverCanalDisparo(
   return modo === 'rodizio'
     ? escolherCanalRodizio(canais, semente)
     : escolherCanalFixo(canais, canalId);
+}
+
+/**
+ * Reconcilia o status (e número) de um canal WAHA com a sessão real do provider.
+ *
+ * Fonte de verdade: a sessão WAHA da conta (identificador da sessão derivado do
+ * conta_id). O canal é só o espelho persistido. Se a sessão estiver WORKING, o
+ * canal fica conectado e ganha o número real; se parada/falhou, fica
+ * desconectado. Nunca criamos QR novo aqui — isso é responsabilidade do fluxo
+ * de conexão (Configurações). Retorna o canal atualizado ou null se a sessão
+ * não existir (canal sem WAHA vivo não vira conectado por mágica).
+ *
+ * ponytail: custo de 1 GET por canal WAHA; chamado no carregarCanais, não em
+ * loop de disparo. Se o WAHA estiver fora, falha fechada (não corrompe o canal).
+ */
+export async function reconciliarStatusWaha(
+  admin: SupabaseClient,
+  canal: CanalWhatsApp,
+): Promise<CanalWhatsApp> {
+  if (canal.provider !== 'waha' || !canal.ativo) return canal;
+
+  const sessao = wahaSessionName(canal.conta_id);
+  let statusWaha: string | null = null;
+  let numero: string | null = null;
+  try {
+    const st = await getStatus(sessao);
+    statusWaha = st?.status ?? null;
+    if (statusWaha === 'WORKING') numero = await getNumeroConectado(sessao);
+  } catch {
+    // WAHA indisponível: mantém o canal como está, não assume desconectado.
+    return canal;
+  }
+
+  const conectado = statusWaha === 'WORKING';
+  const novoStatus = conectado ? 'conectado' : 'desconectado';
+  // Só grava se mudou algo — evita write a toda requisição de configurações.
+  if (canal.status !== novoStatus || canal.numero !== (numero ?? canal.numero)) {
+    const { data, error } = await admin
+      .from('whatsapp_canais')
+      .update({ status: novoStatus, numero: numero ?? canal.numero, atualizado_em: new Date().toISOString() })
+      .eq('id', canal.id)
+      .eq('conta_id', canal.conta_id)
+      .select('*')
+      .single();
+    if (!error && data) return data as CanalWhatsApp;
+  }
+  return canal;
 }

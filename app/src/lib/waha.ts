@@ -14,6 +14,15 @@ export function wahaSessionName(contaId: string): string {
   return `conta_${contaId.replace(/-/g, '')}`;
 }
 
+/** Número conectado (E.164 sem '+', ex.: 5511951783049) ou null. */
+export async function getNumeroConectado(sessionName: string): Promise<string | null> {
+  const st = await getStatus(sessionName);
+  const me = st?.me?.id; // formato WAHA: "5511951783049@c.us" ou similar
+  if (!me) return null;
+  const limpo = me.replace(/@.*$/, '').replace(/\D/g, '');
+  return limpo || null;
+}
+
 /**
  * Única fonte de verdade sobre qual provedor de WhatsApp a conta usa.
  * Nunca infira pelo que está configurado/conectado — sempre leia esta coluna.
@@ -30,7 +39,7 @@ function headers() {
   return { 'Content-Type': 'application/json', 'X-Api-Key': process.env.WAHA_API_KEY ?? '' };
 }
 
-async function getStatus(sessionName: string): Promise<WahaStatus | null> {
+export async function getStatus(sessionName: string): Promise<WahaStatus | null> {
   const r = await fetch(`${base()}/api/sessions/${sessionName}`, {
     headers: headers(),
     signal: AbortSignal.timeout(20_000),

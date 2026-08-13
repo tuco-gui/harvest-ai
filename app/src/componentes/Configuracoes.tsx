@@ -43,6 +43,7 @@ type Props = {
   erros: ErroMensagem[];
   canais: Canal[];
   mostraEnriquecimento: boolean;
+  eSuperAdmin: boolean;
 };
 
 export default function Configuracoes(p: Props) {
@@ -238,11 +239,15 @@ export default function Configuracoes(p: Props) {
               Cada linha é um número/comunicação de WhatsApp da sua conta. O disparo escolhe
               um destes canais (fixo ou em rodízio). Para conectar pelo QR Code, use WAHA.
             </p>
+            <p className="ajuda" style={{ marginTop: -6, marginBottom: 14 }}>
+              <b>Canal padrão</b>: usado quando uma campanha não seleciona um número específico.
+              Mantenha no máximo um canal padrão por conta.
+            </p>
             <div className="cartaocfg">
               <table className="tabela">
                 <thead>
                   <tr>
-                    <th>Nome</th><th>Número</th><th>Provedor</th><th>Status</th><th>Padrão</th><th>Ações</th>
+                    <th>Nome</th><th>Número</th><th>Provedor</th><th>Status</th><th>Canal padrão</th><th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -260,7 +265,7 @@ export default function Configuracoes(p: Props) {
                       <td>{c.padrao ? '★' : ''}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <button type="button" className="ver-detalhes"
-                                onClick={() => alternarPadraoCanal(c.id)}>{c.padrao ? 'Padrão' : 'Tornar padrão'}</button>
+                                onClick={() => alternarPadraoCanal(c.id)}>{c.padrao ? 'Canal padrão' : 'Definir como padrão'}</button>
                         {' · '}
                         <button type="button" className="ver-detalhes" style={{ color: 'var(--red)' }}
                                 onClick={() => excluirCanal(c.id)}>excluir</button>
@@ -311,110 +316,30 @@ export default function Configuracoes(p: Props) {
           </section>
 
           <section className="secao">
-            <h2>WhatsApp — provedor padrão</h2>
-            <p className="resumo-secao">Escolha o provedor usado pelos canais novos. Sem ele os números aparecem como não verificados.</p>
-            <div className="cartaocfg">
-              <div className="grupo">
-                <label className="label" htmlFor="wa-provedor-default">Provedor dos novos canais</label>
-                <select id="wa-provedor-default" value={whatsappProvider}
-                        onChange={(e) => { setWhatsappProvider(e.target.value); setWahaStatus(null); }}
-                        style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)',
-                                 border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
-                  <option value="evolution">Evolution API — instância própria</option>
-                  <option value="waha">WAHA — conecta por QR Code aqui mesmo</option>
-                </select>
-                <p className="ajuda">Isso só define o provedor padrão para novos canais. Cada canal existente mantém o seu.</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="secao">
             <h2>Busca no Google Maps</h2>
-            <p className="resumo-secao">Chave da SerpAPI. Cada página de busca consome um crédito.</p>
+            <p className="resumo-secao">
+              A prospecção usa a busca do Google Maps. Cada página de busca consome um crédito.
+            </p>
             <div className="cartaocfg">
-              <div className="grupo">
-                <label className="label" htmlFor="serp">Chave da SerpAPI</label>
-                <input id="serp" type="password" value={serpapi} onChange={(e) => setSerpapi(e.target.value)}
-                       placeholder={p.temSerpapi ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
-                <p className="ajuda">
-                  {p.temSerpapi
-                    ? 'Já existe uma chave salva. Preencha só se quiser trocá-la.'
-                    : 'Pegue em serpapi.com/manage-api-key.'}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section className="secao">
-            <h2>WhatsApp</h2>
-            <p className="resumo-secao">Escolha o provedor. Sem ele os números aparecem como não verificados.</p>
-            <div className="cartaocfg">
-              <div className="grupo">
-                <label className="label" htmlFor="wa-provedor">Provedor</label>
-                <select id="wa-provedor" value={whatsappProvider}
-                        onChange={(e) => { setWhatsappProvider(e.target.value); setWahaStatus(null); }}
-                        style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)',
-                                 border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
-                  <option value="evolution">Evolution API — instância própria</option>
-                  <option value="waha">WAHA — conecta por QR Code aqui mesmo</option>
-                </select>
-              </div>
-
-              {whatsappProvider === 'evolution' ? (
-                <>
-                  <div className="grupo">
-                    <label className="label" htmlFor="evourl">Endereço da Evolution</label>
-                    <input id="evourl" value={evoUrl} onChange={(e) => setEvoUrl(e.target.value)}
-                           placeholder="https://evolution.seudominio.com.br" />
-                  </div>
-                  <div className="grupo">
-                    <label className="label" htmlFor="evoinst">Instância</label>
-                    <input id="evoinst" value={evoInst} onChange={(e) => setEvoInst(e.target.value)} />
-                  </div>
-                  <div className="grupo">
-                    <label className="label" htmlFor="evokey">Token</label>
-                    <input id="evokey" type="password" value={evoKey} onChange={(e) => setEvoKey(e.target.value)}
-                           placeholder={p.temEvolutionKey ? '•••••••• já cadastrado' : 'cole o token aqui'} />
-                  </div>
-                </>
-              ) : (
+              {p.eSuperAdmin ? (
                 <div className="grupo">
-                  {!wahaStatus && (
-                    <button type="button" className="btn-teste" disabled={wahaCarregando} onClick={conectarWaha}>
-                      {wahaCarregando ? 'Conectando…' : 'Conectar WhatsApp'}
-                    </button>
-                  )}
-                  {wahaStatus?.status === 'SCAN_QR_CODE' && wahaStatus.qr && (
-                    <>
-                      <p className="ajuda">Escaneie no WhatsApp do celular: Aparelhos conectados → Conectar um aparelho.</p>
-                      <img src={wahaStatus.qr} alt="QR Code do WhatsApp" style={{ maxWidth: 260 }} />
-                    </>
-                  )}
-                  {wahaStatus?.status === 'WORKING' && (
-                    <>
-                      <p className="ajuda">Conectado{wahaStatus.numero ? ` — ${wahaStatus.numero}` : ''}.</p>
-                      <button type="button" className="btn-teste" disabled={wahaCarregando} onClick={desconectarWaha}>
-                        Desconectar
-                      </button>
-                    </>
-                  )}
-                  {wahaStatus && (wahaStatus.status === 'FAILED' || wahaStatus.status === 'ERRO') && (
-                    <>
-                      <p className="ajuda">Não consegui conectar ao WAHA. Verifique o servidor e tente de novo.</p>
-                      <button type="button" className="btn-teste" disabled={wahaCarregando} onClick={conectarWaha}>
-                        Tentar de novo
-                      </button>
-                    </>
-                  )}
-                  {wahaStatus && wahaStatus.status !== 'SCAN_QR_CODE' && wahaStatus.status !== 'WORKING'
-                    && wahaStatus.status !== 'FAILED' && wahaStatus.status !== 'ERRO' && (
-                    <p className="ajuda">Status: {wahaStatus.status}. Aguarde…</p>
-                  )}
+                  <label className="label" htmlFor="serp">Chave da SerpAPI (interna da Figueira)</label>
+                  <input id="serp" type="password" value={serpapi} onChange={(e) => setSerpapi(e.target.value)}
+                         placeholder={p.temSerpapi ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
+                  <p className="ajuda">
+                    {p.temSerpapi
+                      ? 'Já existe uma chave salva. Preencha só se quiser trocá-la.'
+                      : 'Pegue em serpapi.com/manage-api-key.'}
+                  </p>
                 </div>
+              ) : (
+                <p className="ajuda" style={{ color: 'var(--ink-2)' }}>
+                  A chave de busca é interna da Figueira e não aparece aqui. Sua conta já pode usar
+                  a prospecção normalmente — o crédito é gerenciado pela equipe.
+                </p>
               )}
             </div>
           </section>
-
           <section className="secao">
             <h2>Inteligência artificial</h2>
             <p className="resumo-secao">
@@ -472,7 +397,14 @@ export default function Configuracoes(p: Props) {
                 Módulo de enriquecimento interno não habilitado para esta conta.
               </p>
             )}
-            {p.mostraEnriquecimento && (
+            {p.mostraEnriquecimento && !p.eSuperAdmin && (
+              <p className="ajuda" style={{ color: 'var(--ink-2)' }}>
+                O enriquecimento é gerenciado pela equipe Figueira (integradores internos). Quando
+                contratado, o botão "Enriquecer" aparece na prospecção — você não precisa configurar
+                credenciais aqui.
+              </p>
+            )}
+            {p.mostraEnriquecimento && p.eSuperAdmin && (
             <div className="cartaocfg">
               <div className="grupo">
                 <label className="label" htmlFor="decisor-provedor">Serviço que acha o sócio/decisor</label>
@@ -582,14 +514,22 @@ export default function Configuracoes(p: Props) {
             <div className="cartaocfg">
               <div className="testes">
                 {[
-                  ['serpapi', 'Testar busca'],
+                  // Cliente admin: só testes pertinentes (WhatsApp + IA + busca).
+                  // Super admin: também os testes técnicos internos.
+                  ...(p.eSuperAdmin
+                    ? [
+                        ['serpapi', 'Testar busca'],
+                        decisorProvedor === 'gratis' ? ['decisor-gratis', 'Testar decisor grátis'] : ['perplexity', 'Testar Perplexity'],
+                        linkedinProvedor === 'tavily' ? ['tavily', 'Testar Tavily'] : ['serper', 'Testar Serper'],
+                        emailProvedor === 'apollo' ? ['apollo', 'Testar Apollo.io']
+                          : emailProvedor === 'snov' ? ['snov', 'Testar Snov.io']
+                          : ['anymail', 'Testar Anymail Finder'],
+                      ]
+                    : [
+                        ['serpapi', 'Testar busca'],
+                      ]),
                   ['whatsapp', 'Testar WhatsApp'],
                   ['ia', 'Testar IA'],
-                  decisorProvedor === 'gratis' ? ['decisor-gratis', 'Testar decisor grátis'] : ['perplexity', 'Testar Perplexity'],
-                  linkedinProvedor === 'tavily' ? ['tavily', 'Testar Tavily'] : ['serper', 'Testar Serper'],
-                  emailProvedor === 'apollo' ? ['apollo', 'Testar Apollo.io']
-                    : emailProvedor === 'snov' ? ['snov', 'Testar Snov.io']
-                    : ['anymail', 'Testar Anymail Finder'],
                 ].map(([qual, rotulo]) => (
                   <button key={qual} type="button" className="btn-teste"
                           data-r={testes[qual]?.ok === undefined ? undefined : testes[qual].ok ? 'ok' : 'erro'}
