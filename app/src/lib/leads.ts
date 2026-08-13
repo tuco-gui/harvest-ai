@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { vincularLeadsACampanha } from './campanhaLeads';
 
 /** Um lead repetido (mesmo place_id) não pode simplesmente reescrever
  *  campanha_id: se "Joalheria X" já estava na campanha "Busca de terça" e a
@@ -34,20 +35,28 @@ export async function salvarLeads(
 
   const { data: jaExistiam } = await admin
     .from('prospecta_leads')
-    .select('place_id, campanha_id')
+    .select('id, place_id, campanha_id')
     .eq('conta_id', contaId)
     .in('place_id', leads.map((l) => l.place_id));
   const existentes: Record<string, number | null> = Object.fromEntries(
     (jaExistiam ?? []).map((r: any) => [r.place_id, r.campanha_id]),
   );
+  const idExistente: Record<string, number> = Object.fromEntries(
+    (jaExistiam ?? []).map((r: any) => [r.place_id, r.id]),
+  );
 
   const novosLeads = leads.filter((l) => !(l.place_id in existentes));
   const duplicados = leads.filter((l) => l.place_id in existentes);
 
+  // ids dos leads afetados nesta chamada — usados abaixo para o vínculo N:N
+  // com a campanha (campanha_leads), independente de serem novos ou repetidos.
+  const idsParaVincular: number[] = duplicados.map((l) => idExistente[l.place_id]).filter((id): id is number => !!id);
+
   if (novosLeads.length) {
-    await admin.from('prospecta_leads').upsert(novosLeads.map((l) => ({
+    const { data: inseridos } = await admin.from('prospecta_leads').upsert(novosLeads.map((l) => ({
       ...l, conta_id: contaId, origem, campanha_id: campanhaId,
-    })), { onConflict: 'conta_id, place_id', ignoreDuplicates: false });
+    })), { onConflict: 'conta_id, place_id', ignoreDuplicates: false }).select('id, place_id');
+    idsParaVincular.push(...(inseridos ?? []).map((r: any) => r.id as number));
   }
   await Promise.all(duplicados.map((l) => admin
     .from('prospecta_leads')
@@ -57,6 +66,13 @@ export async function salvarLeads(
       tem_whatsapp: l.tem_whatsapp,
     })
     .eq('place_id', l.place_id).eq('conta_id', contaId)));
+
+  // Fase 3A: além de campanha_id (campanha de origem, nunca reescrita para
+  // duplicados), grava o vínculo N:N — é isso que permite "o mesmo lead está
+  // em duas campanhas" sem mexer na coluna original.
+  if (typeof campanhaId === 'number' && idsParaVincular.length) {
+    await vincularLeadsACampanha(admin, contaId, campanhaId, idsParaVincular, origem as 'busca' | 'planilha' | 'manual');
+  }
 
   const idsCampanhaAnterior = [...new Set(duplicados.map((l) => existentes[l.place_id]).filter((id): id is number => !!id))];
   let nomesCampanha: Record<number, string> = {};

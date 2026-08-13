@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
 import { wahaSessionName, getOrCreateSession, sendText as wahaSendText, usaWaha as ehWaha } from '@/lib/waha';
+import { normalizarTelefone } from '@/lib/telefone';
+import { estaSuprimido } from '@/lib/supressao';
+import { contatoJaAbordado, registrarTentativaContato, type ProviderContato } from '@/lib/historicoContato';
+import { vincularLeadACampanha } from '@/lib/campanhaLeads';
 
 /**
  * Envia UMA mensagem. O navegador chama uma vez por lead e controla o
@@ -22,6 +26,11 @@ export async function POST(req: Request) {
   if (!lead?.telefone) {
     return NextResponse.json({ erro: 'Lead sem telefone.' }, { status: 400 });
   }
+  const telefone = normalizarTelefone(lead.telefone);
+  if (!telefone) {
+    return NextResponse.json({ erro: 'Telefone do lead é inválido.' }, { status: 400 });
+  }
+  const campanhaIdNum = typeof campanhaId === 'number' ? campanhaId : null;
 
   const admin = supabaseAdmin();
   const [{ data: cred }, { data: envio }] = await Promise.all([
@@ -30,6 +39,27 @@ export async function POST(req: Request) {
   ]);
 
   const usaWaha = ehWaha(cred);
+  const provider: ProviderContato = usaWaha ? 'waha' : 'evolution';
+
+  // Barreira de supressão — Fase 3A. Roda ANTES de qualquer chamada ao
+  // provider (WAHA/Evolution) ou à IA: um contato suprimido não deve nem
+  // custar uma geração de mensagem, muito menos um disparo.
+  if (await estaSuprimido(admin, perfil.conta_id, telefone)) {
+    await registrarTentativaContato(admin, {
+      contaId: perfil.conta_id, leadId: null, campanhaId: campanhaIdNum,
+      telefone, provider, status: 'bloqueado_supressao',
+      motivoBloqueio: 'Telefone suprimido (opt-out/supressão central da conta).',
+    });
+    return NextResponse.json(
+      { erro: 'Este contato está suprimido (opt-out) e não pode receber disparo.', suprimido: true },
+      { status: 403 },
+    );
+  }
+
+  // Informativo, não bloqueia — a conta decide conscientemente se reenvia
+  // (ver Fase 3A: proteção contra contato duplicado).
+  const contatoAnterior = await contatoJaAbordado(admin, perfil.conta_id, telefone);
+
   if (usaWaha) {
     let status;
     try {
@@ -45,16 +75,17 @@ export async function POST(req: Request) {
             conta_id: perfil.conta_id,
             place_id: lead.place_id ?? null,
             empresa: lead.empresa,
-            telefone: lead.telefone,
+            telefone,
             telefone_original: lead.telefone_original ?? null,
-            ...(typeof campanhaId === 'number' ? { campanha_id: campanhaId } : {}),
+            ...(campanhaIdNum !== null ? { campanha_id: campanhaIdNum } : {}),
           },
           { onConflict: 'conta_id, place_id' },
         )
         .select('id')
         .maybeSingle();
+      let mensagemId: number | null = null;
       if (salvo?.id) {
-        await admin.from('prospecta_mensagens').insert({
+        const { data: msg } = await admin.from('prospecta_mensagens').insert({
           conta_id: perfil.conta_id,
           lead_id: salvo.id,
           parte: 1,
@@ -63,8 +94,13 @@ export async function POST(req: Request) {
           status: 'erro',
           enviado_em: null,
           erro: falha,
-        });
+        }).select('id').maybeSingle();
+        mensagemId = msg?.id ?? null;
       }
+      await registrarTentativaContato(admin, {
+        contaId: perfil.conta_id, leadId: salvo?.id ?? null, campanhaId: campanhaIdNum,
+        mensagemId, telefone, provider, status: 'erro',
+      });
       return NextResponse.json({ erro: falha }, { status: 400 });
     }
     if (status.status !== 'WORKING') {
@@ -105,11 +141,27 @@ export async function POST(req: Request) {
     mensagem = modo === 'rodizio' ? textos[Number(indice) % textos.length] : textos[0];
   }
 
+  // Barreira final pré-envio (Fase 3A) — repete a checagem de supressão
+  // imediatamente antes da chamada ao provider. Cobre o caso raro de o
+  // contato ter sido suprimido durante a geração da mensagem (IA pode levar
+  // segundos); sem isso a checagem lá em cima vira só "quase no início".
+  if (await estaSuprimido(admin, perfil.conta_id, telefone)) {
+    await registrarTentativaContato(admin, {
+      contaId: perfil.conta_id, leadId: null, campanhaId: campanhaIdNum,
+      telefone, provider, status: 'bloqueado_supressao',
+      motivoBloqueio: 'Telefone suprimido (opt-out/supressão central da conta) — detectado na barreira final pré-envio.',
+    });
+    return NextResponse.json(
+      { erro: 'Este contato está suprimido (opt-out) e não pode receber disparo.', suprimido: true },
+      { status: 403 },
+    );
+  }
+
   let entregue = false;
   let falha: string | null = null;
 
   if (usaWaha) {
-    entregue = await wahaSendText(wahaSessionName(perfil.conta_id), lead.telefone, mensagem);
+    entregue = await wahaSendText(wahaSessionName(perfil.conta_id), telefone, mensagem);
     if (!entregue) falha = 'Não consegui falar com o WAHA.';
   } else {
     const base = cred.evolution_url.replace(/\/+$/, '');
@@ -117,7 +169,7 @@ export async function POST(req: Request) {
       const r = await fetch(`${base}/message/sendText/${cred.evolution_instancia}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: cred.evolution_key },
-        body: JSON.stringify({ number: lead.telefone, text: mensagem }),
+        body: JSON.stringify({ number: telefone, text: mensagem }),
         signal: AbortSignal.timeout(30_000),
       });
       entregue = r.ok;
@@ -136,9 +188,9 @@ export async function POST(req: Request) {
         conta_id: perfil.conta_id,
         place_id: lead.place_id ?? null,
         empresa: lead.empresa,
-        telefone: lead.telefone,
+        telefone,
         telefone_original: lead.telefone_original ?? null,
-        ...(typeof campanhaId === 'number' ? { campanha_id: campanhaId } : {}),
+        ...(campanhaIdNum !== null ? { campanha_id: campanhaIdNum } : {}),
         ...(entregue ? { disparo: 'sim', status: 'disparado', disparado_em: new Date().toISOString() } : {}),
       },
       { onConflict: 'conta_id, place_id' },
@@ -146,8 +198,9 @@ export async function POST(req: Request) {
     .select('id')
     .maybeSingle();
 
+  let mensagemId: number | null = null;
   if (salvo?.id) {
-    await admin.from('prospecta_mensagens').insert({
+    const { data: msg } = await admin.from('prospecta_mensagens').insert({
       conta_id: perfil.conta_id,
       lead_id: salvo.id,
       parte: 1,
@@ -156,9 +209,21 @@ export async function POST(req: Request) {
       status: entregue ? 'enviada' : 'erro',
       enviado_em: entregue ? new Date().toISOString() : null,
       erro: falha,
+    }).select('id').maybeSingle();
+    mensagemId = msg?.id ?? null;
+
+    // Fase 3A: histórico de contato (por telefone, todo provider) e vínculo
+    // N:N com a campanha — mesmo lead pode acabar em duas campanhas ao longo
+    // do tempo, e isso não pode depender só de prospecta_leads.campanha_id.
+    await registrarTentativaContato(admin, {
+      contaId: perfil.conta_id, leadId: salvo.id, campanhaId: campanhaIdNum,
+      mensagemId, telefone, provider, status: entregue ? 'enviado' : 'erro',
     });
+    if (campanhaIdNum !== null) {
+      await vincularLeadACampanha(admin, perfil.conta_id, campanhaIdNum, salvo.id, 'disparo');
+    }
   }
 
   if (!entregue) return NextResponse.json({ erro: falha }, { status: 502 });
-  return NextResponse.json({ ok: true, mensagem });
+  return NextResponse.json({ ok: true, mensagem, contatoAnterior });
 }
