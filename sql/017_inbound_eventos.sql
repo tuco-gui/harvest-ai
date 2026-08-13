@@ -10,6 +10,18 @@
 -- Eventos que não puderam ser associados a uma conta com segurança NÃO
 -- entram aqui (ver lib/inboundConta.ts) — não existe conta_id "desconhecido"
 -- nesta tabela por design, porque ela é multi-tenant com RLS por conta_id.
+--
+-- Alteração é 100% aditiva: cria 1 tabela nova, não altera/dropa nenhuma
+-- tabela existente, não escreve em nenhuma tabela existente. Nenhum dado
+-- de nenhum outro módulo é tocado.
+--
+-- ROLLBACK (só se necessário, e só antes de haver tráfego real gravado —
+-- depois disso, dropar a tabela apaga eventos inbound reais, o que exige
+-- nova avaliação, mesma regra aplicada à 016):
+--   drop policy if exists inbound_eventos_por_conta on public.inbound_eventos;
+--   drop table if exists public.inbound_eventos;
+-- Nenhuma outra tabela precisa de reversão — nada além desta foi criado ou
+-- alterado por esta migration.
 
 create table if not exists public.inbound_eventos (
   id                  bigserial primary key,
