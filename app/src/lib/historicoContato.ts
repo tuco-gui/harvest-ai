@@ -76,6 +76,7 @@ export type RegistrarTentativaParams = {
   status: StatusContato;
   motivoBloqueio?: string | null;
   origem?: string;
+  canalId?: number | null;
 };
 
 /** Sempre registra — mesmo tentativa bloqueada por supressão, para auditoria. */
@@ -93,5 +94,6 @@ export async function registrarTentativaContato(
     status: p.status,
     motivo_bloqueio: p.motivoBloqueio ?? null,
     origem: p.origem ?? 'disparo',
+    canal_id: p.canalId ?? null,
   });
 }

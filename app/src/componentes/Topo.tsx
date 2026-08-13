@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabaseNoNavegador } from '@/lib/supabase/browser';
 
 type Conta = { id: string; nome: string };
+export type ModuloVisivel = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento';
 
 type Props = {
   nome: string;
@@ -16,6 +17,7 @@ type Props = {
   contaNome: string;
   contas: Conta[];       // só o super admin recebe a lista cheia
   ehSuperAdmin: boolean;
+  modulos: ModuloVisivel[]; // módulos habilitados para a conta (visibilidade)
 };
 
 const NOME_PAPEL: Record<string, string> = {
@@ -114,7 +116,7 @@ export default function Topo(p: Props) {
         <Link href="/configuracoes" aria-current={caminho.startsWith('/configuracoes') ? 'page' : undefined}>
           Configurações
         </Link>
-        {p.papel !== 'operador' && (
+        {p.papel !== 'operador' && p.modulos.includes('usuarios') && (
           <Link href="/usuarios" aria-current={caminho.startsWith('/usuarios') ? 'page' : undefined}>
             Usuários
           </Link>

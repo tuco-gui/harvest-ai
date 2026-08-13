@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+type Canal = { id: number; nome: string; provider: string; ativo: boolean; padrao: boolean };
+
 type Campanha = {
   id: number;
   nome: string;
@@ -12,11 +14,16 @@ type Campanha = {
   com_whatsapp: number;
   enviadas: number;
   erros: number;
+  bloqueados: number;
+  modo_envio_numero?: string | null;
+  canal_ids?: number[] | null;
 };
 
 const NOME_ORIGEM: Record<string, string> = { busca: 'Busca', planilha: 'Planilha', manual: 'Manual' };
 
-export default function Campanhas({ campanhas, podeConfigurar }: { campanhas: Campanha[]; podeConfigurar: boolean }) {
+export default function Campanhas({
+  campanhas, podeConfigurar, canais,
+}: { campanhas: Campanha[]; podeConfigurar: boolean; canais: Canal[] }) {
   const router = useRouter();
 
   async function editar(c: Campanha) {
@@ -51,7 +58,7 @@ export default function Campanhas({ campanhas, podeConfigurar }: { campanhas: Ca
           <thead>
             <tr>
               <th>Campanha</th><th>Origem</th><th>Quando</th>
-              <th>Encontradas</th><th>Com WhatsApp</th><th>Enviadas</th><th>Erro</th>
+              <th>Encontradas</th><th>Com WhatsApp</th><th>Enviadas</th><th>Erro</th><th>Bloqueado</th>
               {podeConfigurar && <th></th>}
             </tr>
           </thead>
@@ -69,6 +76,7 @@ export default function Campanhas({ campanhas, podeConfigurar }: { campanhas: Ca
                 <td>{c.com_whatsapp}</td>
                 <td style={{ color: 'var(--green)' }}>{c.enviadas}</td>
                 <td style={{ color: c.erros ? 'var(--red)' : 'var(--ink-3)' }}>{c.erros}</td>
+                <td style={{ color: c.bloqueados ? 'var(--ink-2)' : 'var(--ink-3)' }}>{c.bloqueados}</td>
                 {podeConfigurar && (
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button type="button" className="ver-detalhes" onClick={() => editar(c)}>editar</button>
@@ -81,14 +89,15 @@ export default function Campanhas({ campanhas, podeConfigurar }: { campanhas: Ca
               </tr>
             ))}
             {!campanhas.length && (
-              <tr><td colSpan={podeConfigurar ? 8 : 7} style={{ color: 'var(--ink-3)' }}>Nenhuma campanha ainda — comece uma busca em Prospecção.</td></tr>
+              <tr><td colSpan={podeConfigurar ? 9 : 8} style={{ color: 'var(--ink-3)' }}>Nenhuma campanha ainda — comece uma busca em Prospecção.</td></tr>
             )}
           </tbody>
         </table>
 
         <p className="ajuda" style={{ marginTop: 14 }}>
           "Quem respondeu" ainda não existe — depende do agente de resposta, que ainda não escuta
-          o que o lead manda de volta.
+          o que o lead manda de volta. O envio usa o número (canal) selecionado na campanha — veja
+          em "Número de envio" ao abrir a campanha. Sem canal conectado, o disparo avisa antes de falhar.
         </p>
       </section>
     </div>

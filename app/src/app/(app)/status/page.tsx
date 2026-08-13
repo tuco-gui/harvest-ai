@@ -27,15 +27,57 @@ export default async function Pagina() {
     },
   ];
 
+  // Erros recentes (sanitizados — nunca mostramos stack trace nem segredo).
+  const { data: errosRecentes } = await admin
+    .from('historico_contato')
+    .select('criado_em, status, provider')
+    .eq('conta_id', perfil.conta_id)
+    .in('status', ['erro', 'bloqueado_supressao'])
+    .order('criado_em', { ascending: false })
+    .limit(8);
+
+  const inboundRecentes = perfil.conta_id
+    ? await admin
+        .from('inbound_eventos')
+        .select('criado_em, provider, tipo')
+        .eq('conta_id', perfil.conta_id)
+        .order('criado_em', { ascending: false })
+        .limit(5)
+    : { data: null };
+
   if (perfil.conta_id) {
     const { data: cred } = await admin
       .from('conta_credenciais').select('serpapi_key, evolution_url, evolution_key, ia_key')
       .eq('conta_id', perfil.conta_id).maybeSingle();
+    const { data: canais } = await admin
+      .from('whatsapp_canais').select('id, nome, provider, status, ativo')
+      .eq('conta_id', perfil.conta_id).order('padrao', { ascending: false });
+
     itens.push(
       { nome: 'Busca (SerpAPI)', ok: !!cred?.serpapi_key, detalhe: cred?.serpapi_key ? 'chave cadastrada' : 'sem chave — teste em Configurações' },
       { nome: 'WhatsApp (Evolution)', ok: !!(cred?.evolution_url && cred?.evolution_key), detalhe: cred?.evolution_url && cred?.evolution_key ? 'configurado' : 'sem configuração — teste em Configurações' },
       { nome: 'IA', ok: !!cred?.ia_key, detalhe: cred?.ia_key ? 'chave cadastrada' : 'sem chave — só necessária no modo "A IA escreve"' },
     );
+
+    const totalCanais = canais?.length ?? 0;
+    const canaisAtivos = (canais ?? []).filter((c) => c.ativo).length;
+    const canaisConectados = (canais ?? []).filter((c) => c.status === 'conectado').length;
+    itens.push({
+      nome: `WhatsApp — canais (${totalCanais})`,
+      ok: totalCanais > 0 && canaisAtivos > 0,
+      detalhe: totalCanais === 0
+        ? 'nenhum canal conectado — adicione em Configurações → WhatsApp'
+        : `${canaisAtivos} ativo(s), ${canaisConectados} conectado(s) de ${totalCanais}`,
+    });
+
+    const inbound = inboundRecentes?.data ?? [];
+    itens.push({
+      nome: 'Inbound / webhooks',
+      ok: true,
+      detalhe: inbound.length
+        ? `${inbound.length} evento(s) recente(s) — ${[...new Set(inbound.map((e) => e.provider))].join(', ')}`
+        : 'sem eventos recentes',
+    });
   }
 
   const tudoOk = itens.every((i) => i.ok);
@@ -70,6 +112,31 @@ export default async function Pagina() {
             status delas.
           </p>
         )}
+      </section>
+
+      <section className="secao">
+        <h2>Erros recentes</h2>
+        <p className="resumo-secao">
+          Últimas tentativas de envio com falha ou bloqueio. Nenhuma credencial ou dado sensível é exibido.
+        </p>
+        <div className="cartaocfg">
+          {errosRecentes?.length ? (
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+              {errosRecentes.map((e, idx) => (
+                <li key={idx} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <span className="selo" style={{ borderColor: 'var(--rule-2)', color: 'var(--ink-2)' }}>
+                    {(e.status as string).replace(/_/g, ' ')}
+                  </span>
+                  <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>
+                    {new Date(e.criado_em).toLocaleString('pt-BR')} · {e.provider}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="ajuda">Nenhum erro recente.</p>
+          )}
+        </div>
       </section>
     </div>
   );

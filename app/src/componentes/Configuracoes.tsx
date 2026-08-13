@@ -1,9 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { PROVEDORES } from '@/lib/ia';
 
 type ErroMensagem = { tipo: string; empresa: string; erro: string; quando: string };
+
+type Canal = {
+  id: number;
+  nome: string;
+  provider: string;
+  numero: string | null;
+  identificador_externo: string | null;
+  status: string;
+  ativo: boolean;
+  padrao: boolean;
+};
 
 type Props = {
   temSerpapi: boolean;
@@ -29,9 +41,12 @@ type Props = {
   intervaloMin: number;
   intervaloMax: number;
   erros: ErroMensagem[];
+  canais: Canal[];
+  mostraEnriquecimento: boolean;
 };
 
 export default function Configuracoes(p: Props) {
+  const router = useRouter();
   const [aba, setAba] = useState<'conexoes' | 'mensagens' | 'tempo' | 'erros'>('conexoes');
 
   const [serpapi, setSerpapi] = useState('');
@@ -106,6 +121,52 @@ export default function Configuracoes(p: Props) {
     setWahaCarregando(false);
   }
 
+  // ---- Canais WhatsApp multicanal (Fase 3B.1) ----
+  const [novoCanalNome, setNovoCanalNome] = useState('');
+  const [novoCanalNumero, setNovoCanalNumero] = useState('');
+  const [novoCanalProvider, setNovoCanalProvider] = useState('waha');
+  const [novoCanalInstancia, setNovoCanalInstancia] = useState('');
+  const [salvandoCanal, setSalvandoCanal] = useState(false);
+
+  async function criarCanal() {
+    if (!novoCanalNome.trim()) return;
+    setSalvandoCanal(true);
+    const r = await fetch('/api/canais', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nome: novoCanalNome,
+        numero: novoCanalNumero,
+        provider: novoCanalProvider,
+        identificador_externo: novoCanalInstancia,
+        padrao: p.canais.length === 0, // primeiro canal vira padrão
+      }),
+    });
+    setSalvandoCanal(false);
+    if (r.ok) {
+      setNovoCanalNome(''); setNovoCanalNumero(''); setNovoCanalInstancia('');
+      router.refresh();
+    } else {
+      const d = await r.json().catch(() => ({ erro: 'Não consegui conectar o número.' }));
+      setAviso(d.erro ?? 'Não consegui conectar o número.');
+    }
+  }
+
+  async function alternarPadraoCanal(id: number) {
+    await fetch(`/api/canais/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padrao: true }),
+    });
+    router.refresh();
+  }
+
+  async function excluirCanal(id: number) {
+    if (!confirm('Excluir este canal? Disparos futuros não usarão mais este número.')) return;
+    await fetch(`/api/canais/${id}`, { method: 'DELETE' });
+    router.refresh();
+  }
+
   function lerMensagens(bruto: string) {
     return bruto.split(/^\s*---\s*$/m).map((m) => m.trim()).filter(Boolean);
   }
@@ -171,6 +232,102 @@ export default function Configuracoes(p: Props) {
 
       {aba === 'conexoes' && (
         <>
+          <section className="secao">
+            <h2>WhatsApp — canais</h2>
+            <p className="resumo-secao">
+              Cada linha é um número/comunicação de WhatsApp da sua conta. O disparo escolhe
+              um destes canais (fixo ou em rodízio). Para conectar pelo QR Code, use WAHA.
+            </p>
+            <div className="cartaocfg">
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th>Nome</th><th>Número</th><th>Provedor</th><th>Status</th><th>Padrão</th><th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.canais.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.nome}</td>
+                      <td>{c.numero ?? <span style={{ color: 'var(--ink-3)' }}>—</span>}</td>
+                      <td style={{ textTransform: 'capitalize' }}>{c.provider}</td>
+                      <td>
+                        <span className="selo" style={{
+                          borderColor: c.status === 'conectado' ? 'var(--green)' : 'var(--rule-2)',
+                          color: c.status === 'conectado' ? 'var(--green)' : 'var(--ink-2)',
+                        }}>{c.ativo ? (c.status === 'conectado' ? 'Conectado' : 'Não conectado') : 'Inativo'}</span>
+                      </td>
+                      <td>{c.padrao ? '★' : ''}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <button type="button" className="ver-detalhes"
+                                onClick={() => alternarPadraoCanal(c.id)}>{c.padrao ? 'Padrão' : 'Tornar padrão'}</button>
+                        {' · '}
+                        <button type="button" className="ver-detalhes" style={{ color: 'var(--red)' }}
+                                onClick={() => excluirCanal(c.id)}>excluir</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!p.canais.length && (
+                    <tr><td colSpan={6} style={{ color: 'var(--ink-3)' }}>Nenhum canal ainda — conecte um número abaixo.</td></tr>
+                  )}
+                </tbody>
+              </table>
+
+              <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div className="grupo" style={{ flex: '1 1 160px' }}>
+                  <label className="label" htmlFor="canal-nome">Nome do canal</label>
+                  <input id="canal-nome" value={novoCanalNome} onChange={(e) => setNovoCanalNome(e.target.value)}
+                         placeholder="Comercial 01" style={{ width: '100%' }} />
+                </div>
+                <div className="grupo" style={{ flex: '1 1 160px' }}>
+                  <label className="label" htmlFor="canal-numero">Número</label>
+                  <input id="canal-numero" value={novoCanalNumero} onChange={(e) => setNovoCanalNumero(e.target.value)}
+                         placeholder="+55 14 99999-9999" style={{ width: '100%' }} />
+                </div>
+                <div className="grupo" style={{ flex: '1 1 160px' }}>
+                  <label className="label" htmlFor="canal-provider">Provedor</label>
+                  <select id="canal-provider" value={novoCanalProvider} onChange={(e) => setNovoCanalProvider(e.target.value)}
+                          style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
+                    <option value="waha">WAHA (QR Code)</option>
+                    <option value="evolution">Evolution (instância)</option>
+                  </select>
+                </div>
+                {novoCanalProvider === 'evolution' && (
+                  <div className="grupo" style={{ flex: '1 1 160px' }}>
+                    <label className="label" htmlFor="canal-inst">Instância</label>
+                    <input id="canal-inst" value={novoCanalInstancia} onChange={(e) => setNovoCanalInstancia(e.target.value)}
+                           placeholder="nome-da-instancia" style={{ width: '100%' }} />
+                  </div>
+                )}
+                <button type="button" className="salvar" style={{ height: 46 }} disabled={salvandoCanal} onClick={criarCanal}>
+                  {salvandoCanal ? 'Conectando…' : '+ Conectar número'}
+                </button>
+              </div>
+              <p className="ajuda" style={{ marginTop: 10 }}>
+                O canal WAHA usa a sessão já configurada do seu provedor. Evolution exige uma instância
+                real conectada — não aparece como conectado se não houver instância viva.
+              </p>
+            </div>
+          </section>
+
+          <section className="secao">
+            <h2>WhatsApp — provedor padrão</h2>
+            <p className="resumo-secao">Escolha o provedor usado pelos canais novos. Sem ele os números aparecem como não verificados.</p>
+            <div className="cartaocfg">
+              <div className="grupo">
+                <label className="label" htmlFor="wa-provedor-default">Provedor dos novos canais</label>
+                <select id="wa-provedor-default" value={whatsappProvider}
+                        onChange={(e) => { setWhatsappProvider(e.target.value); setWahaStatus(null); }}
+                        style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)',
+                                 border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
+                  <option value="evolution">Evolution API — instância própria</option>
+                  <option value="waha">WAHA — conecta por QR Code aqui mesmo</option>
+                </select>
+                <p className="ajuda">Isso só define o provedor padrão para novos canais. Cada canal existente mantém o seu.</p>
+              </div>
+            </div>
+          </section>
+
           <section className="secao">
             <h2>Busca no Google Maps</h2>
             <p className="resumo-secao">Chave da SerpAPI. Cada página de busca consome um crédito.</p>
@@ -310,6 +467,12 @@ export default function Configuracoes(p: Props) {
               Opcional. Sem chave, o botão "Enriquecer" some da lista de resultados. Cada chave é
               uma etapa independente — pode cadastrar só uma, as outras ficam puladas.
             </p>
+            {!p.mostraEnriquecimento && (
+              <p className="ajuda" style={{ color: 'var(--ink-3)' }}>
+                Módulo de enriquecimento interno não habilitado para esta conta.
+              </p>
+            )}
+            {p.mostraEnriquecimento && (
             <div className="cartaocfg">
               <div className="grupo">
                 <label className="label" htmlFor="decisor-provedor">Serviço que acha o sócio/decisor</label>
@@ -403,12 +566,14 @@ export default function Configuracoes(p: Props) {
                          placeholder={p.temAnymail ? '•••••••• já cadastrada' : 'cole a chave aqui'} />
                   <p className="ajuda">Pegue em anymailfinder.com.</p>
                 </div>
-              )}
-            </div>
-          </section>
+                )}
 
-          <section className="secao">
-            <h2>Testar as conexões</h2>
+                </div>
+                )}
+                </section>
+
+                <section className="secao">
+                <h2>Testar as conexões</h2>
             <p className="resumo-secao">
               Nenhum destes testes envia mensagem pro WhatsApp. Testar busca e WhatsApp não gasta
               nada; testar IA gera uma mensagem de exemplo de verdade, então consome um token
