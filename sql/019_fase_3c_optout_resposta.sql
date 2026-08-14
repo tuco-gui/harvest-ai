@@ -16,7 +16,18 @@
 --
 -- Idempotente: safe re-run (create index if not exists / add column if not exists).
 
--- 1) índices para as consultas de resposta/opt-out (Fase 3C)
+-- 1) coluna de apoio em inbound_eventos: marca se o evento foi classificado
+--    como opt-out (palavra-chave), para QA/auditoria sem re-varrer o texto.
+--    Precisa vir ANTES dos índices abaixo — um deles é parcial sobre esta
+--    coluna (BUG CONFIRMADO 2026-08-14: a ordem original criava o índice
+--    antes da coluna existir e falhava com "column tipo_evento does not
+--    exist"; corrigido invertendo a ordem — nada chegou a ser persistido,
+--    o pg-meta roda o arquivo inteiro como uma transação implícita).
+alter table public.inbound_eventos
+  add column if not exists tipo_evento text not null default 'mensagem';
+  -- 'mensagem' | 'optout'
+
+-- 2) índices para as consultas de resposta/opt-out (Fase 3C)
 create index if not exists prospecta_leads_respondeu_idx
   on public.prospecta_leads (conta_id, respondeu_em) where respondeu_em is not null;
 
@@ -26,12 +37,6 @@ create index if not exists historico_contato_resposta_idx
 create index if not exists inbound_eventos_optout_idx
   on public.inbound_eventos (conta_id, telefone, tipo_evento)
   where tipo_evento = 'optout';
-
--- 2) coluna de apoio em inbound_eventos: marca se o evento foi classificado
---    como opt-out (palavra-chave), para QA/auditoria sem re-varrer o texto.
-alter table public.inbound_eventos
-  add column if not exists tipo_evento text not null default 'mensagem';
-  -- 'mensagem' | 'optout'
 
 -- 3) garante que o enum textual de historico_contato aceita os novos estados
 --    usados pela 3C. Não há CHECK constraint hoje (status é text livre), então
