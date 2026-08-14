@@ -161,7 +161,10 @@ export default function Topo(p: Props) {
         )}
       </nav>
 
-      <button className="tema" onClick={trocarTema} aria-label="Alternar tema claro e escuro">
+      {/* Rótulo Dia/Noite (Entrega 15): "tema claro/escuro" soava técnico
+          para o cliente. Dia/Noite comunica a mesma escolha de forma direta,
+          sem infantilizar — o ícone (lua/sol) já dá o contexto visual. */}
+      <button className="tema" onClick={trocarTema} aria-label="Alternar entre Dia e Noite">
         <svg className="lua" width="15" height="15" viewBox="0 0 15 15" fill="none">
           <path d="M12.5 8.6A5.4 5.4 0 016.4 2.5a5.5 5.5 0 106.1 6.1z" stroke="currentColor" strokeWidth="1.3" />
         </svg>

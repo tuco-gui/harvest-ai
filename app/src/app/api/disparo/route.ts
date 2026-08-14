@@ -11,6 +11,7 @@ import { vincularLeadACampanha } from '@/lib/campanhaLeads';
 import {
   carregarCanais, resolverCanalDisparo, type CanalWhatsApp,
 } from '@/lib/whatsappCanais';
+import { envioPermitidoNoAmbiente } from '@/lib/ambienteEnvio';
 
 /**
  * Envia UMA mensagem. O navegador chama uma vez por lead e controla o
@@ -39,6 +40,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Telefone do lead é inválido.' }, { status: 400 });
   }
   const campanhaIdNum = typeof campanhaId === 'number' ? campanhaId : null;
+
+  // Guarda fail-closed de ambiente (staging): roda ANTES de qualquer outra
+  // coisa, inclusive da barreira de supressão — em WHATSAPP_MODE=test,
+  // número fora da whitelist de QA nunca chega perto de um provider real,
+  // mesmo que secrets de staging estejam mal configurados.
+  const permissaoAmbiente = envioPermitidoNoAmbiente(telefone);
+  if (!permissaoAmbiente.ok) {
+    return NextResponse.json({ erro: permissaoAmbiente.motivo, bloqueadoPorAmbiente: true }, { status: 403 });
+  }
 
   const admin = supabaseAdmin();
 

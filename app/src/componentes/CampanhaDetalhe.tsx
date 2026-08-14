@@ -313,12 +313,11 @@ export default function CampanhaDetalhe({
                Entrega 12/13. */}
             <select value="agora" disabled
                     style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14, opacity: .7 }}>
-              <option value="agora">Disparar quando eu clicar (agora)</option>
-              <option value="agendar" disabled>Agendar para depois (em breve)</option>
+              <option value="agora">Agora</option>
+              <option value="agendar" disabled>Agendamento automático (em breve)</option>
             </select>
             <span className="ajuda" style={{ display: 'block', marginTop: 4 }}>
-              Agendamento automático ainda não está disponível — não existe hoje um executor que dispare sozinho
-              no horário marcado. O disparo continua sendo feito clicando em "Disparar selecionados".
+              Em breve. Por enquanto, dispare clicando em "Disparar selecionados".
             </span>
             {false && agendamentoModo === 'agendar' && (
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>

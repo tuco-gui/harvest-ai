@@ -1,9 +1,17 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import FaixaAmbiente from '@/componentes/FaixaAmbiente';
+
+// STAGING (Entrega 15, Seção 9): quando NEXT_PUBLIC_AMBIENTE=staging, o
+// build bloqueia indexação — não pode aparecer em resultado de busca nem
+// ser rastreado. Em produção essa env não existe, então o comportamento
+// padrão (indexável) não muda.
+const ehStaging = process.env.NEXT_PUBLIC_AMBIENTE === 'staging';
 
 export const metadata: Metadata = {
-  title: 'Harvest AI',
+  title: ehStaging ? 'Harvest AI — STAGING' : 'Harvest AI',
   description: 'Prospecção ativa por WhatsApp — Figueira Marketing',
+  ...(ehStaging ? { robots: { index: false, follow: false } } : {}),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +34,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <FaixaAmbiente />
+        {children}
+      </body>
     </html>
   );
 }
