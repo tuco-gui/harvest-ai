@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { formatarDataHora } from '@/lib/data';
 
 type Mensagem = {
   id: number;
@@ -22,7 +23,9 @@ type Conversa = {
 
 const NOME_STATUS: Record<string, string> = { aberta: 'Aberto', respondida: 'Respondido', fechada: 'Fechado' };
 
-export default function ChamadoDetalhe({ conversa, mensagens: iniciais }: { conversa: Conversa; mensagens: Mensagem[] }) {
+export default function ChamadoDetalhe({
+  conversa, mensagens: iniciais, agoraMs: agoraInicial,
+}: { conversa: Conversa; mensagens: Mensagem[]; agoraMs: number }) {
   const router = useRouter();
   const [mensagens, setMensagens] = useState(iniciais);
   const [texto, setTexto] = useState('');
@@ -30,7 +33,18 @@ export default function ChamadoDetalhe({ conversa, mensagens: iniciais }: { conv
   const [mudandoStatus, setMudandoStatus] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
-  const vencido = conversa.status === 'aberta' && new Date(conversa.prazo_sla).getTime() < Date.now();
+  // Hydration-safe: a primeira renderização (SSR e hidratação do cliente)
+  // usa o MESMO `agoraInicial` vindo do servidor — nunca `Date.now()` direto
+  // no render, que gera valores diferentes em cada lado e quebra a
+  // hidratação. Depois de montado, atualiza sozinho a cada 30s para o selo
+  // "SLA vencido" não ficar desatualizado numa aba aberta por muito tempo.
+  const [agoraMs, setAgoraMs] = useState(agoraInicial);
+  useEffect(() => {
+    const id = setInterval(() => setAgoraMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const vencido = conversa.status === 'aberta' && new Date(conversa.prazo_sla).getTime() < agoraMs;
 
   async function responder(e: React.FormEvent) {
     e.preventDefault();
@@ -71,7 +85,7 @@ export default function ChamadoDetalhe({ conversa, mensagens: iniciais }: { conv
           }}>
             {vencido ? 'SLA vencido' : NOME_STATUS[conversa.status]}
           </span>
-          {' '}Aberto em {new Date(conversa.criado_em).toLocaleString('pt-BR')}
+          {' '}Aberto em {formatarDataHora(conversa.criado_em)}
           {conversa.contas?.nome && <> · {conversa.contas.nome}</>}
         </p>
 
@@ -80,7 +94,7 @@ export default function ChamadoDetalhe({ conversa, mensagens: iniciais }: { conv
             <div key={m.id}>
               <p className="ajuda" style={{ margin: '0 0 4px' }}>
                 <b style={{ color: 'var(--ink)' }}>{m.perfis?.nome || m.perfis?.email || 'Alguém'}</b>
-                {' · '}{new Date(m.criado_em).toLocaleString('pt-BR')}
+                {' · '}{formatarDataHora(m.criado_em)}
               </p>
               <p style={{ margin: 0, fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{m.conteudo}</p>
             </div>
