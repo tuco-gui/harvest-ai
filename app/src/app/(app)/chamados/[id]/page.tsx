@@ -27,5 +27,11 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     .select('id, conteudo, criado_em, perfis(nome, email, papel)')
     .eq('conversa_id', id).order('criado_em');
 
-  return <ChamadoDetalhe conversa={conversa as any} mensagens={(mensagens as any) ?? []} />;
+  return (
+    <ChamadoDetalhe
+      conversa={conversa as any}
+      mensagens={(mensagens as any) ?? []}
+      agoraMs={Date.now()}
+    />
+  );
 }

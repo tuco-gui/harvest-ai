@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { formatarDataHora } from '@/lib/data';
 
 type Conversa = {
   id: number;
@@ -21,14 +22,25 @@ const NOME_CATEGORIA: Record<string, string> = {
 };
 const NOME_STATUS: Record<string, string> = { aberta: 'Aberto', respondida: 'Respondido', fechada: 'Fechado' };
 
-function slaVencido(c: Conversa) {
-  return c.status === 'aberta' && new Date(c.prazo_sla).getTime() < Date.now();
+function slaVencido(c: Conversa, agoraMs: number) {
+  return c.status === 'aberta' && new Date(c.prazo_sla).getTime() < agoraMs;
 }
 
 export default function Chamados({
-  conversas, mostrarConta, podeAbrir,
-}: { conversas: Conversa[]; mostrarConta: boolean; podeAbrir: boolean }) {
+  conversas, mostrarConta, podeAbrir, agoraMs: agoraInicial,
+}: { conversas: Conversa[]; mostrarConta: boolean; podeAbrir: boolean; agoraMs: number }) {
   const router = useRouter();
+
+  // Hydration-safe: a primeira renderização (SSR e hidratação do cliente)
+  // usa o MESMO `agoraInicial` vindo do servidor — nunca `Date.now()` direto
+  // no render, que gera valores diferentes em cada lado e quebra a
+  // hidratação. Depois de montado, atualiza sozinho a cada 30s para o selo
+  // "SLA vencido" não ficar desatualizado numa aba aberta por muito tempo.
+  const [agoraMs, setAgoraMs] = useState(agoraInicial);
+  useEffect(() => {
+    const id = setInterval(() => setAgoraMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const [assunto, setAssunto] = useState('');
   const [categoria, setCategoria] = useState('duvida');
@@ -73,13 +85,13 @@ export default function Chamados({
                 <td style={{ color: 'var(--ink-2)' }}>{NOME_CATEGORIA[c.categoria] ?? c.categoria}</td>
                 <td>
                   <span className="selo" style={{
-                    borderColor: slaVencido(c) ? 'var(--red)' : c.status === 'respondida' ? 'var(--green)' : 'var(--rule-2)',
-                    color: slaVencido(c) ? 'var(--red)' : c.status === 'respondida' ? 'var(--green)' : 'var(--ink-2)',
+                    borderColor: slaVencido(c, agoraMs) ? 'var(--red)' : c.status === 'respondida' ? 'var(--green)' : 'var(--rule-2)',
+                    color: slaVencido(c, agoraMs) ? 'var(--red)' : c.status === 'respondida' ? 'var(--green)' : 'var(--ink-2)',
                   }}>
-                    {slaVencido(c) ? 'SLA vencido' : NOME_STATUS[c.status]}
+                    {slaVencido(c, agoraMs) ? 'SLA vencido' : NOME_STATUS[c.status]}
                   </span>
                 </td>
-                <td style={{ color: 'var(--ink-3)' }}>{new Date(c.criado_em).toLocaleString('pt-BR')}</td>
+                <td style={{ color: 'var(--ink-3)' }}>{formatarDataHora(c.criado_em)}</td>
               </tr>
             ))}
             {!conversas.length && (

@@ -31,6 +31,7 @@ export default async function Pagina() {
       conversas={(data as any) ?? []}
       mostrarConta={!perfil.conta_id}
       podeAbrir={!!perfil.conta_id}
+      agoraMs={Date.now()}
     />
   );
 }
