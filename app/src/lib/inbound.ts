@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { EventoInboundNormalizado } from './inboundTipos';
+import { classificarMensagem } from './optoutResposta';
+import { suprimirTelefone } from './supressao';
 
 /**
  * Pipeline comercial único de inbound (Fase 3B) — depois que um adapter
@@ -75,6 +77,10 @@ export async function processarEventoInbound(
     .maybeSingle();
   const campanhaId: number | null = ultimoContato?.campanha_id ?? null;
 
+  // Classificação da mensagem para a 3C (opt-out vs resposta) — precisa estar
+  // disponível tanto no insert de inbound_eventos quanto no reflixo no funil.
+  const classificacao = classificarMensagem(evento.mensagem);
+
   const { data: inserido, error } = await admin
     .from('inbound_eventos')
     .insert({
@@ -89,6 +95,7 @@ export async function processarEventoInbound(
       campanha_id: campanhaId,
       payload_bruto: evento.payloadBruto,
       recebido_em: evento.timestamp,
+      tipo_evento: classificacao,
     })
     .select('id')
     .single();
@@ -101,6 +108,45 @@ export async function processarEventoInbound(
       return { ok: true, duplicado: true, eventoId: -1 };
     }
     return { ok: false, erro: error.message };
+  }
+
+  // --- Fase 3C: refletir a classificação no funil ---
+  const agora = new Date().toISOString();
+
+  // 1) Opt-out: marca supressão central (já bloqueia disparo via 016) e
+  //    registra no histórico (origem='resposta', status='optout').
+  if (classificacao === 'optout') {
+    await suprimirTelefone(admin, contaId, evento.telefone, 'opt_out');
+    await admin.from('historico_contato').insert({
+      conta_id: contaId,
+      lead_id: leadId,
+      campanha_id: campanhaId,
+      telefone: evento.telefone,
+      provider: evento.provider,
+      canal: 'whatsapp',
+      status: 'optout',
+      origem: 'resposta',
+      motivo_bloqueio: 'Opt-out solicitado pelo contato via mensagem inbound.',
+    });
+  } else {
+    // 2) Resposta comum: marca o lead como "respondeu" (sem sobrescrever a
+    //    primeira resposta) e registra entrada no histórico.
+    if (leadId) {
+      await admin.from('prospecta_leads')
+        .update({ respondeu_em: agora, status: 'respondeu', atualizado_em: agora })
+        .eq('id', leadId)
+        .is('respondeu_em', null);
+    }
+    await admin.from('historico_contato').insert({
+      conta_id: contaId,
+      lead_id: leadId,
+      campanha_id: campanhaId,
+      telefone: evento.telefone,
+      provider: evento.provider,
+      canal: 'whatsapp',
+      status: 'recebido',
+      origem: 'resposta',
+    });
   }
 
   return { ok: true, eventoId: inserido.id, leadId, campanhaId };
