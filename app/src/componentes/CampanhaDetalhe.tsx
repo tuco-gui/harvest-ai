@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import Modal from './Modal';
 
 type Lead = {
   id: number;
@@ -36,7 +37,7 @@ type Campanha = {
 
 type Metricas = {
   enviadas: number; leadsContatados: number; erros: number;
-  bloqueados: number; respondidos: number; optouts: number;
+  bloqueados: number; respondidos: number; optouts: number; elegiveis?: number;
 };
 
 const NOME_ORIGEM: Record<string, string> = { busca: 'Busca', planilha: 'Planilha', manual: 'Manual' };
@@ -72,52 +73,51 @@ export default function CampanhaDetalhe({
   const padrao = canais.find((c) => c.padrao && c.ativo) ?? canais.find((c) => c.ativo);
   const [canalFixoId, setCanalFixoId] = useState<number | null>(padrao?.id ?? null);
 
-  // ---- Configuração de campanha (Entrega 12): mensagem / cadência / agendamento ----
-  const [salvandoConfig, setSalvandoConfig] = useState(false);
-  const [msgModo, setMsgModo] = useState(campanha.mensagem_modo ?? 'padrao');
-  const [msgTextos, setMsgTextos] = useState<string[]>(
-    campanha.mensagens?.length ? campanha.mensagens : ['', ''],
-  );
-  const [msgContextoIa, setMsgContextoIa] = useState(campanha.contexto_ia ?? '');
-  const [cadenciaModo, setCadenciaModo] = useState(campanha.cadencia_modo ?? 'padrao');
-  const [cadenciaMin, setCadenciaMin] = useState(campanha.cadencia_min ?? 40);
-  const [cadenciaMax, setCadenciaMax] = useState(campanha.cadencia_max ?? 90);
-  const [agendamentoModo, setAgendamentoModo] = useState<'agora' | 'agendar'>(
-    campanha.agendado_para ? 'agendar' : 'agora',
-  );
-  const [agendadoPara, setAgendadoPara] = useState(campanha.agendado_para?.slice(0, 16) ?? '');
-  const [configAviso, setConfigAviso] = useState<string | null>(null);
-  const [statusAtual, setStatusAtual] = useState(campanha.status ?? 'em_execucao');
+  // A configuração de mensagem/cadência/agendamento agora mora na página
+  // dedicada de edição (Entrega 22, ver CampanhaEditar.tsx) — aqui só resta
+  // o status pra exibição.
+  const statusAtual = campanha.status ?? 'em_execucao';
 
-  async function salvarConfigCampanha() {
-    setSalvandoConfig(true);
-    setConfigAviso(null);
+  // ---- Edição de lead (Entrega 22): modal institucional para nome/telefone/
+  // categoria/endereço, chamando PATCH /api/leads/[id] (regra crítica de
+  // telefone × supressão vive lá, não aqui). ----
+  const [leadEditando, setLeadEditando] = useState<Lead | null>(null);
+  const [formLead, setFormLead] = useState({ empresa: '', telefone: '', endereco: '', especialidades: '' });
+  const [salvandoLead, setSalvandoLead] = useState(false);
+  const [avisoLead, setAvisoLead] = useState<string | null>(null);
+
+  function abrirEdicaoLead(l: Lead) {
+    setLeadEditando(l);
+    setFormLead({
+      empresa: l.empresa ?? '',
+      telefone: l.telefone_original ?? l.telefone ?? '',
+      endereco: l.endereco ?? '',
+      especialidades: l.especialidades ?? '',
+    });
+    setAvisoLead(null);
+  }
+
+  async function salvarLead() {
+    if (!leadEditando) return;
+    setSalvandoLead(true);
+    setAvisoLead(null);
     try {
-      const body: Record<string, unknown> = {
-        id: campanha.id,
-        mensagemModo: msgModo === 'padrao' ? null : msgModo,
-        mensagens: msgModo === 'rodizio' ? msgTextos.filter((t) => t.trim()) : [],
-        contextoIa: msgModo === 'ia' ? msgContextoIa : null,
-        cadenciaModo,
-        cadenciaMin: cadenciaModo === 'personalizada' ? Number(cadenciaMin) : null,
-        cadenciaMax: cadenciaModo === 'personalizada' ? Number(cadenciaMax) : null,
-      };
-      // Agendamento automático desativado nesta entrega (ver bloco da UI
-      // acima) — sempre salva como "agora"/em_execucao, nunca "agendada".
-      body.agendadoPara = null;
-      body.status = 'em_execucao';
-      setStatusAtual('em_execucao');
-      const r = await fetch('/api/campanhas', {
+      const r = await fetch(`/api/leads/${leadEditando.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(formLead),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) { setConfigAviso(d.erro ?? 'Não consegui salvar a configuração.'); return; }
-      setConfigAviso('Configuração salva.');
+      if (!r.ok) { setAvisoLead(d.erro ?? 'Não consegui salvar o lead.'); return; }
+      setLeads((atual) => atual.map((x) => (x.id === leadEditando.id ? {
+        ...x, empresa: formLead.empresa, telefone_original: formLead.telefone,
+        endereco: formLead.endereco, especialidades: formLead.especialidades,
+      } : x)));
+      if (d.avisoSupressao) { setAvisoLead(d.avisoSupressao); return; }
+      setLeadEditando(null);
     } catch {
-      setConfigAviso('Sem conexão com o servidor.');
+      setAvisoLead('Sem conexão com o servidor.');
     } finally {
-      setSalvandoConfig(false);
+      setSalvandoLead(false);
     }
   }
 
@@ -165,8 +165,13 @@ export default function CampanhaDetalhe({
   // preset (rápida/moderada/conservadora) usa a faixa fixa da UI; "padrão"
   // cai no intervalo configurado da conta (conta_config_envio), como antes.
   function cadenciaEfetiva(): [number, number] {
-    if (cadenciaModo === 'personalizada') return [Number(cadenciaMin) || 1, Number(cadenciaMax) || (Number(cadenciaMin) || 1) + 1];
-    const faixa = CADENCIAS[cadenciaModo];
+    const modo = campanha.cadencia_modo ?? 'padrao';
+    if (modo === 'personalizada') {
+      const min = Number(campanha.cadencia_min) || 1;
+      const max = Number(campanha.cadencia_max) || min + 1;
+      return [min, max];
+    }
+    const faixa = CADENCIAS[modo];
     if (faixa) return faixa;
     return [intervaloMin, intervaloMax];
   }
@@ -220,6 +225,10 @@ export default function CampanhaDetalhe({
             <span className="label">Leads na campanha</span>
           </div>
           <div className="etapa">
+            <span className="num">{metricas.elegiveis ?? '—'}</span>
+            <span className="label">Elegíveis</span>
+          </div>
+          <div className="etapa">
             <span className="num">{metricas.leadsContatados}</span>
             <span className="label">Leads contatados</span>
           </div>
@@ -231,113 +240,33 @@ export default function CampanhaDetalhe({
             <span className="num">{metricas.respondidos}</span>
             <span className="label">Responderam</span>
           </div>
+          {/* OPT-OUT ≠ ERRO. BLOQUEADO ≠ necessariamente OPT-OUT — três
+             cartões separados em vez de somados, pra não misturar "o lead
+             pediu pra parar" com "o disparo falhou tecnicamente" com "essa
+             tentativa foi barrada por regra de supressão/duplicidade". */}
           <div className="etapa">
             <span className="num">{metricas.optouts}</span>
             <span className="label">Opt-outs</span>
           </div>
           <div className="etapa">
-            <span className="num">{metricas.erros + metricas.bloqueados}</span>
-            <span className="label">Erros/bloqueados</span>
+            <span className="num" style={{ color: metricas.bloqueados ? 'var(--ink-2)' : undefined }}>{metricas.bloqueados}</span>
+            <span className="label">Bloqueados</span>
+          </div>
+          <div className="etapa">
+            <span className="num" style={{ color: metricas.erros ? 'var(--red)' : undefined }}>{metricas.erros}</span>
+            <span className="label">Erros</span>
           </div>
         </section>
       )}
 
-      <details className="barra-lista" style={{ padding: 12 }}>
-        <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--ink-2)' }}>
-          Configuração da campanha (mensagem, cadência, agendamento)
-        </summary>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
-          <div>
-            <span style={{ fontSize: 13, color: 'var(--ink-2)', display: 'block', marginBottom: 4 }}>Estratégia de mensagem</span>
-            <select value={msgModo} onChange={(e) => setMsgModo(e.target.value)}
-                    style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
-              <option value="padrao">Usar configuração padrão da conta</option>
-              <option value="fixa">Mensagem fixa (usa a config. da conta)</option>
-              <option value="rodizio">Rodízio de mensagens (2 a 5, específicas desta campanha)</option>
-              <option value="ia">A IA escreve (contexto específico desta campanha)</option>
-            </select>
-            {msgModo === 'rodizio' && (
-              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {msgTextos.map((t, i) => (
-                  <textarea key={i} value={t} rows={2} placeholder={`Mensagem ${i + 1}`}
-                    onChange={(e) => setMsgTextos((arr) => arr.map((x, j) => (j === i ? e.target.value : x)))}
-                    style={{ padding: 8, background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
-                ))}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {msgTextos.length < 5 && (
-                    <button type="button" onClick={() => setMsgTextos((arr) => [...arr, ''])}>+ mensagem</button>
-                  )}
-                  {msgTextos.length > 2 && (
-                    <button type="button" onClick={() => setMsgTextos((arr) => arr.slice(0, -1))}>- mensagem</button>
-                  )}
-                </div>
-              </div>
-            )}
-            {msgModo === 'ia' && (
-              <textarea value={msgContextoIa} rows={3} placeholder="Contexto específico desta campanha para a IA usar ao escrever (opcional — se vazio, usa o contexto padrão da conta)"
-                onChange={(e) => setMsgContextoIa(e.target.value)}
-                style={{ marginTop: 8, width: '100%', padding: 8, background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
-            )}
-          </div>
-
-          <div>
-            <span style={{ fontSize: 13, color: 'var(--ink-2)', display: 'block', marginBottom: 4 }}>Cadência entre envios</span>
-            <select value={cadenciaModo} onChange={(e) => setCadenciaModo(e.target.value)}
-                    style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
-              <option value="padrao">Padrão da conta ({intervaloMin}–{intervaloMax}s)</option>
-              <option value="rapida">Rápida (10–25s)</option>
-              <option value="moderada">Moderada (30–60s)</option>
-              <option value="conservadora">Conservadora (60–120s)</option>
-              <option value="personalizada">Personalizada</option>
-            </select>
-            {cadenciaModo === 'personalizada' && (
-              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input type="number" min={1} value={cadenciaMin} onChange={(e) => setCadenciaMin(Number(e.target.value))}
-                  style={{ width: 80, height: 32, padding: '0 8px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2 }} />
-                <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>a</span>
-                <input type="number" min={1} value={cadenciaMax} onChange={(e) => setCadenciaMax(Number(e.target.value))}
-                  style={{ width: 80, height: 32, padding: '0 8px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2 }} />
-                <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>segundos</span>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <span style={{ fontSize: 13, color: 'var(--ink-2)', display: 'block', marginBottom: 4 }}>Agendamento</span>
-            {/* Agendamento automático desativado nesta entrega: não existe
-               executor server-side (cron/fila) que dispare sozinho no
-               horário marcado. Em vez de expor uma opção que parece
-               funcional mas não dispara nada, a opção "agendar" fica
-               desabilitada com "(em breve)" — evita prometer ao cliente
-               algo que o produto ainda não faz. Ver RELATORIO_ENTREGAS.md,
-               Entrega 12/13. */}
-            <select value="agora" disabled
-                    style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14, opacity: .7 }}>
-              <option value="agora">Agora</option>
-              <option value="agendar" disabled>Agendamento automático (em breve)</option>
-            </select>
-            <span className="ajuda" style={{ display: 'block', marginTop: 4 }}>
-              Em breve. Por enquanto, dispare clicando em "Disparar selecionados".
-            </span>
-            {false && agendamentoModo === 'agendar' && (
-              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <input type="datetime-local" value={agendadoPara} onChange={(e) => setAgendadoPara(e.target.value)}
-                  style={{ height: 32, padding: '0 8px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2 }} />
-                <span className="ajuda">
-                  Fuso horário: {campanha.agendado_timezone ?? 'America/Sao_Paulo'}.
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button type="button" onClick={salvarConfigCampanha} disabled={salvandoConfig}>
-              {salvandoConfig ? 'Salvando…' : 'Salvar configuração'}
-            </button>
-            {configAviso && <span className="ajuda">{configAviso}</span>}
-          </div>
-        </div>
-      </details>
+      <div className="barra-lista" style={{ padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+          Nome, leads, canal, mensagem, cadência e demais configurações desta campanha.
+        </span>
+        <Link href={`/campanhas/${campanha.id}/editar`} className="ver-detalhes" style={{ fontWeight: 600 }}>
+          Editar campanha
+        </Link>
+      </div>
 
       <div className="barra-lista">
         <div className="acoes" style={{ flexWrap: 'wrap', rowGap: 8 }}>
@@ -459,6 +388,10 @@ export default function CampanhaDetalhe({
                 <button type="button" className="ver-detalhes" onClick={(e) => alternarDetalhes(l.id, e)}>
                   {expandidos.has(l.id) ? 'ocultar detalhes' : 'ver detalhes'}
                 </button>
+                {' · '}
+                <button type="button" className="ver-detalhes" onClick={(e) => { e.stopPropagation(); abrirEdicaoLead(l); }}>
+                  editar lead
+                </button>
               </span>
 
               {expandidos.has(l.id) && (
@@ -503,6 +436,46 @@ export default function CampanhaDetalhe({
         })}
         {!leads.length && <p className="vazio">Nenhum lead nesta campanha.</p>}
       </ul>
+
+      <Modal titulo="Editar lead" aberto={!!leadEditando} onFechar={() => setLeadEditando(null)}>
+        {leadEditando && (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+                Empresa
+                <input value={formLead.empresa} onChange={(e) => setFormLead((f) => ({ ...f, empresa: e.target.value }))}
+                  style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+                Telefone
+                <input value={formLead.telefone} onChange={(e) => setFormLead((f) => ({ ...f, telefone: e.target.value }))}
+                  style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+                Categoria/ramo
+                <input value={formLead.especialidades} onChange={(e) => setFormLead((f) => ({ ...f, especialidades: e.target.value }))}
+                  style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+                Endereço
+                <input value={formLead.endereco} onChange={(e) => setFormLead((f) => ({ ...f, endereco: e.target.value }))}
+                  style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
+              </label>
+            </div>
+            {avisoLead && (
+              <p className="ajuda" style={{ marginTop: 10, color: avisoLead.includes('supress') ? 'var(--ink-2)' : 'var(--red)' }}>
+                {avisoLead}
+              </p>
+            )}
+            <div className="modal-acoes">
+              <button type="button" onClick={() => setLeadEditando(null)} disabled={salvandoLead}>Cancelar</button>
+              <button type="button" onClick={salvarLead} disabled={salvandoLead}>
+                {salvandoLead ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
