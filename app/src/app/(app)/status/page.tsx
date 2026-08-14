@@ -113,9 +113,30 @@ export default async function Pagina() {
       .eq('conta_id', perfil.conta_id).order('padrao', { ascending: false });
     canaisDetalhe = canais ?? [];
 
+    // BUG CONFIRMADO (2026-08-14, QA de produção): este card checava só se
+    // `conta_credenciais.evolution_url/evolution_key` existiam — campos legados
+    // que podem ficar preenchidos mesmo sem nenhum canal Evolution realmente
+    // conectado hoje (confirmado em produção: Guinffer tem essas credenciais
+    // salvas, mas nenhuma linha provider='evolution' em whatsapp_canais — o
+    // único canal real é WAHA). Isso mostrava "Evolution: OK" mesmo sem canal
+    // vivo, exatamente o falso-positivo que a Saúde não deve mostrar. Corrigido
+    // para checar o canal real em whatsapp_canais (mesma fonte de verdade do
+    // card "WhatsApp — canais" logo abaixo), não a credencial legada isolada.
+    const evolutionConectada = (canais ?? []).some(
+      (c) => c.provider === 'evolution' && c.status === 'conectado' && c.ativo,
+    );
+    const evolutionCredenciada = !!(cred?.evolution_url && cred?.evolution_key);
     itens.push(
       { nome: 'Busca (SerpAPI)', ok: !!cred?.serpapi_key, detalhe: cred?.serpapi_key ? 'chave cadastrada' : 'sem chave — teste em Configurações' },
-      { nome: 'WhatsApp (Evolution)', ok: !!(cred?.evolution_url && cred?.evolution_key), detalhe: cred?.evolution_url && cred?.evolution_key ? 'configurado' : 'sem configuração — teste em Configurações' },
+      {
+        nome: 'WhatsApp (Evolution)',
+        ok: evolutionConectada,
+        detalhe: evolutionConectada
+          ? 'canal conectado'
+          : evolutionCredenciada
+            ? 'credenciais salvas, mas nenhum canal Evolution conectado agora'
+            : 'sem configuração — conecte em Configurações → WhatsApp',
+      },
       { nome: 'IA', ok: !!cred?.ia_key, detalhe: cred?.ia_key ? 'chave cadastrada' : 'sem chave — só necessária no modo "A IA escreve"' },
     );
 
