@@ -46,6 +46,25 @@ export default function Topo(p: Props) {
     };
   }, []);
 
+  // BUG CONFIRMADO (QA 2026-08-14): em algumas rotas (ex.: /chamados), o
+  // script inline no <head> que aplica o tema salvo antes da pintura (ver
+  // app/layout.tsx) não estava efetivando data-tema a tempo — a página
+  // abria no tema padrão (escuro) mesmo com 'harvest_tema' salvo como
+  // 'claro' no localStorage. Rede de segurança: assim que o Topo (presente
+  // em toda página autenticada) monta, reaplica o tema salvo se por algum
+  // motivo ainda não foi aplicado. Só escreve se `dataset.tema` ainda
+  // estiver vazio — nunca sobrescreve um tema já certo, então não introduz
+  // flash nem some com a escolha do usuário.
+  useEffect(() => {
+    const raiz = document.documentElement;
+    if (!raiz.dataset.tema) {
+      try {
+        const salvo = localStorage.getItem('harvest_tema');
+        if (salvo) raiz.dataset.tema = salvo;
+      } catch { /* localStorage indisponível — mantém o padrão */ }
+    }
+  }, []);
+
   function trocarTema() {
     const raiz = document.documentElement;
     const escuroAgora = raiz.dataset.tema
