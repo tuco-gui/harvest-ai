@@ -11,6 +11,7 @@ function normalizarTelefone(bruto) {
   let d = String(bruto).replace(/\D/g, '');
   if (d.length < 10) return null;
   if (!d.startsWith('55')) d = '55' + d;
+  if (d.length > 13) return null; // falha fechada contra LID (2026-08-13)
   return d;
 }
 
@@ -27,8 +28,14 @@ function normalizarEventoWaha(body) {
   if (!body?.event || !EVENTOS_MENSAGEM.has(body.event)) return null;
   const p = body.payload;
   if (!p) return null;
-  const jid = String(p.from ?? '');
-  if (!jid || jid.endsWith('@g.us')) return null;
+  const jidBruto = String(p.from ?? '');
+  if (!jidBruto || jidBruto.endsWith('@g.us')) return null;
+  const key = p._data?.key;
+  const usaLid = jidBruto.endsWith('@lid') || key?.addressingMode === 'lid';
+  const jid = usaLid
+    ? (key?.remoteJidAlt && key.remoteJidAlt.endsWith('@s.whatsapp.net') ? key.remoteJidAlt : null)
+    : jidBruto;
+  if (!jid) return null;
   const telefone = normalizarTelefone(jid.split('@')[0]);
   if (!telefone) return null;
   const messageIdExterno = p.id ? String(p.id) : null;
@@ -197,5 +204,36 @@ assert.strictEqual(localizarLead(leadsFake, 'outra-conta', eventoWaha.telefone),
 // 10. telefone desconhecido aceito como inbound sem inventar vínculo
 const leadDesconhecido = localizarLead(leadsFake, uuidTeste, '5511900001111');
 assert.strictEqual(leadDesconhecido, null, 'telefone sem lead correspondente não inventa vínculo — evento ainda é válido, só sem leadId');
+
+// 11. BUG REAL DE PRODUÇÃO (2026-08-13): contato endereçado por LID —
+// `from` é um lid opaco (`@lid`), telefone real vem em `_data.key.remoteJidAlt`.
+// Payload abaixo é o formato real (números trocados) do evento de opt-out
+// capturado em produção que motivou esta correção.
+const eventoLid = normalizarEventoWaha({
+  event: 'message',
+  session: wahaSessionName(uuidTeste),
+  payload: {
+    id: 'false_21342044815384@lid_ABC123',
+    from: '21342044815384@lid',
+    fromMe: false,
+    body: 'Sair',
+    _data: { key: { remoteJid: '21342044815384@lid', remoteJidAlt: '5514997554659@s.whatsapp.net', addressingMode: 'lid' } },
+  },
+});
+assert.ok(eventoLid, 'evento com addressing LID ainda normaliza (via remoteJidAlt)');
+assert.strictEqual(eventoLid.telefone, '5514997554659', 'telefone real (remoteJidAlt) usado, NÃO o número do lid');
+assert.notStrictEqual(eventoLid.telefone, '5521342044815384', 'nunca usa o lid como telefone');
+
+// 12. LID sem remoteJidAlt disponível → descarta em vez de gravar lixo
+const eventoLidSemAlt = normalizarEventoWaha({
+  event: 'message',
+  session: wahaSessionName(uuidTeste),
+  payload: { id: 'wa_msg_lid_sem_alt', from: '21342044815384@lid', fromMe: false, body: 'oi' },
+});
+assert.strictEqual(eventoLidSemAlt, null, 'sem remoteJidAlt, evento LID é descartado (fail closed) em vez de virar telefone falso');
+
+// 13. normalizarTelefone rejeita dígitos longos demais para ser telefone (defesa em profundidade)
+assert.strictEqual(normalizarTelefone('21342044815384'), null, 'número de 14 dígitos (lid típico) é rejeitado como telefone');
+assert.strictEqual(normalizarTelefone('216827867185396'), null, 'número de 15 dígitos (lid típico) é rejeitado como telefone');
 
 console.log('inbound: ok');

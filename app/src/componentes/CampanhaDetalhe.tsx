@@ -26,13 +26,37 @@ type Lead = {
 
 type Canal = { id: number; nome: string; provider: string; ativo: boolean; padrao: boolean };
 
-type Campanha = { id: number; nome: string; origem: string; encontradas: number; com_whatsapp: number };
+type Campanha = {
+  id: number; nome: string; origem: string; encontradas: number; com_whatsapp: number;
+  tipo?: string; status?: string;
+  mensagem_modo?: string | null; mensagens?: string[] | null; contexto_ia?: string | null;
+  cadencia_modo?: string; cadencia_min?: number | null; cadencia_max?: number | null;
+  agendado_para?: string | null; agendado_timezone?: string | null;
+};
+
+type Metricas = {
+  enviadas: number; leadsContatados: number; erros: number;
+  bloqueados: number; respondidos: number; optouts: number;
+};
 
 const NOME_ORIGEM: Record<string, string> = { busca: 'Busca', planilha: 'Planilha', manual: 'Manual' };
 
+// Faixas de cadência (segundos entre envios) — nomes descritivos, sem rótulo
+// de "seguro" (o quão seguro depende do canal/conta, não é fixo).
+const CADENCIAS: Record<string, [number, number] | null> = {
+  padrao: null, // usa intervaloMin/intervaloMax da conta
+  rapida: [10, 25],
+  moderada: [30, 60],
+  conservadora: [60, 120],
+  personalizada: null, // usa cadencia_min/cadencia_max da própria campanha
+};
+
 export default function CampanhaDetalhe({
-  campanha, leads: leadsIniciais, intervaloMin, intervaloMax, canais,
-}: { campanha: Campanha; leads: Lead[]; intervaloMin: number; intervaloMax: number; canais: Canal[] }) {
+  campanha, leads: leadsIniciais, intervaloMin, intervaloMax, canais, metricas,
+}: {
+  campanha: Campanha; leads: Lead[]; intervaloMin: number; intervaloMax: number; canais: Canal[];
+  metricas?: Metricas;
+}) {
   const [leads, setLeads] = useState(leadsIniciais);
   const [escolhidos, setEscolhidos] = useState<Set<number>>(new Set());
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set());
@@ -47,6 +71,55 @@ export default function CampanhaDetalhe({
   );
   const padrao = canais.find((c) => c.padrao && c.ativo) ?? canais.find((c) => c.ativo);
   const [canalFixoId, setCanalFixoId] = useState<number | null>(padrao?.id ?? null);
+
+  // ---- Configuração de campanha (Entrega 12): mensagem / cadência / agendamento ----
+  const [salvandoConfig, setSalvandoConfig] = useState(false);
+  const [msgModo, setMsgModo] = useState(campanha.mensagem_modo ?? 'padrao');
+  const [msgTextos, setMsgTextos] = useState<string[]>(
+    campanha.mensagens?.length ? campanha.mensagens : ['', ''],
+  );
+  const [msgContextoIa, setMsgContextoIa] = useState(campanha.contexto_ia ?? '');
+  const [cadenciaModo, setCadenciaModo] = useState(campanha.cadencia_modo ?? 'padrao');
+  const [cadenciaMin, setCadenciaMin] = useState(campanha.cadencia_min ?? 40);
+  const [cadenciaMax, setCadenciaMax] = useState(campanha.cadencia_max ?? 90);
+  const [agendamentoModo, setAgendamentoModo] = useState<'agora' | 'agendar'>(
+    campanha.agendado_para ? 'agendar' : 'agora',
+  );
+  const [agendadoPara, setAgendadoPara] = useState(campanha.agendado_para?.slice(0, 16) ?? '');
+  const [configAviso, setConfigAviso] = useState<string | null>(null);
+  const [statusAtual, setStatusAtual] = useState(campanha.status ?? 'em_execucao');
+
+  async function salvarConfigCampanha() {
+    setSalvandoConfig(true);
+    setConfigAviso(null);
+    try {
+      const body: Record<string, unknown> = {
+        id: campanha.id,
+        mensagemModo: msgModo === 'padrao' ? null : msgModo,
+        mensagens: msgModo === 'rodizio' ? msgTextos.filter((t) => t.trim()) : [],
+        contextoIa: msgModo === 'ia' ? msgContextoIa : null,
+        cadenciaModo,
+        cadenciaMin: cadenciaModo === 'personalizada' ? Number(cadenciaMin) : null,
+        cadenciaMax: cadenciaModo === 'personalizada' ? Number(cadenciaMax) : null,
+      };
+      // Agendamento automático desativado nesta entrega (ver bloco da UI
+      // acima) — sempre salva como "agora"/em_execucao, nunca "agendada".
+      body.agendadoPara = null;
+      body.status = 'em_execucao';
+      setStatusAtual('em_execucao');
+      const r = await fetch('/api/campanhas', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setConfigAviso(d.erro ?? 'Não consegui salvar a configuração.'); return; }
+      setConfigAviso('Configuração salva.');
+    } catch {
+      setConfigAviso('Sem conexão com o servidor.');
+    } finally {
+      setSalvandoConfig(false);
+    }
+  }
 
   const comZap = leads.filter((l) => l.tem_whatsapp === 'sim').length;
 
@@ -88,6 +161,16 @@ export default function CampanhaDetalhe({
     }
   }
 
+  // Cadência efetiva: personalizada usa min/max da própria campanha; um
+  // preset (rápida/moderada/conservadora) usa a faixa fixa da UI; "padrão"
+  // cai no intervalo configurado da conta (conta_config_envio), como antes.
+  function cadenciaEfetiva(): [number, number] {
+    if (cadenciaModo === 'personalizada') return [Number(cadenciaMin) || 1, Number(cadenciaMax) || (Number(cadenciaMin) || 1) + 1];
+    const faixa = CADENCIAS[cadenciaModo];
+    if (faixa) return faixa;
+    return [intervaloMin, intervaloMax];
+  }
+
   async function dispararSelecionados() {
     const alvos = leads.filter((l) => escolhidos.has(l.id) && l.telefone);
     if (!alvos.length) return;
@@ -95,6 +178,7 @@ export default function CampanhaDetalhe({
     pararRef.atual = false;
     setDisparando(true);
     setProgresso({ feito: 0, total: alvos.length });
+    const [min, max] = cadenciaEfetiva();
     for (let i = 0; i < alvos.length; i++) {
       if (pararRef.atual) break;
       const l = alvos[i];
@@ -110,7 +194,7 @@ export default function CampanhaDetalhe({
       setLeads((atual) => atual.map((x) => (x.id === l.id ? { ...x, disparo: 'sim' } : x)));
       setProgresso({ feito: i + 1, total: alvos.length });
       if (i < alvos.length - 1 && !pararRef.atual) {
-        const espera = intervaloMin + Math.random() * (intervaloMax - intervaloMin);
+        const espera = min + Math.random() * (max - min);
         // eslint-disable-next-line no-await-in-loop
         await new Promise((res) => setTimeout(res, espera * 1000));
       }
@@ -121,12 +205,140 @@ export default function CampanhaDetalhe({
   function pararDisparo() { pararRef.atual = true; }
 
   return (
-    <div className="pagina">
+    <div className="pagina pagina-larga">
       <p className="ajuda"><Link href="/campanhas">← Campanhas</Link></p>
       <h2 style={{ fontFamily: 'var(--display)', fontWeight: 800, letterSpacing: '-.02em' }}>{campanha.nome}</h2>
       <p className="resumo-secao">
         {NOME_ORIGEM[campanha.origem] ?? campanha.origem} · {leads.length} lead(s) nesta campanha
+        {statusAtual && <> · status: <b>{statusAtual}</b></>}
       </p>
+
+      {metricas && (
+        <section className="funil" aria-label="Métricas da campanha" style={{ marginBottom: 12 }}>
+          <div className="etapa">
+            <span className="num">{leads.length}</span>
+            <span className="label">Leads na campanha</span>
+          </div>
+          <div className="etapa">
+            <span className="num">{metricas.leadsContatados}</span>
+            <span className="label">Leads contatados</span>
+          </div>
+          <div className="etapa">
+            <span className="num">{metricas.enviadas}</span>
+            <span className="label">Mensagens enviadas</span>
+          </div>
+          <div className="etapa">
+            <span className="num">{metricas.respondidos}</span>
+            <span className="label">Responderam</span>
+          </div>
+          <div className="etapa">
+            <span className="num">{metricas.optouts}</span>
+            <span className="label">Opt-outs</span>
+          </div>
+          <div className="etapa">
+            <span className="num">{metricas.erros + metricas.bloqueados}</span>
+            <span className="label">Erros/bloqueados</span>
+          </div>
+        </section>
+      )}
+
+      <details className="barra-lista" style={{ padding: 12 }}>
+        <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--ink-2)' }}>
+          Configuração da campanha (mensagem, cadência, agendamento)
+        </summary>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+          <div>
+            <span style={{ fontSize: 13, color: 'var(--ink-2)', display: 'block', marginBottom: 4 }}>Estratégia de mensagem</span>
+            <select value={msgModo} onChange={(e) => setMsgModo(e.target.value)}
+                    style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
+              <option value="padrao">Usar configuração padrão da conta</option>
+              <option value="fixa">Mensagem fixa (usa a config. da conta)</option>
+              <option value="rodizio">Rodízio de mensagens (2 a 5, específicas desta campanha)</option>
+              <option value="ia">A IA escreve (contexto específico desta campanha)</option>
+            </select>
+            {msgModo === 'rodizio' && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {msgTextos.map((t, i) => (
+                  <textarea key={i} value={t} rows={2} placeholder={`Mensagem ${i + 1}`}
+                    onChange={(e) => setMsgTextos((arr) => arr.map((x, j) => (j === i ? e.target.value : x)))}
+                    style={{ padding: 8, background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
+                ))}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {msgTextos.length < 5 && (
+                    <button type="button" onClick={() => setMsgTextos((arr) => [...arr, ''])}>+ mensagem</button>
+                  )}
+                  {msgTextos.length > 2 && (
+                    <button type="button" onClick={() => setMsgTextos((arr) => arr.slice(0, -1))}>- mensagem</button>
+                  )}
+                </div>
+              </div>
+            )}
+            {msgModo === 'ia' && (
+              <textarea value={msgContextoIa} rows={3} placeholder="Contexto específico desta campanha para a IA usar ao escrever (opcional — se vazio, usa o contexto padrão da conta)"
+                onChange={(e) => setMsgContextoIa(e.target.value)}
+                style={{ marginTop: 8, width: '100%', padding: 8, background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
+            )}
+          </div>
+
+          <div>
+            <span style={{ fontSize: 13, color: 'var(--ink-2)', display: 'block', marginBottom: 4 }}>Cadência entre envios</span>
+            <select value={cadenciaModo} onChange={(e) => setCadenciaModo(e.target.value)}
+                    style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
+              <option value="padrao">Padrão da conta ({intervaloMin}–{intervaloMax}s)</option>
+              <option value="rapida">Rápida (10–25s)</option>
+              <option value="moderada">Moderada (30–60s)</option>
+              <option value="conservadora">Conservadora (60–120s)</option>
+              <option value="personalizada">Personalizada</option>
+            </select>
+            {cadenciaModo === 'personalizada' && (
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="number" min={1} value={cadenciaMin} onChange={(e) => setCadenciaMin(Number(e.target.value))}
+                  style={{ width: 80, height: 32, padding: '0 8px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2 }} />
+                <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>a</span>
+                <input type="number" min={1} value={cadenciaMax} onChange={(e) => setCadenciaMax(Number(e.target.value))}
+                  style={{ width: 80, height: 32, padding: '0 8px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2 }} />
+                <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>segundos</span>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <span style={{ fontSize: 13, color: 'var(--ink-2)', display: 'block', marginBottom: 4 }}>Agendamento</span>
+            {/* Agendamento automático desativado nesta entrega: não existe
+               executor server-side (cron/fila) que dispare sozinho no
+               horário marcado. Em vez de expor uma opção que parece
+               funcional mas não dispara nada, a opção "agendar" fica
+               desabilitada com "(em breve)" — evita prometer ao cliente
+               algo que o produto ainda não faz. Ver RELATORIO_ENTREGAS.md,
+               Entrega 12/13. */}
+            <select value="agora" disabled
+                    style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14, opacity: .7 }}>
+              <option value="agora">Disparar quando eu clicar (agora)</option>
+              <option value="agendar" disabled>Agendar para depois (em breve)</option>
+            </select>
+            <span className="ajuda" style={{ display: 'block', marginTop: 4 }}>
+              Agendamento automático ainda não está disponível — não existe hoje um executor que dispare sozinho
+              no horário marcado. O disparo continua sendo feito clicando em "Disparar selecionados".
+            </span>
+            {false && agendamentoModo === 'agendar' && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <input type="datetime-local" value={agendadoPara} onChange={(e) => setAgendadoPara(e.target.value)}
+                  style={{ height: 32, padding: '0 8px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2 }} />
+                <span className="ajuda">
+                  Fuso horário: {campanha.agendado_timezone ?? 'America/Sao_Paulo'}.
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button type="button" onClick={salvarConfigCampanha} disabled={salvandoConfig}>
+              {salvandoConfig ? 'Salvando…' : 'Salvar configuração'}
+            </button>
+            {configAviso && <span className="ajuda">{configAviso}</span>}
+          </div>
+        </div>
+      </details>
 
       <div className="barra-lista">
         <div className="acoes" style={{ flexWrap: 'wrap', rowGap: 8 }}>

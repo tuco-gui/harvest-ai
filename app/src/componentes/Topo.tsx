@@ -125,7 +125,7 @@ export default function Topo(p: Props) {
           Chamados
         </Link>
         <Link href="/status" aria-current={caminho.startsWith('/status') ? 'page' : undefined}>
-          Status
+          Saúde
         </Link>
         {p.ehSuperAdmin && (
           <>

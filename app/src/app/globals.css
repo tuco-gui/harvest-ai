@@ -418,3 +418,32 @@ a{color:inherit}
 .preset[aria-pressed="true"]{border-color:var(--green);background:var(--hover)}
 .preset b{display:block;font-weight:600;font-size:13px}
 .preset span{display:block;font-size:11.5px;color:var(--ink-3);margin-top:2px}
+
+/* ------------------------------------------------ QA contraste (Entrega 12)
+   Sem isto, <select>/<option>/<textarea> nativos caem no estilo do SO — em
+   modo escuro isso costuma dar fundo claro com texto claro (ilegível).
+   Também faltava um estado :disabled visível fora dos poucos componentes
+   que já tratavam isso caso a caso (.btn-busca, .btn-teste). */
+select, textarea, option{
+  background:var(--sunken);color:var(--ink);border:1px solid var(--rule);
+  border-radius:2px;font-family:inherit;
+}
+select:focus, textarea:focus{outline:none;border-color:var(--rule-2)}
+textarea::placeholder{color:var(--ink-3)}
+button:disabled, input:disabled, select:disabled, textarea:disabled{
+  opacity:.5;cursor:not-allowed;
+}
+label{color:var(--ink-2)}
+a{text-underline-offset:2px}
+a:hover{color:var(--ink)}
+
+/* Páginas com tabela larga (Saúde, Campanhas) ficavam espremidas no mesmo
+   max-width de páginas de texto/formulário — aqui elas ganham mais fôlego
+   sem virar full-bleed (mantém leitura confortável em telas grandes). */
+.pagina-larga{max-width:1180px}
+
+.grade-saude{
+  display:grid;grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+  gap:10px;margin-top:4px;
+}
+.cartao-saude{padding:12px 14px}

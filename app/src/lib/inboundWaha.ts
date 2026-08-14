@@ -3,13 +3,23 @@ import type { EventoInboundNormalizado, TipoMensagemInbound } from './inboundTip
 
 /**
  * Adapter WAHA (Fase 3B) — converte o payload de webhook do WAHA para o
- * evento normalizado interno. Formato de referência (WAHA — engine NOWEB):
- * `{ event, session, engine, payload: { id, timestamp, from, fromMe, to,
- * body, hasMedia, notifyName, _data } }`. NÃO VERIFICADO contra um webhook
- * real desta instância — baseado na documentação pública do WAHA
- * (waha.devlike.pro/docs/how-to/receive-messages, /how-to/event-message).
- * Antes de cadastrar o webhook real em produção, capturar 1 payload real e
- * conferir os nomes de campo aqui.
+ * evento normalizado interno. Formato VERIFICADO contra payloads reais de
+ * produção em 2026-08-13 (8 eventos reais em `inbound_eventos`, incluindo
+ * um opt-out real do QA do cliente).
+ *
+ * BUG CONFIRMADO E CORRIGIDO (2026-08-13): quando o WhatsApp do contato usa
+ * "addressing mode" LID (`_data.key.addressingMode === 'lid'` — endereçamento
+ * por Linked ID, cada vez mais comum, não é caso raro), `payload.from` vem
+ * como `<lid_numerico>@lid`, e o número puro do lid NÃO é o telefone real —
+ * é um identificador opaco. O código anterior fazia `from.split('@')[0]` sem
+ * checar o `@lid`, gravando o número do lid como se fosse telefone. Isso
+ * quebrava: (1) correlação com prospecta_leads (nunca batia); (2) opt-out —
+ * a supressão seria aplicada a um "telefone" que não existe, sem bloquear o
+ * número real em disparos futuros. WAHA expõe o telefone real em
+ * `_data.key.remoteJidAlt` (`<telefone>@s.whatsapp.net`) nesses casos —
+ * confirmado com o payload real do evento de opt-out (lead real localizado
+ * por esse número). Este adapter agora prefere `remoteJidAlt` quando
+ * `addressingMode === 'lid'`.
  */
 export type PayloadWebhookWaha = {
   event?: string;
@@ -22,7 +32,10 @@ export type PayloadWebhookWaha = {
     body?: string;
     hasMedia?: boolean;
     notifyName?: string;
-    _data?: { notifyName?: string };
+    _data?: {
+      notifyName?: string;
+      key?: { remoteJid?: string; remoteJidAlt?: string; addressingMode?: string };
+    };
   };
 };
 
@@ -53,8 +66,20 @@ export function normalizarEventoWaha(body: PayloadWebhookWaha): EventoInboundNor
   const p = body.payload;
   if (!p) return null;
 
-  const jid = String(p.from ?? '');
-  if (!jid || jid.endsWith('@g.us')) return null; // mensagem de grupo — fora de escopo 3B
+  const jidBruto = String(p.from ?? '');
+  if (!jidBruto || jidBruto.endsWith('@g.us')) return null; // mensagem de grupo — fora de escopo 3B
+
+  // Endereçamento LID: `from` não é telefone. Preferir o JID alternativo
+  // baseado em telefone real (`remoteJidAlt`), que o WAHA expõe em
+  // `_data.key` quando `addressingMode === 'lid'`. Sem ele, não há telefone
+  // real disponível — descarta em vez de gravar um lid como se fosse
+  // telefone (ver nota no topo do arquivo).
+  const key = p._data?.key;
+  const usaLid = jidBruto.endsWith('@lid') || key?.addressingMode === 'lid';
+  const jid = usaLid
+    ? (key?.remoteJidAlt && key.remoteJidAlt.endsWith('@s.whatsapp.net') ? key.remoteJidAlt : null)
+    : jidBruto;
+  if (!jid) return null;
 
   const telefone = normalizarTelefone(jid.split('@')[0]);
   if (!telefone) return null;
