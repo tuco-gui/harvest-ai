@@ -102,15 +102,11 @@ export default function CampanhaDetalhe({
         cadenciaMin: cadenciaModo === 'personalizada' ? Number(cadenciaMin) : null,
         cadenciaMax: cadenciaModo === 'personalizada' ? Number(cadenciaMax) : null,
       };
-      if (agendamentoModo === 'agendar' && agendadoPara) {
-        body.agendadoPara = new Date(agendadoPara).toISOString();
-        body.status = 'agendada';
-        setStatusAtual('agendada');
-      } else {
-        body.agendadoPara = null;
-        body.status = 'em_execucao';
-        setStatusAtual('em_execucao');
-      }
+      // Agendamento automático desativado nesta entrega (ver bloco da UI
+      // acima) — sempre salva como "agora"/em_execucao, nunca "agendada".
+      body.agendadoPara = null;
+      body.status = 'em_execucao';
+      setStatusAtual('em_execucao');
       const r = await fetch('/api/campanhas', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -308,21 +304,28 @@ export default function CampanhaDetalhe({
 
           <div>
             <span style={{ fontSize: 13, color: 'var(--ink-2)', display: 'block', marginBottom: 4 }}>Agendamento</span>
-            <select value={agendamentoModo} onChange={(e) => setAgendamentoModo(e.target.value as 'agora' | 'agendar')}
-                    style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
+            {/* Agendamento automático desativado nesta entrega: não existe
+               executor server-side (cron/fila) que dispare sozinho no
+               horário marcado. Em vez de expor uma opção que parece
+               funcional mas não dispara nada, a opção "agendar" fica
+               desabilitada com "(em breve)" — evita prometer ao cliente
+               algo que o produto ainda não faz. Ver RELATORIO_ENTREGAS.md,
+               Entrega 12/13. */}
+            <select value="agora" disabled
+                    style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14, opacity: .7 }}>
               <option value="agora">Disparar quando eu clicar (agora)</option>
-              <option value="agendar">Agendar para depois</option>
+              <option value="agendar" disabled>Agendar para depois (em breve)</option>
             </select>
-            {agendamentoModo === 'agendar' && (
+            <span className="ajuda" style={{ display: 'block', marginTop: 4 }}>
+              Agendamento automático ainda não está disponível — não existe hoje um executor que dispare sozinho
+              no horário marcado. O disparo continua sendo feito clicando em "Disparar selecionados".
+            </span>
+            {false && agendamentoModo === 'agendar' && (
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <input type="datetime-local" value={agendadoPara} onChange={(e) => setAgendadoPara(e.target.value)}
                   style={{ height: 32, padding: '0 8px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2 }} />
                 <span className="ajuda">
-                  Fuso horário: {campanha.agendado_timezone ?? 'America/Sao_Paulo'}. O agendamento aqui salva a
-                  data/status da campanha; o disparo automático nesse horário depende de um executor server-side
-                  ainda não implementado nesta entrega (ver RELATORIO_ENTREGAS.md, Entrega 12) — hoje, "agendar"
-                  marca a campanha como <b>agendada</b> para controle manual, mas o disparo em si continua sendo
-                  feito clicando em "Disparar selecionados" quando chegar a hora.
+                  Fuso horário: {campanha.agendado_timezone ?? 'America/Sao_Paulo'}.
                 </span>
               </div>
             )}
