@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 declare global { interface Window { L: any; Papa: any } }
 
 type Lead = {
+  id?: number | null;
   place_id: string | null;
   empresa: string;
   telefone: string | null;
@@ -90,8 +92,7 @@ export default function Prospeccao({
   const [enriquecidos, setEnriquecidos] = useState<Record<string, ResultadoEnriquecimento>>({});
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
 
-  const [campanhaId, setCampanhaId] = useState<number | null>(null);
-  const [campanhaNome, setCampanhaNome] = useState('');
+  const router = useRouter();
 
   const chave = (l: Lead, i: number) => l.place_id ?? `${l.empresa}-${i}`;
   const selecionados = useMemo(
@@ -101,41 +102,45 @@ export default function Prospeccao({
   const comZap = leads.filter((l) => l.tem_whatsapp === true).length;
   const mostrarMapa = painelExtra === 'mapa' || (leads.length > 0 && vista === 'mapa');
 
-  /** Cria a campanha antes de buscar/importar/adicionar (pra já poder marcar
-   *  os leads com o campanha_id assim que forem salvos), e atualiza os
-   *  números depois. Tudo que entra antes de "Limpar lista" é a mesma campanha. */
-  const campanhaIdRef = useRef<number | null>(null);
-  async function campanhaAntes(origem: 'busca' | 'planilha' | 'manual', nomeSugerido: string): Promise<number | null> {
-    if (campanhaIdRef.current) return campanhaIdRef.current;
-    const r = await fetch('/api/campanhas', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: nomeSugerido, origem, encontradas: 0, comWhatsapp: 0 }),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.id) return null;
-    campanhaIdRef.current = d.id;
-    setCampanhaId(d.id);
-    setCampanhaNome(nomeSugerido);
-    return d.id;
-  }
+  /** Pesquisa ≠ campanha (Entrega 12): a busca/importação/entrada manual NÃO
+   *  cria mais campanha automaticamente — só salva os leads (campanha_id
+   *  null). O usuário decide DEPOIS, com a lista na mão, se quer só guardar
+   *  ("Salvar lista") ou já trabalhar esses leads ("Criar campanha"). */
+  const [salvandoLista, setSalvandoLista] = useState(false);
+  const [ultimaAcaoSalvar, setUltimaAcaoSalvar] = useState<{ tipo: 'lista' | 'campanha'; nome: string; id: number } | null>(null);
 
-  function campanhaDepois(totalEncontradas: number, totalComZap: number) {
-    if (!campanhaIdRef.current) return;
-    fetch('/api/campanhas', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: campanhaIdRef.current, encontradas: totalEncontradas, comWhatsapp: totalComZap }),
-    }).catch(() => {});
-  }
+  async function salvarSelecaoComo(tipo: 'lista' | 'campanha') {
+    const alvo = selecionados.length ? selecionados : leads;
+    const leadIds = alvo.map((l) => l.id).filter((id): id is number => typeof id === 'number');
+    if (!leadIds.length) {
+      setErro('Nenhum lead com id salvo para incluir — busque de novo antes de salvar.');
+      return;
+    }
+    const sugestao = tipo === 'lista'
+      ? (termo.trim() || `Lista ${new Date().toLocaleDateString('pt-BR')}`)
+      : (termo.trim() || `Campanha ${new Date().toLocaleDateString('pt-BR')}`);
+    const nome = prompt(tipo === 'lista' ? 'Nome da lista:' : 'Nome da campanha:', sugestao);
+    if (!nome || !nome.trim()) return;
 
-  function renomearCampanha() {
-    if (!campanhaId) return;
-    const novo = prompt('Nome da campanha:', campanhaNome);
-    if (!novo || !novo.trim() || novo.trim() === campanhaNome) return;
-    setCampanhaNome(novo.trim());
-    fetch('/api/campanhas', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: campanhaId, nome: novo.trim() }),
-    }).catch(() => {});
+    setSalvandoLista(true);
+    setErro(null);
+    try {
+      const r = await fetch('/api/campanhas', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nome.trim(), tipo, origem: 'busca', leadIds }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.id) {
+        setErro(d.erro ?? `Não consegui salvar como ${tipo === 'lista' ? 'lista' : 'campanha'}.`);
+        return;
+      }
+      setUltimaAcaoSalvar({ tipo, nome: nome.trim(), id: d.id });
+      if (tipo === 'campanha') router.push(`/campanhas/${d.id}`);
+    } catch {
+      setErro('Sem conexão com o servidor.');
+    } finally {
+      setSalvandoLista(false);
+    }
   }
 
   async function buscar(e?: React.FormEvent) {
@@ -146,8 +151,8 @@ export default function Prospeccao({
     setErro(null);
     setAvisoRegiao(null);
 
+    setUltimaAcaoSalvar(null);
     try {
-      const idCampanha = await campanhaAntes('busca', termo.trim());
       const r = await fetch('/api/busca', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,7 +164,9 @@ export default function Prospeccao({
           // verdade pela distância real.
           ll: regiao ? `@${regiao.lat.toFixed(6)},${regiao.lng.toFixed(6)},${zoomParaRaio(regiao.km)}z` : undefined,
           regiao: regiao ?? undefined,
-          campanhaId: idCampanha,
+          // Pesquisa ≠ campanha (Entrega 12): a busca só salva os leads
+          // (prospecta_leads), sem campanha nenhuma. "Salvar lista" e
+          // "Criar campanha" são ações explícitas do usuário, depois.
         }),
       });
       const dados = await r.json();
@@ -173,8 +180,6 @@ export default function Prospeccao({
         setEscolhidos(new Set());
         setVista(regiao ? 'mapa' : 'lista');
         setAvisoRegiao(dados.avisoRegiao ?? null);
-        const comZapLeva = novaLeva.filter((l) => l.tem_whatsapp === true).length;
-        campanhaDepois(novaLeva.length, comZapLeva);
       }
       setJaBuscou(true);
       setPainelExtra(null);
@@ -242,7 +247,6 @@ export default function Prospeccao({
     if (!removidos) return;
     setLeads(restantes);
     setEscolhidos(new Set(restantes.filter((l) => escolhidos.has(chave(l, leads.indexOf(l)))).map(chave)));
-    campanhaDepois(restantes.length, restantes.filter((l) => l.tem_whatsapp === true).length);
   }
 
   const todas = () => setEscolhidos(new Set(leads.map(chave)));
@@ -258,9 +262,7 @@ export default function Prospeccao({
     setErro(null);
     setAvisoRegiao(null);
     setVista('lista');
-    campanhaIdRef.current = null;
-    setCampanhaId(null);
-    setCampanhaNome('');
+    setUltimaAcaoSalvar(null);
   }
 
   function aplicarRaioCustom() {
@@ -302,7 +304,11 @@ export default function Prospeccao({
         const r = await fetch('/api/disparo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lead: fila[i], indice: i, campanhaId: campanhaIdRef.current }),
+          // Disparo direto pela tela de pesquisa (sem campanha formal) —
+          // continua permitido para envio pontual; fica registrado sem
+          // campanha_id (ver /api/disparo). Para campanha configurada
+          // (mensagem/cadência/canal), use "Criar campanha".
+          body: JSON.stringify({ lead: fila[i], indice: i, campanhaId: null }),
         });
         if (r.ok) { ok++; setEnviados(ok); }
         else {
@@ -444,11 +450,12 @@ export default function Prospeccao({
         const validacao = await validarLeva(importados.map((l) => l.telefone));
         const comValidacao = importados.map((l) => ({ ...l, tem_whatsapp: l.telefone ? (validacao[l.telefone] ?? null) : null }));
 
-        const idCampanha = await campanhaAntes('planilha', `Planilha ${new Date().toLocaleDateString('pt-BR')}`);
+        // Pesquisa ≠ campanha: importar só salva os leads. "Salvar lista"/
+        // "Criar campanha" ficam disponíveis depois, como na busca.
         const r = await fetch('/api/leads/importar', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            origem: 'csv', campanhaId: idCampanha,
+            origem: 'csv',
             leads: comValidacao.map((l) => ({
               empresa: l.empresa, telefone: l.telefone, telefone_original: l.telefone_original,
               endereco: l.endereco, especialidades: l.especialidades, site: l.site, temWhatsapp: l.tem_whatsapp,
@@ -459,7 +466,7 @@ export default function Prospeccao({
         const porTelefone = new Map((d.leads ?? []).map((x: any) => [x.telefone, x]));
         const finais = comValidacao.map((l) => {
           const salvo = l.telefone ? (porTelefone.get(l.telefone) as any) : undefined;
-          return salvo ? { ...l, place_id: salvo.place_id, duplicado: salvo.duplicado, campanhaAnterior: salvo.campanhaAnterior } : l;
+          return salvo ? { ...l, id: salvo.id, place_id: salvo.place_id, duplicado: salvo.duplicado, campanhaAnterior: salvo.campanhaAnterior } : l;
         });
 
         setLeads(finais);
@@ -468,7 +475,7 @@ export default function Prospeccao({
         setVista('lista');
         setPainelExtra(null);
         setImportando(false);
-        if (idCampanha) campanhaDepois(finais.length, finais.filter((l) => l.tem_whatsapp === true).length);
+        setUltimaAcaoSalvar(null);
       },
       error: () => { setImportando(false); setErro('Não consegui ler o arquivo. Salve como CSV UTF-8.'); },
     });
@@ -500,11 +507,10 @@ export default function Prospeccao({
       tem_whatsapp: c.telefone ? (validacao[c.telefone] ?? null) : null, dados_extras: null,
     }));
 
-    const idCampanha = await campanhaAntes('manual', `Manual ${new Date().toLocaleDateString('pt-BR')}`);
     const r = await fetch('/api/leads/importar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        origem: 'manual', campanhaId: idCampanha,
+        origem: 'manual',
         leads: novos.map((l) => ({
           empresa: l.empresa, telefone: l.telefone, telefone_original: l.telefone_original,
           especialidades: l.especialidades, temWhatsapp: l.tem_whatsapp,
@@ -515,7 +521,7 @@ export default function Prospeccao({
     const porTelefone = new Map((d.leads ?? []).map((x: any) => [x.telefone, x]));
     const novosSalvos = novos.map((l) => {
       const salvo = l.telefone ? (porTelefone.get(l.telefone) as any) : undefined;
-      return salvo ? { ...l, place_id: salvo.place_id, duplicado: salvo.duplicado, campanhaAnterior: salvo.campanhaAnterior } : l;
+      return salvo ? { ...l, id: salvo.id, place_id: salvo.place_id, duplicado: salvo.duplicado, campanhaAnterior: salvo.campanhaAnterior } : l;
     });
 
     const existentes = new Set(leads.map((l) => l.telefone));
@@ -526,8 +532,7 @@ export default function Prospeccao({
     setManualTexto('');
     setAdicionandoManual(false);
     setPainelExtra(null);
-
-    if (idCampanha) campanhaDepois(mesclados.length, mesclados.filter((l) => l.tem_whatsapp === true).length);
+    setUltimaAcaoSalvar(null);
   }
 
   /* ---------------------------------------------------------- o CEP */
@@ -809,13 +814,39 @@ export default function Prospeccao({
           </div>
         )}
 
-        {campanhaId && (
-          <p className="ajuda" style={{ marginTop: 4 }}>
-            Campanha: <b style={{ color: 'var(--ink)' }}>{campanhaNome}</b>{' '}
-            <button type="button" onClick={renomearCampanha} style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
-              editar
+        {leads.length > 0 && !mostrarMapa && (
+          <div className="acoes-salvar" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 4 }}>
+            <button
+              type="button"
+              className="botao-secundario"
+              disabled={salvandoLista || !leads.some((l) => l.id != null)}
+              onClick={() => salvarSelecaoComo('lista')}
+            >
+              {salvandoLista ? 'Salvando…' : 'Salvar lista'}
             </button>
-          </p>
+            <button
+              type="button"
+              className="botao-primario"
+              disabled={salvandoLista || !leads.some((l) => l.id != null)}
+              onClick={() => salvarSelecaoComo('campanha')}
+            >
+              {salvandoLista ? 'Criando…' : 'Criar campanha'}
+            </button>
+            {ultimaAcaoSalvar && (
+              <span className="ajuda" style={{ marginLeft: 4 }}>
+                {ultimaAcaoSalvar.tipo === 'lista' ? 'Lista salva: ' : 'Campanha criada: '}
+                <b style={{ color: 'var(--ink)' }}>{ultimaAcaoSalvar.nome}</b>
+                {ultimaAcaoSalvar.tipo === 'campanha' && (
+                  <>
+                    {' '}
+                    <a href={`/campanhas/${ultimaAcaoSalvar.id}`} style={{ color: 'var(--ink-3)', textDecoration: 'underline' }}>
+                      abrir
+                    </a>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
         )}
 
         {avisoRegiao && <p className="aviso-suave">{avisoRegiao}</p>}

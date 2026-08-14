@@ -25,7 +25,7 @@ export type LeadParaSalvar = {
   tem_whatsapp: 'sim' | 'nao' | 'nao_verificado';
 };
 
-export type InfoDuplicado = { duplicado: boolean; campanhaAnterior: string | null };
+export type InfoDuplicado = { duplicado: boolean; campanhaAnterior: string | null; id: number | null };
 
 export async function salvarLeads(
   admin: SupabaseClient, contaId: string, leads: LeadParaSalvar[],
@@ -49,13 +49,17 @@ export async function salvarLeads(
   const duplicados = leads.filter((l) => l.place_id in existentes);
 
   // ids dos leads afetados nesta chamada — usados abaixo para o vínculo N:N
-  // com a campanha (campanha_leads), independente de serem novos ou repetidos.
+  // com a campanha (campanha_leads), independente de serem novos ou repetidos,
+  // e devolvidos ao chamador (porPlaceId[...].id) para permitir criar
+  // lista/campanha explicitamente DEPOIS da busca (ver api/busca/route.ts).
+  const idPorPlaceIdNovo: Record<string, number> = {};
   const idsParaVincular: number[] = duplicados.map((l) => idExistente[l.place_id]).filter((id): id is number => !!id);
 
   if (novosLeads.length) {
     const { data: inseridos } = await admin.from('prospecta_leads').upsert(novosLeads.map((l) => ({
       ...l, conta_id: contaId, origem, campanha_id: campanhaId,
     })), { onConflict: 'conta_id, place_id', ignoreDuplicates: false }).select('id, place_id');
+    for (const r of (inseridos ?? []) as any[]) idPorPlaceIdNovo[r.place_id] = r.id;
     idsParaVincular.push(...(inseridos ?? []).map((r: any) => r.id as number));
   }
   await Promise.all(duplicados.map((l) => admin
@@ -87,6 +91,7 @@ export async function salvarLeads(
     porPlaceId[l.place_id] = {
       duplicado: l.place_id in existentes,
       campanhaAnterior: campanhaAnteriorId ? (nomesCampanha[campanhaAnteriorId] ?? null) : null,
+      id: idExistente[l.place_id] ?? idPorPlaceIdNovo[l.place_id] ?? null,
     };
   }
   return { porPlaceId, novos: novosLeads.length };

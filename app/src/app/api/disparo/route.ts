@@ -47,7 +47,9 @@ export async function POST(req: Request) {
     admin.from('conta_credenciais').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
     campanhaIdNum !== null
-      ? admin.from('prospecta_campanhas').select('modo_envio_numero, canal_ids').eq('id', campanhaIdNum).single()
+      ? admin.from('prospecta_campanhas')
+          .select('modo_envio_numero, canal_ids, mensagem_modo, mensagens, contexto_ia')
+          .eq('id', campanhaIdNum).single()
       : Promise.resolve({ data: null }),
     carregarCanais(admin, perfil.conta_id),
   ]);
@@ -147,8 +149,19 @@ export async function POST(req: Request) {
     );
   }
 
-  const modoMsg = envio?.modo ?? 'ia';
-  const textos: string[] = Array.isArray(envio?.mensagens) ? envio!.mensagens : [];
+  // Estratégia de mensagem (Entrega 12): a campanha pode sobrescrever a
+  // config padrão da conta (conta_config_envio). `mensagem_modo` null ou
+  // 'padrao' = usa a config da conta, como antes.
+  const campanhaSobrescreve = !!campanha?.mensagem_modo && campanha.mensagem_modo !== 'padrao';
+  const modoMsg: 'ia' | 'fixa' | 'rodizio' = campanhaSobrescreve
+    ? (campanha!.mensagem_modo as 'ia' | 'fixa' | 'rodizio')
+    : (envio?.modo ?? 'ia');
+  const textos: string[] = campanhaSobrescreve
+    ? (Array.isArray(campanha?.mensagens) ? (campanha!.mensagens as string[]) : [])
+    : (Array.isArray(envio?.mensagens) ? envio!.mensagens : []);
+  const contextoIa: string = campanhaSobrescreve && campanha?.contexto_ia
+    ? campanha.contexto_ia
+    : (envio?.contexto ?? '');
 
   let mensagem: string;
   if (modoMsg === 'ia') {
@@ -159,7 +172,7 @@ export async function POST(req: Request) {
       );
     }
     try {
-      const { system, user } = montarPrompts(envio?.contexto ?? '', lead);
+      const { system, user } = montarPrompts(contextoIa, lead);
       mensagem = await gerarComIA((cred.ia_provedor ?? 'openai') as ProvedorIA, cred.ia_key, system, user, cred.ia_modelo);
     } catch {
       return NextResponse.json({ erro: 'A IA não respondeu. Tente de novo.' }, { status: 502 });

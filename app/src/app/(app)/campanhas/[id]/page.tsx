@@ -15,17 +15,27 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
   // nessa conta" antes; admin/operador só a da própria conta ativa.
   const podeVer = campanha && (perfil.papel === 'super_admin' || campanha.conta_id === perfil.conta_id);
 
-  const [{ data: leads }, { data: envio }, { data: canais }] = podeVer
+  const CAMPOS_LEAD = 'id, place_id, empresa, telefone, telefone_original, endereco, especialidades, rating, reviews, site, tem_whatsapp, cnpj, decisor_nome, linkedin, email, email_status, erro_enriquecimento, disparo';
+
+  const [{ data: leadsPorFk }, { data: vinculos }, { data: envio }, { data: canais }, { data: historico }] = podeVer
     ? await Promise.all([
-        admin.from('prospecta_leads')
-          .select('id, place_id, empresa, telefone, telefone_original, endereco, especialidades, rating, reviews, site, tem_whatsapp, cnpj, decisor_nome, linkedin, email, email_status, erro_enriquecimento, disparo')
-          .eq('campanha_id', id).eq('conta_id', campanha!.conta_id)
-          .order('empresa'),
+        // Compatibilidade retroativa: campanhas antigas só têm o vínculo por
+        // prospecta_leads.campanha_id (1ª campanha em que o lead apareceu).
+        admin.from('prospecta_leads').select(CAMPOS_LEAD)
+          .eq('campanha_id', id).eq('conta_id', campanha!.conta_id),
+        // Fonte robusta (Entrega 12): N:N via campanha_leads — não quebra
+        // quando o mesmo lead pertence a mais de uma campanha (bug da classe
+        // "PRATA 925 ATIBAIA": contagem por campanha_id não bate com a
+        // realidade quando há reuso do lead entre campanhas).
+        admin.from('campanha_leads').select('lead_id').eq('campanha_id', id),
         admin.from('conta_config_envio').select('intervalo_min, intervalo_max').eq('conta_id', campanha!.conta_id).maybeSingle(),
         admin.from('whatsapp_canais').select('*').eq('conta_id', campanha!.conta_id)
           .order('padrao', { ascending: false }).order('id'),
+        // Métricas duráveis (Entrega 12): calculadas no servidor a partir do
+        // histórico real, não de estado do navegador — sobrevivem a refresh.
+        admin.from('historico_contato').select('status, lead_id').eq('campanha_id', id),
       ])
-    : [{ data: null }, { data: null }, { data: null }];
+    : [{ data: null }, { data: null }, { data: null }, { data: null }, { data: null }];
 
   if (!podeVer) {
     return (
@@ -36,13 +46,36 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     );
   }
 
+  const idsExtras = (vinculos ?? [])
+    .map((v) => v.lead_id)
+    .filter((leadId) => !(leadsPorFk ?? []).some((l) => l.id === leadId));
+
+  const { data: leadsExtras } = idsExtras.length
+    ? await admin.from('prospecta_leads').select(CAMPOS_LEAD).in('id', idsExtras)
+    : { data: [] };
+
+  const leads = [...(leadsPorFk ?? []), ...(leadsExtras ?? [])].sort((a, b) => a.empresa.localeCompare(b.empresa));
+
+  // "Mensagens enviadas" (total de envios, pode ter reenvio pro mesmo lead)
+  // vs. "Leads contatados" (quantos leads DISTINTOS já receberam pelo menos
+  // um envio) — a confusão entre essas duas contagens era a causa do
+  // relatório "2 leads → 4 enviadas" (Entrega 11/12).
+  const linhasHistorico = historico ?? [];
+  const enviadas = linhasHistorico.filter((h) => h.status === 'enviado').length;
+  const leadsContatados = new Set(linhasHistorico.filter((h) => h.status === 'enviado' && h.lead_id).map((h) => h.lead_id)).size;
+  const erros = linhasHistorico.filter((h) => h.status === 'erro').length;
+  const bloqueados = linhasHistorico.filter((h) => h.status === 'bloqueado_supressao').length;
+  const respondidos = linhasHistorico.filter((h) => h.status === 'recebido').length;
+  const optouts = linhasHistorico.filter((h) => h.status === 'optout').length;
+
   return (
     <CampanhaDetalhe
       campanha={campanha}
-      leads={leads ?? []}
+      leads={leads}
       intervaloMin={envio?.intervalo_min ?? 30}
       intervaloMax={envio?.intervalo_max ?? 60}
       canais={canais ?? []}
+      metricas={{ enviadas, leadsContatados, erros, bloqueados, respondidos, optouts }}
     />
   );
 }

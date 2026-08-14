@@ -128,6 +128,7 @@ export async function POST(req: Request) {
 
   const comExtras = leads.map((l, i) => ({
     ...l,
+    id: l.place_id ? (porPlaceId[l.place_id]?.id ?? null) : null,
     duplicado: l.place_id ? (porPlaceId[l.place_id]?.duplicado ?? false) : false,
     campanhaAnterior: l.place_id ? (porPlaceId[l.place_id]?.campanhaAnterior ?? null) : null,
     tem_whatsapp: l.telefone ? (zap[l.telefone] ?? null) : null,

@@ -48,6 +48,7 @@ export async function POST(req: Request) {
     novos,
     leads: comId.map((l) => ({
       ...l,
+      id: porPlaceId[l.place_id]?.id ?? null,
       duplicado: porPlaceId[l.place_id]?.duplicado ?? false,
       campanhaAnterior: porPlaceId[l.place_id]?.campanhaAnterior ?? null,
     })),
