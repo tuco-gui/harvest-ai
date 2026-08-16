@@ -13,11 +13,11 @@ export default function Equipe({ equipe, meuId }: { equipe: Perfil[]; meuId: str
   const [criando, setCriando] = useState(false);
 
   const [aviso, setAviso] = useState<string | null>(null);
-  const [senhaNova, setSenhaNova] = useState<{ email: string; senha: string; emailEnviado?: boolean } | null>(null);
+  const [otpEnviado, setOtpEnviado] = useState<{ email: string; primeiroAcesso?: boolean } | null>(null);
 
   async function criarUsuario(e: React.FormEvent) {
     e.preventDefault();
-    setAviso(null); setSenhaNova(null); setCriando(true);
+    setAviso(null); setOtpEnviado(null); setCriando(true);
     const r = await fetch('/api/usuarios', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome, email, papel: 'super_admin' }),
@@ -25,7 +25,7 @@ export default function Equipe({ equipe, meuId }: { equipe: Perfil[]; meuId: str
     const d = await r.json();
     setCriando(false);
     if (!r.ok) { setAviso(d.erro); return; }
-    setSenhaNova({ email: d.email, senha: d.senha, emailEnviado: d.emailEnviado });
+    setOtpEnviado({ email: d.email, primeiroAcesso: true });
     setNome(''); setEmail('');
     router.refresh();
   }
@@ -41,16 +41,16 @@ export default function Equipe({ equipe, meuId }: { equipe: Perfil[]; meuId: str
     router.refresh();
   }
 
-  async function gerarSenha(u: Perfil) {
-    if (!confirm(`Gerar uma senha nova para ${u.email}? A senha atual dele para de funcionar.`)) return;
-    setAviso(null); setSenhaNova(null);
+  async function enviarOtp(u: Perfil) {
+    if (!confirm(`Enviar um código de acesso para ${u.email}? A senha atual dele para de funcionar até ele definir a nova.`)) return;
+    setAviso(null); setOtpEnviado(null);
     const r = await fetch('/api/usuarios', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: u.id }),
     });
     const d = await r.json();
     if (!r.ok) { setAviso(d.erro); return; }
-    setSenhaNova({ email: d.email, senha: d.senha, emailEnviado: d.emailEnviado });
+    setOtpEnviado({ email: d.email, primeiroAcesso: false });
   }
 
   return (
@@ -68,7 +68,7 @@ export default function Equipe({ equipe, meuId }: { equipe: Perfil[]; meuId: str
                 <td>{u.nome || '—'}</td>
                 <td style={{ color: 'var(--ink-2)' }}>{u.email}</td>
                 <td className="acao">
-                  <button onClick={() => gerarSenha(u)}>Gerar nova senha</button>
+                  <button onClick={() => enviarOtp(u)}>Enviar código de acesso</button>
                   {u.id !== meuId && <button onClick={() => remover(u)}>Remover</button>}
                 </td>
               </tr>
@@ -76,13 +76,13 @@ export default function Equipe({ equipe, meuId }: { equipe: Perfil[]; meuId: str
           </tbody>
         </table>
 
-        {senhaNova && (
+        {otpEnviado && (
           <div className="senha-nova" style={{ marginTop: 22 }}>
-            Passe estes dados para <b>{senhaNova.email}</b>: <code>{senhaNova.senha}</code>
-            <br />
-            {senhaNova.emailEnviado
-              ? 'Também mandei por e-mail para essa pessoa.'
-              : 'Esta senha aparece uma vez só e não fica guardada. Anote agora.'}
+            {otpEnviado.primeiroAcesso ? (
+              <>Enviamos um código de primeiro acesso para <b>{otpEnviado.email}</b> por e-mail. A pessoa usa esse código para definir a própria senha.</>
+            ) : (
+              <>Enviamos um código de acesso para <b>{otpEnviado.email}</b> por e-mail. A senha atual dele para de funcionar até ele definir a nova em /verificar-codigo.</>
+            )}
           </div>
         )}
 

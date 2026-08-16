@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabaseNoNavegador } from '@/lib/supabase/browser';
 
 export default function Entrar() {
@@ -55,6 +56,10 @@ export default function Entrar() {
         <button className="entrar" disabled={enviando}>
           {enviando ? 'Entrando…' : 'Entrar'}
         </button>
+
+        <p className="ajuda" style={{ marginTop: 18 }}>
+          <Link href="/esqueci-senha">Esqueci minha senha</Link>
+        </p>
       </form>
     </main>
   );

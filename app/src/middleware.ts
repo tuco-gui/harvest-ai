@@ -17,6 +17,15 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Recuperação de senha / primeiro acesso são self-service: abertos para
+  // quem NÃO está logado (quem está logado nem precisaria disso). A API de
+  // esqueci-senha só gera OTP por e-mail — não autentica nada.
+  const ehRecuperacao =
+    req.nextUrl.pathname.startsWith('/esqueci-senha') ||
+    req.nextUrl.pathname.startsWith('/verificar-codigo') ||
+    req.nextUrl.pathname.startsWith('/api/auth/');
+  if (ehRecuperacao) return NextResponse.next();
+
   let res = NextResponse.next({ request: req });
 
   const sb = createServerClient(
