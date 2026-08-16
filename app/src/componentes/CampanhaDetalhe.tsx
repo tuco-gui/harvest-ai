@@ -472,8 +472,6 @@ export default function CampanhaDetalhe({
                 <button type="button" className="ver-detalhes" disabled={qualificandoId === l.id} onClick={(e) => { e.stopPropagation(); qualificarLead(l); }}>
                   {qualificandoId === l.id ? 'Qualificando…' : 'Qualificar'}
                 </button>
-                  editar lead
-                </button>
               </span>
 
               {expandidos.has(l.id) && (
