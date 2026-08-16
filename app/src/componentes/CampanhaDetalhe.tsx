@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Modal from './Modal';
 
 type Lead = {
@@ -58,6 +59,7 @@ export default function CampanhaDetalhe({
   campanha: Campanha; leads: Lead[]; intervaloMin: number; intervaloMax: number; canais: Canal[];
   metricas?: Metricas;
 }) {
+  const router = useRouter();
   const [leads, setLeads] = useState(leadsIniciais);
   const [escolhidos, setEscolhidos] = useState<Set<number>>(new Set());
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set());
@@ -65,6 +67,11 @@ export default function CampanhaDetalhe({
   const [disparando, setDisparando] = useState(false);
   const [pararRef] = useState({ atual: false });
   const [progresso, setProgresso] = useState<{ feito: number; total: number } | null>(null);
+  // Hotfix P1: resultado REAL de cada disparo desta rodada — antes disso,
+  // o card "já disparado" era marcado incondicionalmente pra todo lead
+  // processado, mesmo quando o envio falhava ou era bloqueado por
+  // supressão. Isso fazia a lista contradizer o que de fato saiu.
+  const [resultadosDisparo, setResultadosDisparo] = useState<Record<number, 'enviado' | 'erro' | 'bloqueado'>>({});
 
   // Número de envio (Fase 3B.1): fixo num canal escolhido, ou rodízio entre os ativos.
   const [modoEnvio, setModoEnvio] = useState<'fixo' | 'rodizio'>(
@@ -182,21 +189,31 @@ export default function CampanhaDetalhe({
     if (!confirm(`Disparar mensagem pra ${alvos.length} lead(s) agora?`)) return;
     pararRef.atual = false;
     setDisparando(true);
+    setResultadosDisparo({});
     setProgresso({ feito: 0, total: alvos.length });
     const [min, max] = cadenciaEfetiva();
     for (let i = 0; i < alvos.length; i++) {
       if (pararRef.atual) break;
       const l = alvos[i];
       const canalId = modoEnvio === 'fixo' ? canalFixoId : null;
+      // Hotfix P1: o resultado exibido por lead agora reflete a resposta
+      // real do disparo — sucesso (2xx/ok), bloqueado por supressão (403 +
+      // suprimido:true) ou erro (qualquer outra falha, inclusive de rede).
       // eslint-disable-next-line no-await-in-loop
-      await fetch('/api/disparo', {
+      const r = await fetch('/api/disparo', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lead: l, indice: i, campanhaId: campanha.id,
           canalId, modoEnvio,
         }),
       }).catch(() => null);
-      setLeads((atual) => atual.map((x) => (x.id === l.id ? { ...x, disparo: 'sim' } : x)));
+      // eslint-disable-next-line no-await-in-loop
+      const dados = r ? await r.json().catch(() => ({})) : {};
+      const resultado: 'enviado' | 'erro' | 'bloqueado' = r?.ok
+        ? 'enviado'
+        : dados?.suprimido ? 'bloqueado' : 'erro';
+      setResultadosDisparo((atual) => ({ ...atual, [l.id]: resultado }));
+      setLeads((atual) => atual.map((x) => (x.id === l.id && resultado === 'enviado' ? { ...x, disparo: 'sim' } : x)));
       setProgresso({ feito: i + 1, total: alvos.length });
       if (i < alvos.length - 1 && !pararRef.atual) {
         const espera = min + Math.random() * (max - min);
@@ -205,6 +222,11 @@ export default function CampanhaDetalhe({
       }
     }
     setDisparando(false);
+    // As métricas do funil (enviadas/erros/bloqueados) e o status "já
+    // disparado" persistido vêm do servidor (historico_contato) — sem isso,
+    // a tela ficava com o número antigo até um F5 manual, mesmo com
+    // mensagens realmente saindo.
+    router.refresh();
   }
 
   function pararDisparo() { pararRef.atual = true; }
@@ -257,6 +279,15 @@ export default function CampanhaDetalhe({
             <span className="label">Erros</span>
           </div>
         </section>
+      )}
+      {metricas && metricas.optouts > 0 && (
+        // Hotfix (item 9): a lógica de opt-out já bloqueia novo disparo em
+        // produção (SAIR → supressão → /api/disparo recusa com 403) — o
+        // texto aqui não pode sugerir o contrário.
+        <p className="ajuda" style={{ marginTop: -6, marginBottom: 12 }}>
+          <b>Opt-out</b>: pediu para não receber novas mensagens. Fica bloqueado para novos
+          disparos nesta e em qualquer outra campanha da conta, até decisão em contrário.
+        </p>
       )}
 
       <div className="barra-lista" style={{ padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -326,12 +357,22 @@ export default function CampanhaDetalhe({
         </div>
       </div>
 
-      {progresso && (
-        <p className="ajuda">
-          Disparando {progresso.feito} de {progresso.total}
-          {intervaloMin ? ` — intervalo de ${intervaloMin}–${intervaloMax}s entre envios` : ''}.
-        </p>
-      )}
+      {progresso && (() => {
+        const contagem = Object.values(resultadosDisparo).reduce(
+          (acc, r) => ({ ...acc, [r]: acc[r] + 1 }),
+          { enviado: 0, erro: 0, bloqueado: 0 } as Record<'enviado' | 'erro' | 'bloqueado', number>,
+        );
+        return (
+          <p className="ajuda">
+            {disparando ? 'Disparando' : 'Disparo concluído'} {progresso.feito} de {progresso.total}
+            {intervaloMin && disparando ? ` — intervalo de ${intervaloMin}–${intervaloMax}s entre envios` : ''}
+            {progresso.feito > 0 && (
+              <> — {contagem.enviado} enviado(s){contagem.bloqueado ? `, ${contagem.bloqueado} bloqueado(s) por opt-out` : ''}
+                {contagem.erro ? `, ${contagem.erro} com erro` : ''}.</>
+            )}
+          </p>
+        );
+      })()}
 
       <ul className="lista" role="listbox" aria-multiselectable>
         {leads.map((l) => {
@@ -384,7 +425,14 @@ export default function CampanhaDetalhe({
                   {l.tem_whatsapp === 'sim' ? 'WhatsApp' : l.tem_whatsapp === 'nao' ? 'Sem WhatsApp' : 'Não verificado'}
                 </span>
                 <span className="zap-numero">{l.telefone_original ?? 'sem telefone'}</span>
-                {l.disparo === 'sim' && <span className="ajuda">já disparado</span>}
+                {resultadosDisparo[l.id] === 'enviado' && <span className="ajuda">enviado agora</span>}
+                {resultadosDisparo[l.id] === 'bloqueado' && (
+                  <span className="ajuda" style={{ color: 'var(--ink-2)' }}>bloqueado — opt-out</span>
+                )}
+                {resultadosDisparo[l.id] === 'erro' && (
+                  <span className="ajuda" style={{ color: 'var(--red)' }}>erro no envio</span>
+                )}
+                {!resultadosDisparo[l.id] && l.disparo === 'sim' && <span className="ajuda">já disparado</span>}
                 <button type="button" className="ver-detalhes" onClick={(e) => alternarDetalhes(l.id, e)}>
                   {expandidos.has(l.id) ? 'ocultar detalhes' : 'ver detalhes'}
                 </button>
