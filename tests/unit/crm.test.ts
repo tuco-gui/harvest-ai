@@ -9,7 +9,28 @@
  * continua NÃO VERIFICADA (exige credencial ausente).
  */
 import { ESTAGIOS_CRM, estagioValido, nomeEstagio, ESTAGIO_PADRAO } from '../../app/src/lib/crmStages.ts';
-import type { CrmBackend, Oportunidade, OportunidadeInput } from '../../app/src/lib/twenty.ts';
+
+// Tipos mínimos replicados da interface CrmBackend (lib/twenty) para o teste
+// NÃO precisar importar twenty.ts (que puxa supabase/server fora do Next).
+type Oportunidade = {
+  id: number; conta_id: string; lead_id: number | null; empresa: string; contato: string;
+  telefone: string | null; email: string | null; origem: string; estagio: string;
+  owner_id: string | null; valor: number; proxima_acao: string | null;
+  observacoes: string | null; previsao_fechamento: string | null; criado_em: string; atualizado_em: string;
+};
+type OportunidadeInput = {
+  lead_id?: number | null; empresa?: string; contato?: string; telefone?: string | null;
+  email?: string | null; origem?: string; estagio?: string; owner_id?: string | null;
+  valor?: number; proxima_acao?: string | null; observacoes?: string | null; previsao_fechamento?: string | null;
+};
+interface CrmBackend {
+  listar(contaId: string): Promise<Oportunidade[]>;
+  buscar(id: number): Promise<Oportunidade | null>;
+  criar(contaId: string, input: OportunidadeInput): Promise<Oportunidade>;
+  atualizar(id: number, patch: Partial<OportunidadeInput>): Promise<Oportunidade | null>;
+  buscarOwners(contaId: string): Promise<{ id: string; nome: string }[]>;
+  jaExistePorLead(leadId: number): Promise<boolean>;
+}
 
 let passou = 0;
 let falhou = 0;
