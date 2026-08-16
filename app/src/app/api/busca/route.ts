@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { salvarLeads } from '@/lib/leads';
 import { wahaSessionName, checkNumbers, usaWaha } from '@/lib/waha';
-import { chamarSerpApi } from '@/lib/serpapi';
+import { chamarSerpApi, resolverChaveSerpapi } from '@/lib/serpapi';
 
 /**
  * Busca no Google Maps via SerpAPI, chamada direta (sem n8n — ver lib/serpapi.ts).
@@ -36,10 +36,14 @@ export async function POST(req: Request) {
     .eq('conta_id', perfil.conta_id)
     .single();
 
-  if (!cred?.serpapi_key) {
+  // Busca é institucional (bug P0): credencial da Figueira em runtime prevalece;
+  // BYOK por tenant só como fallback. Sem nenhuma → indisponível sanitizado,
+  // nunca "cadastre sua chave".
+  const chave = resolverChaveSerpapi(cred);
+  if (chave.fonte === 'ausente') {
     return NextResponse.json(
-      { erro: 'Falta a chave da SerpAPI. Peça ao administrador da conta para cadastrar em Configurações.' },
-      { status: 400 },
+      { erro: 'Busca temporariamente indisponível.', indisponivel: true },
+      { status: 503 },
     );
   }
 
@@ -57,7 +61,7 @@ export async function POST(req: Request) {
   // Chamada direta à SerpAPI (sem ponte n8n) — mesma função usada por
   // "Testar busca" (lib/serpapi.ts) — um único caminho real, sem divergência
   // entre teste e busca de verdade. A chave nunca entra em `params`.
-  const resultado = await chamarSerpApi(admin, perfil.conta_id, cred.serpapi_key, params, { modo: 'busca' });
+  const resultado = await chamarSerpApi(admin, perfil.conta_id, chave.key, params, { modo: 'busca' });
   if (!resultado.ok) {
     return NextResponse.json({ erro: resultado.motivo }, { status: resultado.status });
   }

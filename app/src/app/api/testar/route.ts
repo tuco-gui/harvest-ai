@@ -6,7 +6,7 @@ import {
   buscarEmailApollo, buscarEmailSnov,
 } from '@/lib/enriquecimento';
 import { wahaSessionName, getOrCreateSession, checkNumbers, usaWaha } from '@/lib/waha';
-import { chamarSerpApi } from '@/lib/serpapi';
+import { chamarSerpApi, resolverChaveSerpapi } from '@/lib/serpapi';
 
 const LEAD_EXEMPLO = {
   empresa: 'Joalheria Exemplo', especialidades: 'Joalheria', rating: 4.7, reviews: 132,
@@ -34,9 +34,14 @@ export async function POST(req: Request) {
 
   try {
     if (qual === 'serpapi') {
-      if (!c?.serpapi_key) return NextResponse.json({ erro: 'Sem chave cadastrada.' }, { status: 400 });
+      // Busca é institucional (bug P0): runtime da Figueira prevalece; BYOK por
+      // tenant só como fallback. Sem nenhuma → indisponível sanitizado.
+      const chave = resolverChaveSerpapi(c);
+      if (chave.fonte === 'ausente') {
+        return NextResponse.json({ erro: 'Busca temporariamente indisponível.', indisponivel: true }, { status: 503 });
+      }
       // 1) chave válida (barato, não gasta busca)
-      const r = await fetch(`https://serpapi.com/account?api_key=${c.serpapi_key}`,
+      const r = await fetch(`https://serpapi.com/account?api_key=${chave.key}`,
         { signal: AbortSignal.timeout(20_000) });
       const d = await r.json();
       if (d.error) return NextResponse.json({ erro: 'Chave recusada pela SerpAPI.' }, { status: 400 });
@@ -45,7 +50,7 @@ export async function POST(req: Request) {
       //    real quebrado, que era o bug reportado. Custa 1 crédito, igual
       //    a uma busca normal — não tem como testar o caminho real de graça.)
       const admin = supabaseAdmin();
-      const prova = await chamarSerpApi(admin, perfil.conta_id, c.serpapi_key,
+      const prova = await chamarSerpApi(admin, perfil.conta_id, chave.key,
         { engine: 'google_maps', type: 'search', q: 'padaria', hl: 'pt', gl: 'br' },
         { modo: 'prova' });
       if (!prova.ok) {

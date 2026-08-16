@@ -3,7 +3,7 @@
  * Roda sem banco real (admin é um stub) e sem rede real (fetch é mockado):
  *   node --experimental-strip-types tests/unit/serpapi.test.ts
  */
-import { chamarSerpApi } from '../../app/src/lib/serpapi.ts';
+import { chamarSerpApi, resolverChaveSerpapi } from '../../app/src/lib/serpapi.ts';
 
 let falhas = 0;
 function ok(cond: boolean, msg: string) {
@@ -86,6 +86,27 @@ async function rodar() {
     mockFetch(async () => ({ ok: true, json: async () => ({ local_results: [{ title: 'Padaria X' }] }) }));
     const r = await chamarSerpApi(adminStub, 'conta-1', 'ok', { q: 'x' }, { modo: 'busca' });
     ok(r.ok && Array.isArray(r.dados.local_results) && r.dados.local_results.length === 1, 'sucesso -> local_results propagado');
+  }
+
+  // 10) resolverChaveSerpapi (bug P0 — busca institucional): institucional > BYOK > ausente
+  {
+    const anterior = process.env.SERPAPI_KEY;
+    try {
+      delete process.env.SERPAPI_KEY;
+      const byok = resolverChaveSerpapi({ serpapi_key: '  tenant-key  ' });
+      ok(byok.fonte === 'byok' && byok.key === 'tenant-key', 'só BYOK -> fonte byok, chave trimada');
+
+      process.env.SERPAPI_KEY = 'institucional-fig';
+      const inst = resolverChaveSerpapi({ serpapi_key: 'tenant-key' });
+      ok(inst.fonte === 'institucional' && inst.key === 'institucional-fig', 'runtime institucional prevalece sobre BYOK');
+
+      delete process.env.SERPAPI_KEY;
+      const aus = resolverChaveSerpapi(null);
+      ok(aus.fonte === 'ausente', 'sem chave nenhuma -> ausente (sanitizado pelo chamador)');
+    } finally {
+      if (anterior === undefined) delete process.env.SERPAPI_KEY;
+      else process.env.SERPAPI_KEY = anterior;
+    }
   }
 
   console.log(falhas ? `\n${falhas} falha(s).` : '\nTodos os testes passaram.');

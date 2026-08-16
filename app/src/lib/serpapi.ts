@@ -30,6 +30,35 @@ const CREDITOS_ESGOTADOS_RE = /run\s*out\s*of\s*searches|no\s*more\s*searches|in
 const CREDENCIAL_INVALIDA_RE = /invalid\s*api\s*key/i;
 
 /**
+ * Resolução da chave da SerpAPI (bug P0 — inconsistência UI vs backend).
+ *
+ * Modelo aprovado: a busca é **institucional** (credencial da Figueira, no
+ * servidor). O cliente NÃO cadastra chave. Ordem de resolução:
+ *
+ *   1. `SERPAPI_KEY` (env de runtime do servidor) — credencial institucional.
+ *      Prevalece sempre; a UI nunca a exibe.
+ *   2. `conta_credenciais.serpapi_key` — BYOK legado por tenant, usado só se
+ *      não houver credencial institucional (compatibilidade).
+ *   3. nenhuma das duas — recurso indisponível (sanitizado pelo chamador).
+ *
+ * A chave NUNCA sai do servidor: não entra em resposta, log de erro, nem
+ * chega ao browser. A ausência total vira "Busca temporariamente indisponível."
+ * — nunca "cadastre sua chave" para um recurso institucional.
+ */
+export type ResolucaoSerpKey =
+  | { fonte: 'institucional'; key: string }
+  | { fonte: 'byok'; key: string }
+  | { fonte: 'ausente' };
+
+export function resolverChaveSerpapi(cred?: { serpapi_key?: string | null } | null): ResolucaoSerpKey {
+  const institucional = (process.env.SERPAPI_KEY ?? '').trim();
+  if (institucional) return { fonte: 'institucional', key: institucional };
+  const byok = cred?.serpapi_key?.trim();
+  if (byok) return { fonte: 'byok', key: byok };
+  return { fonte: 'ausente' };
+}
+
+/**
  * `modo: 'prova'` faz uma busca mínima só pra confirmar que a chave E a
  * conectividade com a SerpAPI funcionam de verdade (mesmo caminho da busca
  * real — é o que faz "Testar busca" valer alguma coisa). `modo: 'busca'`
