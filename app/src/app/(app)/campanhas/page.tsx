@@ -70,9 +70,15 @@ export default async function Pagina() {
   const comFunil = todasComFunil.filter((c) => c.tipo !== 'lista');
   const listas = todasComFunil.filter((c) => c.tipo === 'lista');
 
+  // Arquivar (Entrega 22) reaproveita status='cancelada' — não some da base,
+  // só sai da listagem operacional e vai para "Arquivadas" à parte.
+  const ativas = comFunil.filter((c) => c.status !== 'cancelada');
+  const arquivadas = comFunil.filter((c) => c.status === 'cancelada');
+
   return (
     <Campanhas
-      campanhas={comFunil}
+      campanhas={ativas}
+      arquivadas={arquivadas}
       listas={listas}
       podeConfigurar={perfil.papel !== 'operador'}
       canais={canais ?? []}
