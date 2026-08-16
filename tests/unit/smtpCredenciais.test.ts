@@ -4,14 +4,15 @@
  */
 
 import { detectarAmbiente, resolverCredenciaisSmtp } from '../../app/src/lib/smtpCredenciais.ts';
-import { configuracaoSmtp } from '../../app/src/lib/email.ts';
+import fs from 'node:fs';
 
-// Mock simples para configuracaoSmtp (evita conexão real com Supabase)
-let mockConfiguracaoSmtpBanco: any = null;
+// Banco legacy mockado via seam (evita puxar supabase/server fora do Next).
+// Casos que querem banco sobrescrevem; o padrão (null) simula "sem banco".
+(globalThis as any).__smtpBancoLoader__ = async () => null;
 
-// Sobrescreve a função importada
-import * as emailModule from '../../app/src/lib/email.ts';
-(emailModule as any).configuracaoSmtp = async () => mockConfiguracaoSmtpBanco;
+// Nota: smtpCredenciais.ts faz lazy import de email.ts (banco) só no caminho
+// de desenvolvimento; em staging/produção o banco nem é alcançado (fail-closed),
+// então o teste roda sem puxar supabase/server.
 
 function setEnv(env: Record<string, string | undefined>) {
   const backup: Record<string, string | undefined> = {};
@@ -39,7 +40,6 @@ function restoreEnv(backup: Record<string, string | undefined>) {
 let originalExistsSync: any = null;
 
 function mockFsExistsSecrets(exists: boolean) {
-  const fs = require('fs');
   if (originalExistsSync === null) {
     originalExistsSync = fs.existsSync;
   }
@@ -51,7 +51,6 @@ function mockFsExistsSecrets(exists: boolean) {
 
 function restoreFs() {
   if (originalExistsSync !== null) {
-    const fs = require('fs');
     fs.existsSync = originalExistsSync;
     originalExistsSync = null;
   }
@@ -121,7 +120,7 @@ function assert(condicao: boolean, msg: string) {
     SMTP_FROM: 'Test <no-reply@test.com>',
     SMTP_REPLY_TO: 'contato@test.com',
   });
-  mockConfiguracaoSmtpBanco = { smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' };
+  (globalThis as any).__smtpBancoLoader__ = async () => ({ smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' });
   const creds = await resolverCredenciaisSmtp();
   assert(creds !== null, 'staging + runtime completo → credenciais resolvidas');
   assert(creds?.fonte === 'runtime', 'staging + runtime completo → fonte=runtime');
@@ -139,7 +138,7 @@ function assert(condicao: boolean, msg: string) {
     // SMTP_PASSWORD ausente
     SMTP_FROM: 'Test <no-reply@test.com>',
   });
-  mockConfiguracaoSmtpBanco = { smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' };
+  (globalThis as any).__smtpBancoLoader__ = async () => ({ smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' });
   const creds = await resolverCredenciaisSmtp();
   assert(creds === null, 'staging sem SMTP_PASSWORD → null (fail-closed)');
   restoreEnv(backup);
@@ -151,7 +150,7 @@ function assert(condicao: boolean, msg: string) {
     NEXT_PUBLIC_AMBIENTE: 'staging',
     // SEM variáveis SMTP_*
   });
-  mockConfiguracaoSmtpBanco = { smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' };
+  (globalThis as any).__smtpBancoLoader__ = async () => ({ smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' });
   const creds = await resolverCredenciaisSmtp();
   assert(creds === null, 'staging sem runtime, só banco → null (fail-closed)');
   restoreEnv(backup);
@@ -165,7 +164,7 @@ function assert(condicao: boolean, msg: string) {
     // SEM variáveis SMTP_*
   });
   mockFsExistsSecrets(false);
-  mockConfiguracaoSmtpBanco = { smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' };
+  (globalThis as any).__smtpBancoLoader__ = async () => ({ smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' });
   const creds = await resolverCredenciaisSmtp();
   assert(creds === null, 'produção sem secrets nem runtime → null (fail-closed)');
   restoreFs();
@@ -180,7 +179,7 @@ function assert(condicao: boolean, msg: string) {
     // SEM variáveis SMTP_*
   });
   mockFsExistsSecrets(false);
-  mockConfiguracaoSmtpBanco = { smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' };
+  (globalThis as any).__smtpBancoLoader__ = async () => ({ smtp_host: 'banco.host', smtp_usuario: 'banco@user', smtp_senha: 'banco-senha' });
   const creds = await resolverCredenciaisSmtp();
   assert(creds !== null, 'development sem runtime + banco legacy → credenciais do banco');
   assert(creds?.fonte === 'banco', 'development + banco legacy → fonte=banco');
@@ -196,7 +195,7 @@ function assert(condicao: boolean, msg: string) {
     NODE_ENV: 'development',
   });
   mockFsExistsSecrets(false);
-  mockConfiguracaoSmtpBanco = null;
+  (globalThis as any).__smtpBancoLoader__ = async () => null;
   const creds = await resolverCredenciaisSmtp();
   assert(creds === null, 'development sem runtime nem banco → null');
   restoreFs();

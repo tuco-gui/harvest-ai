@@ -89,8 +89,12 @@ export async function POST(req: Request) {
 
   // OTP para o próprio usuário definir a senha — o admin nunca vê a senha.
   const otp = await gerarCodigoRecuperacao(admin, email);
-  if ('codigo' in otp) {
-    await enviarEmail(email, 'Seu acesso ao Harvest AI', textoCodigoRecuperacao(otp.codigo, true, baseUrl));
+  if (!('codigo' in otp)) {
+    return NextResponse.json({ erro: 'Não consegui gerar o código de acesso.' }, { status: 500 });
+  }
+  const enviou = await enviarEmail(email, 'Seu acesso ao Harvest AI', textoCodigoRecuperacao(otp.codigo, true, baseUrl));
+  if (!enviou) {
+    return NextResponse.json({ erro: 'Falha ao enviar o e-mail de primeiro acesso. Verifique o SMTP.' }, { status: 502 });
   }
   return NextResponse.json({ id: data.user?.id, email, modo: 'otp', emailEnviado: true });
 }
@@ -140,11 +144,14 @@ export async function PATCH(req: Request) {
   if (!('codigo' in otp)) {
     return NextResponse.json({ erro: 'Não consegui enviar o código de recuperação.' }, { status: 500 });
   }
-  await enviarEmail(
+  const enviou = await enviarEmail(
     alvo.email!,
     'Sua senha no Harvest AI foi redefinida',
     textoCodigoRecuperacao(otp.codigo, false, baseUrl),
   );
+  if (!enviou) {
+    return NextResponse.json({ erro: 'Falha ao enviar o e-mail de redefinição. Verifique o SMTP.' }, { status: 502 });
+  }
   return NextResponse.json({ email: alvo.email, modo: 'otp', emailEnviado: true });
 }
 

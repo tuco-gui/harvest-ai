@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
-import { supabaseAdmin } from './supabase/server';
-import { resolverCredenciaisSmtp } from './smtpCredenciais';
+import { supabaseAdmin } from './supabase/server.ts';
+import { resolverCredenciaisSmtp } from './smtpCredenciais.ts';
 
 export type ConfigSmtp = {
   smtp_host: string | null;
@@ -11,6 +11,10 @@ export type ConfigSmtp = {
   smtp_reply_to: string | null;
 };
 
+// ponytail: smtp_senha legacy — LEGACY / DEPRECATED FOR STAGING AND PRODUCTION.
+// Staging e produção NUNCA consomem config_sistema (fail-closed em smtpCredenciais.ts);
+// este loader só é alcançado em desenvolvimento/local. Dívida técnica: remover/migrar
+// a coluna smtp_senha do banco futuramente.
 /** Lê configuração legada do banco (desenvolvimento/local). */
 export async function configuracaoSmtp(): Promise<ConfigSmtp | null> {
   const { data } = await supabaseAdmin().from('config_sistema').select('*').eq('id', 1).maybeSingle();

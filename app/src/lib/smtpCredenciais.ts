@@ -23,7 +23,11 @@
  * NUNCA retornar segredos ao frontend.
  */
 
-import { configuracaoSmtp as configuracaoSmtpBanco } from './email';
+// Import dinâmico (lazy) para não puxar supabase/server em runtime de teste.
+// O banco legacy só é usado no caminho de DESENVOLVIMENTO; em staging/prod
+// esse código nem é alcançado (fail-closed retorna null antes).
+
+import fs from 'node:fs';
 
 export type SmtpCredenciaisResolvidas = {
   host: string;
@@ -51,7 +55,6 @@ function detectarAmbiente(): AmbienteSmtp {
 
   // PRODUÇÃO: Docker Secrets presentes (Swarm)
   try {
-    const fs = require('fs');
     if (fs.existsSync('/run/secrets')) {
       return 'producao';
     }
@@ -70,7 +73,6 @@ function detectarAmbiente(): AmbienteSmtp {
 
 function lerDockerSecret(caminho: string): string | null {
   try {
-    const fs = require('fs');
     if (fs.existsSync(caminho)) {
       return fs.readFileSync(caminho, 'utf-8').trim();
     }
@@ -129,6 +131,19 @@ function resolverDoRuntime(): SmtpCredenciaisResolvidas | null {
 }
 
 /**
+ * Carrega credenciais do banco legacy (apenas desenvolvimento). Em produção o
+ * caller já retornou null antes de chegar aqui (fail-closed). O loader pode ser
+ * sobrescrito via globalThis.__smtpBancoLoader__ nos testes, evitando puxar
+ * supabase/server fora do Next.js.
+ */
+async function carregarBanco(): Promise<any> {
+  const loader = (globalThis as any).__smtpBancoLoader__;
+  if (typeof loader === 'function') return loader();
+  const { configuracaoSmtp } = await import('./email.ts');
+  return configuracaoSmtp();
+}
+
+/**
  * Resolve credenciais SMTP com FAIL-CLOSED em staging/produção.
  * 
  * Regras:
@@ -153,7 +168,7 @@ export async function resolverCredenciaisSmtp(): Promise<SmtpCredenciaisResolvid
   }
 
   // 3. DESENVOLVIMENTO/LOCAL: fallback para banco legacy (compatibilidade)
-  const banco = await configuracaoSmtpBanco();
+  const banco = await carregarBanco();
   if (banco?.smtp_host && banco.smtp_usuario && banco.smtp_senha) {
     return {
       host: banco.smtp_host,
