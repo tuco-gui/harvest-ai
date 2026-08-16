@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { senhaAleatoria } from '@/lib/senha';
 import { enviarEmail, configuracaoSmtp } from '@/lib/email';
-import { gerarCodigoRecuperacao, textoCodigoRecuperacao } from '@/lib/recuperacao';
+import { gerarCodigoRecuperacao, textoCodigoRecuperacao, baseUrlApp } from '@/lib/recuperacao';
 
 const PAPEIS = ['super_admin', 'admin', 'operador'] as const;
 type Papel = (typeof PAPEIS)[number];
@@ -56,6 +56,16 @@ export async function POST(req: Request) {
 
   const admin = supabaseAdmin();
 
+  // Base URL do ambiente (para o link do e-mail). Sem ela não enviamos e-mail
+  // apontando para lugar errado — erro claro ao admin, em vez de fallback.
+  const baseUrl = baseUrlApp();
+  if (!baseUrl) {
+    return NextResponse.json(
+      { erro: 'URL do app não configurada (NEXT_PUBLIC_APP_URL). Defina antes de criar usuários.' },
+      { status: 500 },
+    );
+  }
+
   // senhaAleatoria() é detalhe de bootstrap: o Auth exige uma senha no
   // createUser, mas ela NUNCA volta no corpo da resposta nem aparece na UI.
   const senha = senhaAleatoria();
@@ -80,7 +90,7 @@ export async function POST(req: Request) {
   // OTP para o próprio usuário definir a senha — o admin nunca vê a senha.
   const otp = await gerarCodigoRecuperacao(admin, email);
   if ('codigo' in otp) {
-    await enviarEmail(email, 'Seu acesso ao Harvest AI', textoCodigoRecuperacao(otp.codigo, true));
+    await enviarEmail(email, 'Seu acesso ao Harvest AI', textoCodigoRecuperacao(otp.codigo, true, baseUrl));
   }
   return NextResponse.json({ id: data.user?.id, email, modo: 'otp', emailEnviado: true });
 }
@@ -117,6 +127,14 @@ export async function PATCH(req: Request) {
     );
   }
 
+  const baseUrl = baseUrlApp();
+  if (!baseUrl) {
+    return NextResponse.json(
+      { erro: 'URL do app não configurada (NEXT_PUBLIC_APP_URL). Defina antes de redefinir senhas.' },
+      { status: 500 },
+    );
+  }
+
   // OTP vai para o USUÁRIO, não para o admin. Ele define a nova senha.
   const otp = await gerarCodigoRecuperacao(admin, alvo.email!);
   if (!('codigo' in otp)) {
@@ -125,7 +143,7 @@ export async function PATCH(req: Request) {
   await enviarEmail(
     alvo.email!,
     'Sua senha no Harvest AI foi redefinida',
-    textoCodigoRecuperacao(otp.codigo, false),
+    textoCodigoRecuperacao(otp.codigo, false, baseUrl),
   );
   return NextResponse.json({ email: alvo.email, modo: 'otp', emailEnviado: true });
 }

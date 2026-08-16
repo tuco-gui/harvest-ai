@@ -18,6 +18,18 @@ export function emailValido(email: string): boolean {
  * complexidade real para o mesmo resultado. O código resolve com uma
  * chamada de cliente só (`auth.verifyOtp`), sem depender de redirect.
  */
+/**
+ * Base URL pública do app, por ambiente. Lê NEXT_PUBLIC_APP_URL (ou a
+ * alternativa server-side APP_URL). Fail-closed: se nenhuma estiver
+ * configurada, retorna null — NUNCA cai para produção silenciosamente.
+ * Quem chama decide o que fazer (não enviar e-mail, ou erro claro ao admin).
+ */
+export function baseUrlApp(): string | null {
+  const bruta = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? '').trim();
+  if (!bruta) return null;
+  return bruta.replace(/\/+$/, ''); // tira barra final, se houver
+}
+
 export async function gerarCodigoRecuperacao(
   admin: SupabaseClient,
   email: string,
@@ -29,15 +41,23 @@ export async function gerarCodigoRecuperacao(
   return { codigo: data.properties.email_otp };
 }
 
-export function textoCodigoRecuperacao(codigo: string, primeiroAcesso: boolean): string {
+/**
+ * Texto do e-mail de recuperação/primeiro acesso. A URL é SEMPRE a do
+ * ambiente (baseUrl), vinda de NEXT_PUBLIC_APP_URL. Sem baseUrl não montamos
+ * link nenhum — falha fechado, em vez de apontar para produção por engano.
+ */
+export function textoCodigoRecuperacao(codigo: string, primeiroAcesso: boolean, baseUrl: string): string {
+  if (!baseUrl) {
+    throw new Error('baseUrlApp não configurada: não é possível montar o link de recuperação.');
+  }
+  const link = `${baseUrl}/verificar-codigo`;
   const contexto = primeiroAcesso
     ? 'Seu acesso ao Harvest AI foi criado. Use o código abaixo para definir sua senha e entrar pela primeira vez.'
     : 'Recebemos um pedido para redefinir sua senha no Harvest AI.';
   return (
     `${contexto}\n\n` +
     `Código: ${codigo}\n\n` +
-    `Entre em https://harvest.figueiramarketing.com.br/verificar-codigo, informe seu ` +
-    `e-mail e esse código, e defina a senha nova.\n\n` +
+    `Acesse ${link}, informe seu e-mail e esse código, e defina a senha nova.\n\n` +
     `O código expira em pouco tempo. Se você não pediu isso, pode ignorar este e-mail —` +
     ` sua senha atual continua valendo.`
   );

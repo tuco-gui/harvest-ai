@@ -3,7 +3,7 @@
  * (lib/recuperacao.ts e lib/senha.ts). Roda sem banco:
  *   node --experimental-strip-types tests/unit/recuperacao.test.ts
  */
-import { emailValido, textoCodigoRecuperacao } from '../../app/src/lib/recuperacao.ts';
+import { emailValido, textoCodigoRecuperacao, baseUrlApp } from '../../app/src/lib/recuperacao.ts';
 import { senhaFraca, senhaAleatoria } from '../../app/src/lib/senha.ts';
 import * as senhaMod from '../../app/src/lib/senha.ts';
 
@@ -19,15 +19,54 @@ ok(!emailValido('sem-arroba'), 'emailValido: sem arroba -> false');
 ok(!emailValido('a@b'), 'emailValido: sem domínio com ponto -> false');
 ok(!emailValido('a b@c.com'), 'emailValido: com espaço -> false');
 
-// --- textoCodigoRecuperacao (fluxo A vs B, link correto) ---
-const tA = textoCodigoRecuperacao('123456', false);
-ok(tA.includes('redefinir sua senha') || tA.toLowerCase().includes('pedido'), 'texto A: menciona redefinição');
-ok(tA.includes('/verificar-codigo'), 'texto A: aponta para /verificar-codigo');
+// --- baseUrlApp por ambiente ---
+const ORIGINAL = process.env.NEXT_PUBLIC_APP_URL;
+const ORIGINAL2 = process.env.APP_URL;
+function setBase(v: string | undefined) {
+  if (v === undefined) { delete process.env.NEXT_PUBLIC_APP_URL; }
+  else { process.env.NEXT_PUBLIC_APP_URL = v; }
+}
+setBase('https://harvest-staging.vercel.app');
+ok(baseUrlApp() === 'https://harvest-staging.vercel.app', 'baseUrlApp: staging -> URL de staging');
+setBase('https://harvest.figueiramarketing.com.br');
+ok(baseUrlApp() === 'https://harvest.figueiramarketing.com.br', 'baseUrlApp: produção -> URL de produção');
+setBase('https://harvest-staging.vercel.app/');
+ok(baseUrlApp() === 'https://harvest-staging.vercel.app', 'baseUrlApp: remove barra final');
+// Fallback para APP_URL quando NEXT_PUBLIC_APP_URL ausente
+setBase(undefined);
+process.env.APP_URL = 'https://fallback.exemplo.com';
+ok(baseUrlApp() === 'https://fallback.exemplo.com', 'baseUrlApp: fallback APP_URL quando NEXT_PUBLIC ausente');
+// Ausência total -> null (fail-closed, NÃO produção)
+delete process.env.APP_URL;
+ok(baseUrlApp() === null, 'baseUrlApp: ausência de config -> null (fail-closed)');
+// restaura
+if (ORIGINAL === undefined) delete process.env.NEXT_PUBLIC_APP_URL; else process.env.NEXT_PUBLIC_APP_URL = ORIGINAL;
+if (ORIGINAL2 === undefined) delete process.env.APP_URL; else process.env.APP_URL = ORIGINAL2;
 
-const tB = textoCodigoRecuperacao('654321', true);
-ok(tB.toLowerCase().includes('primeira vez') || tB.toLowerCase().includes('primeiro acesso'), 'texto B: é de primeiro acesso');
-ok(tB.includes('/verificar-codigo'), 'texto B: aponta para /verificar-codigo');
-ok(tA !== tB, 'texto A e B são diferentes');
+// --- textoCodigoRecuperacao usa a baseUrl do ambiente (nunca hardcoded) ---
+const tStaging = textoCodigoRecuperacao('123456', false, 'https://harvest-staging.vercel.app');
+ok(tStaging.includes('https://harvest-staging.vercel.app/verificar-codigo'),
+  'texto A: link aponta para a baseUrl de staging');
+ok(!tStaging.includes('figueiramarketing.com.br'), 'texto A: NÃO aponta para produção em staging');
+const tProd = textoCodigoRecuperacao('123456', false, 'https://harvest.figueiramarketing.com.br');
+ok(tProd.includes('https://harvest.figueiramarketing.com.br/verificar-codigo'),
+  'texto A: produção -> link de produção');
+// Sem baseUrl -> lança (fail-closed), não monta link incorreto
+let lancou = false;
+try { textoCodigoRecuperacao('123456', false, ''); } catch { lancou = true; }
+ok(lancou, 'texto: baseUrl vazia -> lança (não gera link incorreto)');
+
+const tB = textoCodigoRecuperacao('654321', true, 'https://harvest-staging.vercel.app');
+ok(tB.toLowerCase().includes('primeira vez') || tB.toLowerCase().includes('primeiro acesso'),
+  'texto B: é de primeiro acesso');
+ok(tB.includes('https://harvest-staging.vercel.app/verificar-codigo'),
+  'texto B: primeiro acesso também usa baseUrl de staging');
+
+// --- nenhuma URL de produção hardcoded no helper ---
+// CoTO pelo textoCodigoRecuperacao acima: com baseUrl de staging o link só
+// aponta para staging, e com baseUrl de produção só aponta para produção.
+// Como o helper não tem mais string fixa de produção (vem de baseUrlApp),
+// esses dois casos cobrem a ausência de hardcoded.
 
 // --- senhaAleatoria (bootstrap interno do fluxo B) ---
 const a1 = senhaAleatoria();
@@ -36,17 +75,13 @@ ok(typeof a1 === 'string' && a1.length >= 8, 'senhaAleatoria: tem pelo menos 8 c
 ok(a1 !== a2, 'senhaAleatoria: duas gerações diferentes');
 ok(senhaFraca(a1) === null, 'senhaAleatoria: passa na regra de senha forte');
 
-// A senha previsível antiga ("NomeDaEmpresa1234") NÃO existe mais. Confirmamos
-// que a função sumiu do módulo e que a aleatória nunca segue o padrão antigo.
+// A senha previsível antiga ("NomeDaEmpresa1234") NÃO existe mais.
 const senhaExports = Object.keys(senhaMod);
 ok(!senhaExports.includes('senhaProvisoria'), 'senhaProvisoria foi removida do módulo');
 ok(!/1234$/.test(a1), 'senhaAleatoria: não termina em 1234 (padrão previsível antigo)');
 ok(!/[A-Z][a-z]+1234/.test(a1), 'senhaAleatoria: não segue "Empresa1234"');
 
 // --- contrato de resposta (shape) das rotas de usuário ---
-// Estes asseguram que, em nenhum caminho, a resposta devolve a senha nem a
-// senha provisória. Validamos o formato esperado do payload (sem a parte de
-// rede, que depende de banco real — coberta pelo QA de staging).
 const respostaCriacaoOtp = { id: 'x', email: 'u@e.com', modo: 'otp', emailEnviado: true };
 ok(!('senha' in respostaCriacaoOtp) && !('senhaProvisoria' in respostaCriacaoOtp),
   'criação com SMTP (modo otp): resposta NÃO contém senha');

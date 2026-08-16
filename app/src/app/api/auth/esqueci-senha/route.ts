@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { enviarEmail } from '@/lib/email';
-import { gerarCodigoRecuperacao, textoCodigoRecuperacao } from '@/lib/recuperacao';
+import { gerarCodigoRecuperacao, textoCodigoRecuperacao, baseUrlApp } from '@/lib/recuperacao';
 
 /**
  * Esqueci minha senha — gera um código OTP de 6 dígitos e manda por e-mail.
@@ -24,12 +24,21 @@ export async function POST(req: Request) {
   const admin = supabaseAdmin();
   const res = await gerarCodigoRecuperacao(admin, email);
 
+  // Link do e-mail usa a base URL do ambiente (NEXT_PUBLIC_APP_URL). Sem ela,
+  // não montamos link nenhum — fail-closed (não apontamos para produção). O
+  // fluxo público continua 200 genérico para não vazar nada; o erro técnico
+  // fica só no log interno (sem segredo).
+  const baseUrl = baseUrlApp();
   if ('codigo' in res) {
-    await enviarEmail(
-      email,
-      'Redefinir sua senha no Harvest AI',
-      textoCodigoRecuperacao(res.codigo, false),
-    );
+    if (baseUrl) {
+      await enviarEmail(
+        email,
+        'Redefinir sua senha no Harvest AI',
+        textoCodigoRecuperacao(res.codigo, false, baseUrl),
+      );
+    } else {
+      console.error('[esqueci-senha] NEXT_PUBLIC_APP_URL ausente: não foi possível enviar o e-mail de recuperação.');
+    }
   }
   // Se deu erro (usuário inexistente, e-mail não confirmado etc.), caímos no
   // 200 genérico abaixo sem enviar nada.
