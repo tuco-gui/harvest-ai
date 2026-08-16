@@ -1,37 +1,27 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
-import { senhaProvisoria } from '@/lib/senha';
-import { enviarEmail } from '@/lib/email';
+import { senhaAleatoria } from '@/lib/senha';
+import { enviarEmail, configuracaoSmtp } from '@/lib/email';
+import { gerarCodigoRecuperacao, textoCodigoRecuperacao, baseUrlApp } from '@/lib/recuperacao';
 
 const PAPEIS = ['super_admin', 'admin', 'operador'] as const;
 type Papel = (typeof PAPEIS)[number];
 
-async function nomeDaConta(admin: ReturnType<typeof supabaseAdmin>, conta: string | null) {
-  if (!conta) return 'Figueira';
-  const { data } = await admin.from('contas').select('nome').eq('id', conta).maybeSingle();
-  return data?.nome ?? 'Harvest';
-}
-
-function textoConvite(email: string, senha: string) {
-  return (
-    `Seu acesso ao Harvest AI foi criado.\n\n` +
-    `Link: https://harvest.figueiramarketing.com.br/entrar\n` +
-    `E-mail: ${email}\n` +
-    `Senha provisória: ${senha}\n\n` +
-    `No primeiro login o sistema vai pedir para você trocar essa senha por uma só sua.`
-  );
-}
+const ERRO_SMTP =
+  'O envio de e-mail não está configurado. Configure o SMTP antes de criar novos usuários.';
 
 /**
- * Cria usuário. Duas permissões distintas:
- *  - super admin cria qualquer um, em qualquer conta, inclusive da agência
- *  - admin de conta cria só dentro da própria conta, e não cria super admin
+ * Cria usuário (primeiro acesso, fluxo B). Só existe um caminho:
+ *  - COM SMTP: nasce com senha aleatória INTERNA (só para "vestir" o Auth,
+ *    nunca exposta) + senha_provisoria=true; mandamos um código OTP de 6
+ *    dígitos por e-mail. A pessoa valida o código e define a senha dela.
+ *  - SEM SMTP: nem criamos — retornamos erro claro. Não há mais senha
+ *    provisória previsível (nome/empresa + 1234) nem qualquer segredo na
+ *    resposta. Sem e-mail não há como entregar o código, então o fluxo não
+ *    existe incompleto.
  *
- * A senha nasce previsível ("NomeDaEmpresa1234") em vez de aleatória: sem
- * SMTP não dá para confiar que a pessoa vai ver a senha só uma vez na tela,
- * então ela precisa ser algo que dê para repassar de cabeça. senha_provisoria
- * fica true, e o layout barra qualquer navegação até ela trocar por uma senha
- * de verdade — é o que torna essa previsibilidade segura.
+ * A permissão continua a mesma: super admin cria qualquer um; admin de conta
+ * cria só na própria conta e não cria outro super admin.
  */
 export async function POST(req: Request) {
   const perfil = await perfilAtual();
@@ -60,8 +50,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Escolha a conta do usuário.' }, { status: 400 });
   }
 
+  // Sem SMTP não dá para entregar o OTP — nem criamos o usuário.
+  const temSmtp = !!(await configuracaoSmtp());
+  if (!temSmtp) return NextResponse.json({ erro: ERRO_SMTP }, { status: 400 });
+
   const admin = supabaseAdmin();
-  const senha = senhaProvisoria(await nomeDaConta(admin, conta));
+
+  // Base URL do ambiente (para o link do e-mail). Sem ela não enviamos e-mail
+  // apontando para lugar errado — erro claro ao admin, em vez de fallback.
+  const baseUrl = baseUrlApp();
+  if (!baseUrl) {
+    return NextResponse.json(
+      { erro: 'URL do app não configurada (NEXT_PUBLIC_APP_URL). Defina antes de criar usuários.' },
+      { status: 500 },
+    );
+  }
+
+  // senhaAleatoria() é detalhe de bootstrap: o Auth exige uma senha no
+  // createUser, mas ela NUNCA volta no corpo da resposta nem aparece na UI.
+  const senha = senhaAleatoria();
 
   const { data, error } = await admin.auth.admin.createUser({
     email,
@@ -80,16 +87,23 @@ export async function POST(req: Request) {
 
   await admin.from('perfis').update({ senha_provisoria: true }).eq('id', data.user!.id);
 
-  const emailEnviado = await enviarEmail(email, 'Seu acesso ao Harvest AI', textoConvite(email, senha));
-
-  // A senha aparece aqui de qualquer forma — o e-mail é um extra, não uma garantia.
-  return NextResponse.json({ id: data.user?.id, email, senha, emailEnviado });
+  // OTP para o próprio usuário definir a senha — o admin nunca vê a senha.
+  const otp = await gerarCodigoRecuperacao(admin, email);
+  if (!('codigo' in otp)) {
+    return NextResponse.json({ erro: 'Não consegui gerar o código de acesso.' }, { status: 500 });
+  }
+  const enviou = await enviarEmail(email, 'Seu acesso ao Harvest AI', textoCodigoRecuperacao(otp.codigo, true, baseUrl));
+  if (!enviou) {
+    return NextResponse.json({ erro: 'Falha ao enviar o e-mail de primeiro acesso. Verifique o SMTP.' }, { status: 502 });
+  }
+  return NextResponse.json({ id: data.user?.id, email, modo: 'otp', emailEnviado: true });
 }
 
 /**
- * Gera uma senha nova para um usuário já existente. Cobre dois casos: ele
- * nunca recebeu a senha inicial (sem SMTP não há e-mail de convite) ou
- * esqueceu — sem SMTP também não há "esqueci minha senha" self-service.
+ * Redefinição de senha pedida pelo admin (não o self-service "esqueci").
+ * Mesmo padrão do primeiro acesso: o admin SÓ dispara o OTP para o usuário;
+ * quem define a nova senha é o próprio usuário em /verificar-codigo. O admin
+ * não recebe (e não pode receber) a senha final. Sem SMTP, erro de configuração.
  * Mesma regra de alcance do DELETE: admin só na própria conta.
  */
 export async function PATCH(req: Request) {
@@ -109,15 +123,36 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ erro: 'Esse usuário não é da sua conta.' }, { status: 403 });
   }
 
-  const senha = senhaProvisoria(await nomeDaConta(admin, alvo.conta_id));
-  const { error } = await admin.auth.admin.updateUserById(id, { password: senha });
-  if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+  const temSmtp = !!(await configuracaoSmtp());
+  if (!temSmtp) {
+    return NextResponse.json(
+      { erro: 'O envio de e-mail não está configurado. Configure o SMTP antes de redefinir senhas.' },
+      { status: 400 },
+    );
+  }
 
-  await admin.from('perfis').update({ senha_provisoria: true }).eq('id', id);
+  const baseUrl = baseUrlApp();
+  if (!baseUrl) {
+    return NextResponse.json(
+      { erro: 'URL do app não configurada (NEXT_PUBLIC_APP_URL). Defina antes de redefinir senhas.' },
+      { status: 500 },
+    );
+  }
 
-  const emailEnviado = await enviarEmail(alvo.email!, 'Sua senha no Harvest AI foi redefinida', textoConvite(alvo.email!, senha));
-
-  return NextResponse.json({ email: alvo.email, senha, emailEnviado });
+  // OTP vai para o USUÁRIO, não para o admin. Ele define a nova senha.
+  const otp = await gerarCodigoRecuperacao(admin, alvo.email!);
+  if (!('codigo' in otp)) {
+    return NextResponse.json({ erro: 'Não consegui enviar o código de recuperação.' }, { status: 500 });
+  }
+  const enviou = await enviarEmail(
+    alvo.email!,
+    'Sua senha no Harvest AI foi redefinida',
+    textoCodigoRecuperacao(otp.codigo, false, baseUrl),
+  );
+  if (!enviou) {
+    return NextResponse.json({ erro: 'Falha ao enviar o e-mail de redefinição. Verifique o SMTP.' }, { status: 502 });
+  }
+  return NextResponse.json({ email: alvo.email, modo: 'otp', emailEnviado: true });
 }
 
 /** Remove usuário. O perfil cai junto por cascade. */

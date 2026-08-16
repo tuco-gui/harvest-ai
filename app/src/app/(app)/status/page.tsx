@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+import { metadadosSmtp } from '@/lib/smtpCredenciais';
 
 type Item = { nome: string; ok: boolean; detalhe: string };
 
@@ -12,7 +13,21 @@ export default async function Pagina() {
   const { error: erroBanco } = await admin.from('contas').select('id').limit(1);
   const tempoBanco = Date.now() - inicio;
 
-  const { data: smtp } = await admin.from('config_sistema').select('smtp_senha').eq('id', 1).maybeSingle();
+  const smtpMeta = await metadadosSmtp();
+
+  // Classificação de estado SMTP (não executa envio a cada load)
+  let smtpEstado: 'não configurado' | 'configurado' | 'conexão validada' | 'envio validado' | 'entrega validada';
+  let smtpDetalhe: string;
+
+  if (!smtpMeta.configurado) {
+    smtpEstado = 'não configurado';
+    smtpDetalhe = `ambiente: ${smtpMeta.ambiente} — convites e senhas não saem por e-mail`;
+  } else {
+    smtpEstado = 'configurado';
+    smtpDetalhe = `ambiente: ${smtpMeta.ambiente} | fonte: ${smtpMeta.fonte} | ${smtpMeta.host}:${smtpMeta.porta}`;
+    // Nota: "conexão validada" / "envio validado" / "entrega validada"
+    // exigem teste explícito via /sistema (ação do super admin), não health check passivo.
+  }
 
   const itens: Item[] = [
     {
@@ -22,8 +37,8 @@ export default async function Pagina() {
     },
     {
       nome: 'E-mail do sistema (SMTP)',
-      ok: !!smtp?.smtp_senha,
-      detalhe: smtp?.smtp_senha ? 'configurado' : 'não configurado — convites e senhas aparecem só na tela',
+      ok: smtpMeta.configurado,
+      detalhe: smtpDetalhe,
     },
   ];
 
