@@ -9,7 +9,7 @@ export default async function Pagina() {
 
   const admin = supabaseAdmin();
   const [{ data: contas }, { data: perfis }] = await Promise.all([
-    admin.from('contas').select('id, nome, slug, ativo, criado_em').order('criado_em'),
+    admin.from('contas').select('id, nome, slug, ativo, criado_em, modulos_habilitados').order('criado_em'),
     admin.from('perfis').select('conta_id').not('conta_id', 'is', null),
   ]);
 

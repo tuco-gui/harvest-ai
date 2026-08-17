@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-type Conta = { id: string; nome: string; slug: string; ativo: boolean; criado_em: string };
+type Conta = {
+  id: string; nome: string; slug: string; ativo: boolean; criado_em: string;
+  modulos_habilitados: string[] | null;
+};
 
 export default function Contas({
   contas, contaAtiva, nUsuariosPorConta,
@@ -14,6 +17,7 @@ export default function Contas({
   const [nomeConta, setNomeConta] = useState('');
   const [criandoConta, setCriandoConta] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [salvandoModulo, setSalvandoModulo] = useState<string | null>(null);
 
   async function criarConta(e: React.FormEvent) {
     e.preventDefault();
@@ -65,6 +69,27 @@ export default function Contas({
     router.refresh();
   }
 
+  async function alternarCrm(c: Conta) {
+    const atuais = c.modulos_habilitados ?? ['whatsapp', 'ia', 'usuarios', 'chamados', 'status'];
+    const habilitado = atuais.includes('crm');
+    const novos = habilitado ? atuais.filter((m) => m !== 'crm') : [...atuais, 'crm'];
+    setAviso(null);
+    setSalvandoModulo(c.id);
+    const r = await fetch('/api/contas', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: c.id, modulos_habilitados: novos }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setSalvandoModulo(null);
+    if (!r.ok) {
+      setAviso(d.erro ?? 'Não foi possível alterar o CRM desta conta.');
+      return;
+    }
+    setAviso(habilitado ? `CRM desativado para ${c.nome}.` : `CRM liberado para ${c.nome}.`);
+    router.refresh();
+  }
+
   return (
     <div className="pagina" style={{ maxWidth: 940 }}>
       <section className="secao">
@@ -77,7 +102,7 @@ export default function Contas({
 
         <table className="tabela">
           <thead>
-            <tr><th>Empresa</th><th>Usuários</th><th>Criada</th><th className="acao">&nbsp;</th></tr>
+            <tr><th>Empresa</th><th>Usuários</th><th>Criada</th><th>CRM</th><th className="acao">&nbsp;</th></tr>
           </thead>
           <tbody>
             {contas.map((c) => (
@@ -94,6 +119,21 @@ export default function Contas({
                 <td style={{ color: 'var(--ink-3)' }}>
                   {new Date(c.criado_em).toLocaleDateString('pt-BR')}
                 </td>
+                <td>
+                  <span className="selo" data-zap-selo={c.modulos_habilitados?.includes('crm') ? 'sim' : 'nao'}>
+                    {c.modulos_habilitados?.includes('crm') ? 'Liberado' : 'Desativado'}
+                  </span>
+                  <button
+                    type="button"
+                    style={{ marginLeft: 8 }}
+                    disabled={salvandoModulo === c.id}
+                    onClick={() => alternarCrm(c)}
+                  >
+                    {salvandoModulo === c.id
+                      ? 'Salvando…'
+                      : c.modulos_habilitados?.includes('crm') ? 'Desativar' : 'Liberar'}
+                  </button>
+                </td>
                 <td className="acao">
                   {contaAtiva !== c.id && (
                     <button onClick={() => trabalharEm(c.id)}>Trabalhar nesta conta</button>
@@ -104,7 +144,7 @@ export default function Contas({
               </tr>
             ))}
             {!contas.length && (
-              <tr><td colSpan={4} style={{ color: 'var(--ink-3)' }}>Nenhuma conta ainda.</td></tr>
+              <tr><td colSpan={5} style={{ color: 'var(--ink-3)' }}>Nenhuma conta ainda.</td></tr>
             )}
           </tbody>
         </table>
