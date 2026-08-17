@@ -102,9 +102,9 @@ async function main() {
   assert(modulosDaConta(['whatsapp', 'crm'], 'super_admin').has('crm'), 'super admin enxerga CRM na conta habilitada');
 
   // --- Estágios (item 11: não hardcoded arbitrário, configurável) ---
-  assert(ESTAGIOS_CRM.length === 6, 'estágios configuráveis (6)');
+  assert(ESTAGIOS_CRM.length === 11, 'estágios configuráveis (7 de pipeline + 4 encerrados)');
   assert(nomeEstagio('ganho') === 'Ganho', 'nomeEstagio mapeia id');
-  assert(estagioValido('negociacao') && !estagioValido('xpto'), 'estagioValido valida');
+  assert(estagioValido('qualificando') && estagioValido('optout') && !estagioValido('xpto'), 'estagioValido valida');
 
   const b = new MemCrmBackend();
   const CONTA_A = 'conta-a';

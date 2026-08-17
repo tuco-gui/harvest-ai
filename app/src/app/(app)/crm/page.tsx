@@ -3,6 +3,7 @@ import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { crmBackend } from '@/lib/twenty';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import CrmPipeline from '@/componentes/CrmPipeline';
+import { carregarCanais } from '@/lib/whatsappCanais';
 
 export default async function PaginaCrm() {
   const perfil = await perfilAtual();
@@ -14,13 +15,16 @@ export default async function PaginaCrm() {
   if (!(await perfilTemModulo(admin, perfil, 'crm'))) redirect('/');
 
   const backend = crmBackend();
-  const [ops, ownersData] = await Promise.all([
+  const [ops, ownersData, campanhasData, canais] = await Promise.all([
     backend.listar(perfil.conta_id),
     admin
       .from('perfis')
       .select('id, nome, email')
       .eq('conta_id', perfil.conta_id)
       .order('nome'),
+    admin.from('prospecta_campanhas').select('id, nome')
+      .eq('conta_id', perfil.conta_id).order('criado_em', { ascending: false }).limit(100),
+    carregarCanais(admin, perfil.conta_id),
   ]);
 
   const owners = (ownersData.data ?? []).map((p: any) => ({
@@ -29,14 +33,22 @@ export default async function PaginaCrm() {
   }));
 
   return (
-    <div className="pagina pagina-larga">
+    <div className="pagina pagina-larga crm-pagina">
       <header className="cabecalho-pagina">
-        <h1>CRM</h1>
+        <p className="label">Comercial</p>
+        <h1>Pipeline de vendas</h1>
         <p className="ajuda">
-          Pipeline de oportunidades. Arraste os cards entre os estágios. Clique para abrir a ficha.
+          Acompanhe oportunidades, próximas ações e conversas em um único lugar.
         </p>
       </header>
-      <CrmPipeline oportunidades={ops} owners={owners} />
+      <CrmPipeline
+        oportunidades={ops}
+        owners={owners}
+        campanhas={(campanhasData.data ?? []) as { id: number; nome: string }[]}
+        canais={canais.filter((c) => c.ativo && c.status === 'conectado').map((c) => ({
+          id: c.id, nome: c.nome, numero: c.numero, provider: c.provider,
+        }))}
+      />
     </div>
   );
 }
