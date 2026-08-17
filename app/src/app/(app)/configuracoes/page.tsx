@@ -55,7 +55,7 @@ export default async function Pagina() {
       tipo: 'Disparo',
       empresa: m.prospecta_leads?.empresa ?? 'Lead removido',
       erro: m.erro ?? 'Sem detalhe.',
-      quando: new Date(m.criado_em).toLocaleString('pt-BR'),
+      quando: new Date(m.criado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
       quandoOrdenar: m.criado_em,
     })),
     ...(leadsComErro ?? []).map((l: any) => ({

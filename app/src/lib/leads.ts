@@ -78,7 +78,18 @@ export async function salvarLeads(
     await vincularLeadsACampanha(admin, contaId, campanhaId, idsParaVincular, origem as 'busca' | 'planilha' | 'manual');
   }
 
-  const idsCampanhaAnterior = [...new Set(duplicados.map((l) => existentes[l.place_id]).filter((id): id is number => !!id))];
+  // Um lead pode estar em várias listas/campanhas pelo vínculo N:N. Mostrar
+  // apenas a antiga FK campanha_id gerava o aviso vago "já está em outra"
+  // mesmo quando o sistema sabia exatamente em quais listas ele estava.
+  const idsDuplicados = duplicados.map((l) => idExistente[l.place_id]).filter((id): id is number => !!id);
+  const { data: vinculosAnteriores } = idsDuplicados.length
+    ? await admin.from('campanha_leads').select('lead_id, campanha_id')
+        .eq('conta_id', contaId).in('lead_id', idsDuplicados)
+    : { data: [] };
+  const idsCampanhaAnterior = [...new Set([
+    ...duplicados.map((l) => existentes[l.place_id]).filter((id): id is number => !!id),
+    ...(vinculosAnteriores ?? []).map((v: any) => v.campanha_id as number),
+  ])];
   let nomesCampanha: Record<number, string> = {};
   if (idsCampanhaAnterior.length) {
     const { data: campanhasAnteriores } = await admin.from('prospecta_campanhas').select('id, nome').in('id', idsCampanhaAnterior);
@@ -88,9 +99,18 @@ export async function salvarLeads(
   const porPlaceId: Record<string, InfoDuplicado> = {};
   for (const l of leads) {
     const campanhaAnteriorId = existentes[l.place_id];
+    const leadId = idExistente[l.place_id];
+    const nomesVinculados = (vinculosAnteriores ?? [])
+      .filter((v: any) => v.lead_id === leadId)
+      .map((v: any) => nomesCampanha[v.campanha_id])
+      .filter(Boolean);
+    if (campanhaAnteriorId && nomesCampanha[campanhaAnteriorId]) {
+      nomesVinculados.unshift(nomesCampanha[campanhaAnteriorId]);
+    }
+    const nomesUnicos = [...new Set(nomesVinculados)];
     porPlaceId[l.place_id] = {
       duplicado: l.place_id in existentes,
-      campanhaAnterior: campanhaAnteriorId ? (nomesCampanha[campanhaAnteriorId] ?? null) : null,
+      campanhaAnterior: nomesUnicos.length ? nomesUnicos.join(', ') : null,
       id: idExistente[l.place_id] ?? idPorPlaceIdNovo[l.place_id] ?? null,
     };
   }

@@ -52,10 +52,19 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
   if (leadIds.length) {
-    await vincularLeadsACampanha(admin, perfil.conta_id, data.id, leadIds, 'manual');
+    try {
+      await vincularLeadsACampanha(admin, perfil.conta_id, data.id, leadIds, 'manual');
+    } catch (e) {
+      // Não confirma uma campanha vazia quando o vínculo falhou. A linha foi
+      // criada nesta mesma requisição e ainda não possui histórico.
+      await admin.from('prospecta_campanhas').delete()
+        .eq('id', data.id).eq('conta_id', perfil.conta_id);
+      const detalhe = e instanceof Error ? e.message : 'Falha ao vincular os leads.';
+      return NextResponse.json({ erro: detalhe }, { status: 500 });
+    }
   }
 
-  return NextResponse.json({ id: data.id });
+  return NextResponse.json({ id: data.id, leadsVinculados: encontradas });
 }
 
 /** Atualiza nome e/ou os números de "encontradas"/"com WhatsApp" — chamado

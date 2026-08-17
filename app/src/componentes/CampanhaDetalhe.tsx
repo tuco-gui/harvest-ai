@@ -41,7 +41,12 @@ type Campanha = {
 
 type Metricas = {
   enviadas: number; leadsContatados: number; erros: number;
-  bloqueados: number; respondidos: number; optouts: number; elegiveis?: number;
+  bloqueados: number; respondidos: number; optouts: number; elegiveis?: number; errosEnriquecimento?: number;
+};
+
+type Tentativa = {
+  id: number; leadId: number | null; empresa: string; status: string; motivo: string | null;
+  provider: string; canalId: number | null; criadoEm: string;
 };
 
 const NOME_ORIGEM: Record<string, string> = { busca: 'Busca', planilha: 'Planilha', manual: 'Manual' };
@@ -57,10 +62,11 @@ const CADENCIAS: Record<string, [number, number] | null> = {
 };
 
 export default function CampanhaDetalhe({
-  campanha, leads: leadsIniciais, intervaloMin, intervaloMax, canais, metricas, crmHabilitado = false,
+  campanha, leads: leadsIniciais, intervaloMin, intervaloMax, canais, metricas,
+  tentativasRecentes = [], crmHabilitado = false,
 }: {
   campanha: Campanha; leads: Lead[]; intervaloMin: number; intervaloMax: number; canais: Canal[];
-  metricas?: Metricas; crmHabilitado?: boolean;
+  metricas?: Metricas; tentativasRecentes?: Tentativa[]; crmHabilitado?: boolean;
 }) {
   const router = useRouter();
   const [leads, setLeads] = useState(leadsIniciais);
@@ -74,8 +80,12 @@ export default function CampanhaDetalhe({
   // o card "já disparado" era marcado incondicionalmente pra todo lead
   // processado, mesmo quando o envio falhava ou era bloqueado por
   // supressão. Isso fazia a lista contradizer o que de fato saiu.
-  const [resultadosDisparo, setResultadosDisparo] = useState<Record<number, 'enviado' | 'erro' | 'bloqueado'>>({});
+  const [resultadosDisparo, setResultadosDisparo] = useState<Record<number, {
+    status: 'enviado' | 'erro' | 'bloqueado'; motivo?: string;
+  }>>({});
   const [filtroSituacao, setFiltroSituacao] = useState<'todos' | SituacaoContato>('todos');
+  const [mostrarLog, setMostrarLog] = useState(false);
+  const [segundosAteProximo, setSegundosAteProximo] = useState<number | null>(null);
 
   // Número de envio (Fase 3B.1): fixo num canal escolhido, ou rodízio entre os ativos.
   const canaisConectados = canais.filter((c) => c.ativo && c.status === 'conectado');
@@ -167,7 +177,6 @@ export default function CampanhaDetalhe({
     }
   }
 
-  const comZap = leads.filter((l) => l.tem_whatsapp === 'sim').length;
   const leadsVisiveis = filtroSituacao === 'todos'
     ? leads
     : leads.filter((lead) => lead.situacao_contato === filtroSituacao);
@@ -177,7 +186,18 @@ export default function CampanhaDetalhe({
   }
   const todas = () => setEscolhidos(new Set(leads.map((l) => l.id)));
   const nenhuma = () => setEscolhidos(new Set());
-  const soZap = () => setEscolhidos(new Set(leads.filter((l) => l.tem_whatsapp === 'sim').map((l) => l.id)));
+  const soComTelefone = () => setEscolhidos(new Set(leads.filter((l) => Boolean(l.telefone)).map((l) => l.id)));
+  const contagemSituacao = (situacao: SituacaoContato) => leads.filter((l) => l.situacao_contato === situacao).length;
+
+  async function aguardarComContagem(segundos: number) {
+    const total = Math.max(1, Math.ceil(segundos));
+    for (let restante = total; restante > 0 && !pararRef.atual; restante--) {
+      setSegundosAteProximo(restante);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+    setSegundosAteProximo(null);
+  }
 
   function alternarDetalhes(id: number, e: React.MouseEvent) {
     e.stopPropagation();
@@ -254,13 +274,13 @@ export default function CampanhaDetalhe({
       const resultado: 'enviado' | 'erro' | 'bloqueado' = r?.ok
         ? 'enviado'
         : dados?.suprimido ? 'bloqueado' : 'erro';
-      setResultadosDisparo((atual) => ({ ...atual, [l.id]: resultado }));
+      setResultadosDisparo((atual) => ({ ...atual, [l.id]: { status: resultado, motivo: dados?.erro } }));
       setLeads((atual) => atual.map((x) => (x.id === l.id && resultado === 'enviado' ? { ...x, disparo: 'sim' } : x)));
       setProgresso({ feito: i + 1, total: alvos.length });
       if (i < alvos.length - 1 && !pararRef.atual) {
         const espera = min + Math.random() * (max - min);
         // eslint-disable-next-line no-await-in-loop
-        await new Promise((res) => setTimeout(res, espera * 1000));
+        await aguardarComContagem(espera);
       }
     }
     setDisparando(false);
@@ -390,13 +410,47 @@ export default function CampanhaDetalhe({
         </div>
       </div>
 
+      <div className="barra-lista" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <strong style={{ fontSize: 13 }}>Acompanhamento do disparo</strong>
+          <span className="ajuda" style={{ marginLeft: 8 }}>
+            {tentativasRecentes.length ? `${tentativasRecentes.length} evento(s) recente(s)` : 'nenhuma tentativa registrada'}
+          </span>
+        </div>
+        <button type="button" onClick={() => setMostrarLog((v) => !v)}>
+          {mostrarLog ? 'Ocultar log' : 'Ver log'}
+        </button>
+      </div>
+
+      {mostrarLog && (
+        <div className="barra-lista" style={{ display: 'block' }}>
+          <p className="ajuda" style={{ marginTop: 0 }}>
+            Enriquecimento é separado do envio. Há {metricas?.errosEnriquecimento ?? 0} falha(s) de enriquecimento nesta campanha.
+          </p>
+          <ul className="lista" style={{ margin: 0 }}>
+            {tentativasRecentes.map((evento) => (
+              <li key={evento.id} className="linha" style={{ cursor: 'default', gridTemplateColumns: 'minmax(160px,1fr) 130px minmax(240px,2fr)' }}>
+                <span><b>{evento.empresa}</b><small className="ajuda" style={{ display: 'block' }}>
+                  {new Date(evento.criadoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                </small></span>
+                <span className="selo" data-zap-selo={evento.status === 'enviado' ? 'sim' : evento.status === 'erro' ? 'nao' : 'incerto'}>
+                  {{ enviado: 'Enviado', erro: 'Erro', bloqueado_supressao: 'Bloqueado', recebido: 'Resposta', optout: 'Opt-out' }[evento.status] ?? evento.status}
+                </span>
+                <span className="ajuda">{evento.motivo ?? `${evento.provider.toUpperCase()} confirmou o evento.`}</span>
+              </li>
+            ))}
+            {!tentativasRecentes.length && <li className="vazio">Nenhuma tentativa registrada para esta campanha.</li>}
+          </ul>
+        </div>
+      )}
+
       <div className="barra-lista">
         <div className="acoes">
           <button type="button" onClick={todas}>Selecionar todas</button>
           <div className="sep" />
           <button type="button" onClick={nenhuma}>Limpar seleção</button>
           <div className="sep" />
-          <button type="button" onClick={soZap}>Só com WhatsApp</button>
+          <button type="button" onClick={soComTelefone}>Só com telefone</button>
           <div className="sep" />
           <button type="button" disabled={!escolhidos.size} onClick={enriquecerSelecionados}>
             Enriquecer selecionados
@@ -419,12 +473,12 @@ export default function CampanhaDetalhe({
           <select value={filtroSituacao} onChange={(e) => setFiltroSituacao(e.target.value as 'todos' | SituacaoContato)}
             style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
             <option value="todos">Todos ({leads.length})</option>
-            <option value="respondido">Responderam</option>
-            <option value="optout">Pediram para sair</option>
-            <option value="sem_resposta">Enviados sem resposta</option>
-            <option value="bloqueado">Bloqueados</option>
-            <option value="erro">Erros</option>
-            <option value="nao_contatado">Ainda não contatados</option>
+            <option value="respondido">Responderam ({contagemSituacao('respondido')})</option>
+            <option value="optout">Pediram para sair ({contagemSituacao('optout')})</option>
+            <option value="sem_resposta">Enviados sem resposta ({contagemSituacao('sem_resposta')})</option>
+            <option value="bloqueado">Bloqueados ({contagemSituacao('bloqueado')})</option>
+            <option value="erro">Erros de envio ({contagemSituacao('erro')})</option>
+            <option value="nao_contatado">Ainda não contatados ({contagemSituacao('nao_contatado')})</option>
           </select>
           {filtroSituacao !== 'todos' && <span className="ajuda">{leadsVisiveis.length} lead(s) neste filtro</span>}
         </div>
@@ -432,13 +486,13 @@ export default function CampanhaDetalhe({
 
       {progresso && (() => {
         const contagem = Object.values(resultadosDisparo).reduce(
-          (acc, r) => ({ ...acc, [r]: acc[r] + 1 }),
+          (acc, r) => ({ ...acc, [r.status]: acc[r.status] + 1 }),
           { enviado: 0, erro: 0, bloqueado: 0 } as Record<'enviado' | 'erro' | 'bloqueado', number>,
         );
         return (
           <p className="ajuda">
             {disparando ? 'Disparando' : 'Disparo concluído'} {progresso.feito} de {progresso.total}
-            {intervaloMin && disparando ? ` — intervalo de ${intervaloMin}–${intervaloMax}s entre envios` : ''}
+            {segundosAteProximo !== null && disparando ? ` — próximo envio em ${segundosAteProximo}s. Não feche esta tela.` : ''}
             {progresso.feito > 0 && (
               <> — {contagem.enviado} enviado(s){contagem.bloqueado ? `, ${contagem.bloqueado} bloqueado(s) por opt-out` : ''}
                 {contagem.erro ? `, ${contagem.erro} com erro` : ''}.</>
@@ -495,7 +549,7 @@ export default function CampanhaDetalhe({
               </span>
               <span className="zap">
                 <span className="selo" data-zap-selo={l.tem_whatsapp === 'sim' ? 'sim' : l.tem_whatsapp === 'nao' ? 'nao' : 'incerto'}>
-                  {l.tem_whatsapp === 'sim' ? 'WhatsApp' : l.tem_whatsapp === 'nao' ? 'Sem WhatsApp' : 'Não verificado'}
+                  {l.tem_whatsapp === 'sim' ? 'WhatsApp verificado' : l.telefone ? 'Telefone cadastrado' : 'Sem telefone'}
                 </span>
                 <span className="zap-numero">{l.telefone_original ?? 'sem telefone'}</span>
                 <span className="ajuda" style={{ display: 'block', color:
@@ -509,12 +563,14 @@ export default function CampanhaDetalhe({
                     nao_contatado: 'ainda não contatado',
                   }[l.situacao_contato]}
                 </span>
-                {resultadosDisparo[l.id] === 'enviado' && <span className="ajuda">enviado agora</span>}
-                {resultadosDisparo[l.id] === 'bloqueado' && (
+                {resultadosDisparo[l.id]?.status === 'enviado' && <span className="ajuda">enviado agora</span>}
+                {resultadosDisparo[l.id]?.status === 'bloqueado' && (
                   <span className="ajuda" style={{ color: 'var(--ink-2)' }}>bloqueado — opt-out</span>
                 )}
-                {resultadosDisparo[l.id] === 'erro' && (
-                  <span className="ajuda" style={{ color: 'var(--red)' }}>erro no envio</span>
+                {resultadosDisparo[l.id]?.status === 'erro' && (
+                  <span className="ajuda" style={{ color: 'var(--red)' }}>
+                    erro no envio: {resultadosDisparo[l.id]?.motivo ?? 'consulte o log'}
+                  </span>
                 )}
                 {!resultadosDisparo[l.id] && l.disparo === 'sim' && <span className="ajuda">já disparado</span>}
                 <button type="button" className="ver-detalhes" onClick={(e) => alternarDetalhes(l.id, e)}>
