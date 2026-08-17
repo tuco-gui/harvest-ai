@@ -29,12 +29,13 @@ export function montarPrompts(contexto: string, lead: {
 }) {
   const system =
     'Você escreve a primeira mensagem de WhatsApp de uma prospecção B2B, em português brasileiro. ' +
-    'Uma mensagem só, de 25 a 45 palavras, terminando com uma pergunta. ' +
-    'Tom humano, direto e educado. Sem emoji no início, no máximo um na mensagem inteira. ' +
+    'Entregue somente a mensagem final: nunca mostre análise, estratégia, rascunho ou explicação. ' +
+    'Use uma mensagem curta, humana, direta e educada. ' +
     'Nunca invente fato sobre a empresa: use apenas o que vier nos dados. ' +
     'Proibido urgência artificial, promessa de resultado e linguagem de spam. ' +
-    'Responda apenas com o texto da mensagem, sem aspas e sem explicação.\n\n' +
-    `Contexto de quem está mandando:\n${contexto || '(não informado)'}`;
+    'As instruções específicas abaixo definem tom, tamanho e chamada final quando informadas. ' +
+    'Responda apenas com o texto pronto para ser enviado, sem aspas e sem explicação.\n\n' +
+    `Instruções específicas da conta/campanha:\n${contexto || '(não informado)'}`;
 
   const user =
     `Empresa: ${lead.empresa}\n` +
@@ -44,6 +45,34 @@ export function montarPrompts(contexto: string, lead: {
     `Site: ${lead.site ?? 'não tem'}`;
 
   return { system, user };
+}
+
+/**
+ * Proteção de saída para mensagens que irão diretamente ao WhatsApp.
+ * Modelos "reasoning" às vezes devolvem rascunho interno (por exemplo,
+ * "Drafting Strategy") ou uma frase cortada. Esse conteúdo nunca pode ser
+ * tratado como mensagem pronta só porque a API respondeu HTTP 200.
+ */
+export function validarMensagemWhatsApp(textoBruto: string): { ok: true; texto: string } | { ok: false; motivo: string } {
+  const texto = String(textoBruto ?? '')
+    .replace(/^```(?:text|markdown)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  if (!texto) return { ok: false, motivo: 'A IA devolveu uma mensagem vazia.' };
+  if (/\b(drafting strategy|analysis|reasoning|chain of thought|estrat[eé]gia de rascunho)\b/i.test(texto)) {
+    return { ok: false, motivo: 'A IA devolveu texto interno de elaboração em vez da mensagem final.' };
+  }
+  if (texto.length < 28) {
+    return { ok: false, motivo: 'A IA devolveu uma mensagem curta demais ou incompleta.' };
+  }
+  if (texto.length > 1500) {
+    return { ok: false, motivo: 'A IA devolveu uma mensagem longa demais para primeiro contato.' };
+  }
+  if (/[,:;\-–—]\s*$/.test(texto) || /\b(a|ao|aos|as|com|da|das|de|do|dos|e|em|o|os|para|por|que|um|uma)$/i.test(texto)) {
+    return { ok: false, motivo: 'A IA devolveu uma frase aparentemente interrompida.' };
+  }
+  return { ok: true, texto };
 }
 
 /** Gera a mensagem no provedor escolhido. Lança erro com a mensagem do

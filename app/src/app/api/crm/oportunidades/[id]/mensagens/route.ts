@@ -48,7 +48,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const mensagens = [
     ...(saidas.data ?? []).map((m: any) => ({
-      id: `s-${m.id}`, direcao: 'saida', texto: m.conteudo, status: m.status,
+      id: `s-${m.id}`, direcao: 'saida', texto: m.conteudo || 'Mensagem não enviada', status: m.status,
       data: m.enviado_em ?? m.criado_em, erro: m.erro ?? null,
     })),
     ...(entradas.data ?? []).map((m: any) => ({

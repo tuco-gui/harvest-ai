@@ -35,7 +35,9 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
         carregarCanais(admin, campanha!.conta_id).then((data) => ({ data })),
         // Métricas duráveis (Entrega 12): calculadas no servidor a partir do
         // histórico real, não de estado do navegador — sobrevivem a refresh.
-        admin.from('historico_contato').select('status, lead_id, criado_em').eq('campanha_id', id).order('criado_em'),
+        admin.from('historico_contato')
+          .select('id, status, lead_id, criado_em, motivo_bloqueio, provider, canal_id')
+          .eq('campanha_id', id).eq('conta_id', campanha!.conta_id).order('criado_em'),
         // Entrega 22: para "elegíveis" (tem telefone válido e não está
         // suprimido) — supressão é por telefone normalizado dentro da conta,
         // não por lead (ver lib/supressao.ts).
@@ -104,6 +106,19 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     return norm && !telefonesSuprimidos.has(norm);
   }).length;
 
+  const nomePorLead = new Map(leadsBase.map((lead) => [lead.id, lead.empresa]));
+  const tentativasRecentes = linhasHistorico.slice(-50).reverse().map((linha) => ({
+    id: linha.id,
+    leadId: linha.lead_id,
+    empresa: linha.lead_id ? nomePorLead.get(linha.lead_id) ?? `Lead #${linha.lead_id}` : 'Contato não identificado',
+    status: linha.status,
+    motivo: linha.motivo_bloqueio ?? null,
+    provider: linha.provider,
+    canalId: linha.canal_id ?? null,
+    criadoEm: linha.criado_em,
+  }));
+  const errosEnriquecimento = leads.filter((lead) => Boolean(lead.erro_enriquecimento)).length;
+
   const { data: contaDaCampanha } = await admin
     .from('contas')
     .select('modulos_habilitados')
@@ -119,7 +134,8 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
       intervaloMax={envio?.intervalo_max ?? 60}
       canais={canais ?? []}
       crmHabilitado={crmHabilitado}
-      metricas={{ enviadas, leadsContatados, erros, bloqueados, respondidos, optouts, elegiveis }}
+      tentativasRecentes={tentativasRecentes}
+      metricas={{ enviadas, leadsContatados, erros, bloqueados, respondidos, optouts, elegiveis, errosEnriquecimento }}
     />
   );
 }

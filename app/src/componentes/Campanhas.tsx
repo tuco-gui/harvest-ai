@@ -78,7 +78,7 @@ export default function Campanhas({
           <thead>
             <tr>
               <th>Campanha</th><th>Origem</th><th>Quando</th>
-              <th>Encontradas</th><th>Com WhatsApp</th><th>Enviadas</th><th>Erro</th><th>Bloqueado</th><th>Respondeu</th>
+              <th>Encontradas</th><th>WhatsApp verificado</th><th>Enviadas</th><th>Erro</th><th>Bloqueado</th><th>Respondeu</th>
               {podeConfigurar && <th style={{ textAlign: 'right' }}>Ações</th>}
             </tr>
           </thead>
@@ -91,7 +91,7 @@ export default function Campanhas({
                   </Link>
                 </td>
                 <td style={{ color: 'var(--ink-2)' }}>{NOME_ORIGEM[c.origem] ?? c.origem}</td>
-                <td style={{ color: 'var(--ink-3)' }}>{new Date(c.criado_em).toLocaleString('pt-BR')}</td>
+                <td style={{ color: 'var(--ink-3)' }}>{new Date(c.criado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
                 <td>{c.encontradas}</td>
                 <td>{c.com_whatsapp}</td>
                 <td style={{ color: 'var(--green)' }}>{c.enviadas}</td>
@@ -152,7 +152,7 @@ export default function Campanhas({
                   <tr key={c.id} style={{ color: 'var(--ink-3)' }}>
                     <td>{c.nome}</td>
                     <td>{NOME_ORIGEM[c.origem] ?? c.origem}</td>
-                    <td>{new Date(c.criado_em).toLocaleString('pt-BR')}</td>
+                    <td>{new Date(c.criado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
                     <td>{c.enviadas}</td>
                     <td>{c.respondeu}</td>
                     <td>
@@ -188,7 +188,7 @@ export default function Campanhas({
                     </Link>
                   </td>
                   <td style={{ color: 'var(--ink-2)' }}>{NOME_ORIGEM[l.origem] ?? l.origem}</td>
-                  <td style={{ color: 'var(--ink-3)' }}>{new Date(l.criado_em).toLocaleString('pt-BR')}</td>
+                  <td style={{ color: 'var(--ink-3)' }}>{new Date(l.criado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
                   <td>{l.encontradas}</td>
                   {podeConfigurar && (
                     <td style={{ whiteSpace: 'nowrap' }}>

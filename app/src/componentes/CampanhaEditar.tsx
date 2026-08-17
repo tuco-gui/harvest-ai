@@ -101,13 +101,24 @@ export default function CampanhaEditar({
     setSalvando(true);
     setAviso(null);
     try {
+      const mensagensDaCampanha = msgModo === 'fixa'
+        ? [msgTextos[0] ?? ''].filter((t) => t.trim())
+        : msgModo === 'rodizio' ? msgTextos.filter((t) => t.trim()) : [];
+      if (msgModo === 'fixa' && !mensagensDaCampanha.length) {
+        setAviso('Digite a mensagem fixa antes de salvar.');
+        return;
+      }
+      if (msgModo === 'rodizio' && mensagensDaCampanha.length < 2) {
+        setAviso('O rodízio precisa de pelo menos duas mensagens.');
+        return;
+      }
       const body: Record<string, unknown> = {
         id: campanha.id,
         nome: nome.trim() || campanha.nome,
         modoEnvio,
         canalIds: Array.from(canalIds),
         mensagemModo: msgModo === 'padrao' ? null : msgModo,
-        mensagens: msgModo === 'rodizio' ? msgTextos.filter((t) => t.trim()) : [],
+        mensagens: mensagensDaCampanha,
         contextoIa: msgModo === 'ia' ? msgContextoIa : null,
         cadenciaModo,
         cadenciaMin: cadenciaModo === 'personalizada' ? Number(cadenciaMin) : null,
@@ -207,10 +218,15 @@ export default function CampanhaEditar({
         <select value={msgModo} onChange={(e) => setMsgModo(e.target.value)}
           style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
           <option value="padrao">Usar configuração padrão da conta</option>
-          <option value="fixa">Mensagem fixa (usa a config. da conta)</option>
+          <option value="fixa">Mensagem fixa desta campanha</option>
           <option value="rodizio">Rodízio de mensagens (2 a 5, específicas desta campanha)</option>
           <option value="ia">A IA escreve (contexto específico desta campanha)</option>
         </select>
+        {msgModo === 'fixa' && (
+          <textarea value={msgTextos[0] ?? ''} rows={4} placeholder="Digite a mensagem exata que será enviada"
+            onChange={(e) => setMsgTextos((arr) => [e.target.value, ...arr.slice(1)])}
+            style={{ marginTop: 8, width: '100%', maxWidth: 480, padding: 8, background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
+        )}
         {msgModo === 'rodizio' && (
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 480 }}>
             {msgTextos.map((t, i) => (

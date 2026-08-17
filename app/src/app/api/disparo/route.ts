@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
-import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
+import { gerarComIA, montarPrompts, validarMensagemWhatsApp, type ProvedorIA } from '@/lib/ia';
 import { getOrCreateSession, sendText as wahaSendText, usaWaha as ehWaha } from '@/lib/waha';
 import { normalizarTelefone } from '@/lib/telefone';
 import { estaSuprimido } from '@/lib/supressao';
@@ -52,6 +52,41 @@ export async function POST(req: Request) {
 
   const admin = supabaseAdmin();
 
+  // O id recebido da tela é a identidade canônica. Reencontrar o lead por
+  // place_id criava/selecionava outro registro em alguns casos e separava a
+  // mensagem da oportunidade que o CRM já tinha vinculada.
+  const leadIdRecebido = Number(lead.id);
+  const { data: leadPersistido } = Number.isInteger(leadIdRecebido)
+    ? await admin.from('prospecta_leads')
+        .select('id, conta_id, place_id, empresa, telefone, telefone_original')
+        .eq('id', leadIdRecebido).eq('conta_id', perfil.conta_id).maybeSingle()
+    : { data: null };
+  if (!leadPersistido) {
+    return NextResponse.json({ erro: 'Lead não encontrado na conta ativa.' }, { status: 404 });
+  }
+  if (campanhaIdNum !== null) {
+    const { data: vinculo } = await admin.from('campanha_leads').select('id')
+      .eq('conta_id', perfil.conta_id).eq('campanha_id', campanhaIdNum)
+      .eq('lead_id', leadPersistido.id).maybeSingle();
+    const { data: vinculoLegado } = vinculo ? { data: vinculo } : await admin.from('prospecta_leads')
+      .select('id').eq('id', leadPersistido.id).eq('campanha_id', campanhaIdNum).maybeSingle();
+    if (!vinculoLegado) {
+      return NextResponse.json({ erro: 'Este lead não pertence à campanha informada.' }, { status: 400 });
+    }
+  }
+
+  async function registrarFalha(motivo: string, provider: ProviderContato = 'waha', canal: CanalWhatsApp | null = null) {
+    const { data: msg } = await admin.from('prospecta_mensagens').insert({
+      conta_id: perfil!.conta_id, lead_id: leadPersistido!.id, parte: 1,
+      direcao: 'saida', conteudo: '', status: 'erro', enviado_em: null, erro: motivo,
+    }).select('id').maybeSingle();
+    await registrarTentativaContato(admin, {
+      contaId: perfil!.conta_id!, leadId: leadPersistido!.id, campanhaId: campanhaIdNum,
+      mensagemId: msg?.id ?? null, telefone: telefone!, provider, canalId: canal?.id ?? null,
+      status: 'erro', motivoBloqueio: motivo,
+    });
+  }
+
   // ---- Resolução do canal (multicanal) ----
   const [{ data: cred }, { data: envio }, { data: campanha }, canais] = await Promise.all([
     admin.from('conta_credenciais').select('*').eq('conta_id', perfil.conta_id).single(),
@@ -82,6 +117,7 @@ export async function POST(req: Request) {
 
   const canal: CanalWhatsApp | null = resolverCanalDisparo(canaisValidos, modo, canalId, Number(indice));
   if (!canal) {
+    await registrarFalha('Nenhum canal conectado e elegível foi encontrado para esta campanha.');
     return NextResponse.json(
       { erro: 'Nenhum canal de WhatsApp elegível para enviar. Conecte um número em Configurações → WhatsApp ou escolha um canal ativo.' },
       { status: 400 },
@@ -96,7 +132,7 @@ export async function POST(req: Request) {
   // provider (WAHA/Evolution) ou à IA.
   if (await estaSuprimido(admin, perfil.conta_id, telefone)) {
     await registrarTentativaContato(admin, {
-      contaId: perfil.conta_id, leadId: null, campanhaId: campanhaIdNum,
+      contaId: perfil.conta_id, leadId: leadPersistido.id, campanhaId: campanhaIdNum,
       telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
       motivoBloqueio: 'Telefone suprimido (opt-out/supressão central da conta).',
     });
@@ -115,48 +151,18 @@ export async function POST(req: Request) {
       status = await getOrCreateSession(sessaoWaha!);
     } catch {
       const falha = 'Não consegui falar com o WAHA. Verifique se o servidor está no ar.';
-      const { data: salvo } = await admin
-        .from('prospecta_leads')
-        .upsert(
-          {
-            conta_id: perfil.conta_id,
-            place_id: lead.place_id ?? null,
-            empresa: lead.empresa,
-            telefone,
-            telefone_original: lead.telefone_original ?? null,
-            ...(campanhaIdNum !== null ? { campanha_id: campanhaIdNum } : {}),
-          },
-          { onConflict: 'conta_id, place_id' },
-        )
-        .select('id')
-        .maybeSingle();
-      let mensagemId: number | null = null;
-      if (salvo?.id) {
-        const { data: msg } = await admin.from('prospecta_mensagens').insert({
-          conta_id: perfil.conta_id,
-          lead_id: salvo.id,
-          parte: 1,
-          direcao: 'saida',
-          conteudo: '',
-          status: 'erro',
-          enviado_em: null,
-          erro: falha,
-        }).select('id').maybeSingle();
-        mensagemId = msg?.id ?? null;
-      }
-      await registrarTentativaContato(admin, {
-        contaId: perfil.conta_id, leadId: salvo?.id ?? null, campanhaId: campanhaIdNum,
-        mensagemId, telefone, provider, canalId: canal.id, status: 'erro',
-      });
+      await registrarFalha(falha, provider, canal);
       return NextResponse.json({ erro: falha }, { status: 400 });
     }
     if (status.status !== 'WORKING') {
+      await registrarFalha('O canal WAHA selecionado não está conectado (status diferente de WORKING).', provider, canal);
       return NextResponse.json(
         { erro: 'O canal selecionado (WAHA) não está conectado. Conecte pelo QR Code em Configurações → WhatsApp.' },
         { status: 400 },
       );
     }
   } else if (!cred?.evolution_url || !cred?.evolution_instancia || !cred?.evolution_key) {
+    await registrarFalha('O canal Evolution não possui endereço, instância e token válidos.', provider, canal);
     return NextResponse.json(
       { erro: 'O canal selecionado (Evolution) não está conectado. Preencha endereço, instância e token em Configurações → WhatsApp.' },
       { status: 400 },
@@ -180,6 +186,7 @@ export async function POST(req: Request) {
   let mensagem: string;
   if (modoMsg === 'ia') {
     if (!cred.ia_key) {
+      await registrarFalha('A estratégia usa IA, mas não há chave de IA configurada na conta.', provider, canal);
       return NextResponse.json(
         { erro: 'O modo "A IA escreve" precisa de uma chave de IA em Configurações.' },
         { status: 400 },
@@ -187,12 +194,34 @@ export async function POST(req: Request) {
     }
     try {
       const { system, user } = montarPrompts(contextoIa, lead);
-      mensagem = await gerarComIA((cred.ia_provedor ?? 'openai') as ProvedorIA, cred.ia_key, system, user, cred.ia_modelo);
-    } catch {
-      return NextResponse.json({ erro: 'A IA não respondeu. Tente de novo.' }, { status: 502 });
+      const provedorIa = (cred.ia_provedor ?? 'openai') as ProvedorIA;
+      let gerada = await gerarComIA(provedorIa, cred.ia_key, system, user, cred.ia_modelo);
+      let validacao = validarMensagemWhatsApp(gerada);
+      // Uma segunda geração estritamente orientada ao formato reduz falhas
+      // transitórias de modelos de raciocínio sem jamais enviar a primeira
+      // resposta defeituosa ao contato.
+      if (!validacao.ok) {
+        gerada = await gerarComIA(
+          provedorIa, cred.ia_key,
+          `${system}\n\nCORREÇÃO OBRIGATÓRIA: gere novamente e entregue somente a mensagem final completa.`,
+          user, cred.ia_modelo,
+        );
+        validacao = validarMensagemWhatsApp(gerada);
+      }
+      if (!validacao.ok) {
+        await registrarFalha(validacao.motivo, provider, canal);
+        return NextResponse.json({ erro: `${validacao.motivo} Nada foi enviado.` }, { status: 422 });
+      }
+      mensagem = validacao.texto;
+    } catch (e) {
+      const detalhe = e instanceof Error ? e.message : 'Falha desconhecida.';
+      const falha = `A IA não gerou uma mensagem utilizável: ${detalhe}`;
+      await registrarFalha(falha, provider, canal);
+      return NextResponse.json({ erro: falha }, { status: 502 });
     }
   } else {
     if (!textos.length) {
+      await registrarFalha('A estratégia selecionada não possui mensagem cadastrada.', provider, canal);
       return NextResponse.json({ erro: 'Nenhuma mensagem cadastrada.' }, { status: 400 });
     }
     // rodízio alterna por lead; fixa usa sempre a primeira
@@ -202,7 +231,7 @@ export async function POST(req: Request) {
   // Barreira final pré-envio (Fase 3A).
   if (await estaSuprimido(admin, perfil.conta_id, telefone)) {
     await registrarTentativaContato(admin, {
-      contaId: perfil.conta_id, leadId: null, campanhaId: campanhaIdNum,
+      contaId: perfil.conta_id, leadId: leadPersistido.id, campanhaId: campanhaIdNum,
       telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
       motivoBloqueio: 'Telefone suprimido (opt-out/supressão central da conta) — detectado na barreira final pré-envio.',
     });
@@ -237,20 +266,12 @@ export async function POST(req: Request) {
   // Registra o que aconteceu, mesmo quando falhou.
   const { data: salvo } = await admin
     .from('prospecta_leads')
-    .upsert(
-      {
-        conta_id: perfil.conta_id,
-        place_id: lead.place_id ?? null,
-        empresa: lead.empresa,
-        telefone,
-        telefone_original: lead.telefone_original ?? null,
-        ...(campanhaIdNum !== null ? { campanha_id: campanhaIdNum } : {}),
-        ...(entregue ? { disparo: 'sim', status: 'disparado', disparado_em: new Date().toISOString() } : {}),
-      },
-      { onConflict: 'conta_id, place_id' },
-    )
-    .select('id')
-    .maybeSingle();
+    .update({
+      telefone,
+      ...(entregue ? { disparo: 'sim', status: 'disparado', disparado_em: new Date().toISOString() } : {}),
+    })
+    .eq('id', leadPersistido.id).eq('conta_id', perfil.conta_id)
+    .select('id').maybeSingle();
 
   let mensagemId: number | null = null;
   if (salvo?.id) {
@@ -269,6 +290,7 @@ export async function POST(req: Request) {
     await registrarTentativaContato(admin, {
       contaId: perfil.conta_id, leadId: salvo.id, campanhaId: campanhaIdNum,
       mensagemId, telefone, provider, canalId: canal.id, status: entregue ? 'enviado' : 'erro',
+      motivoBloqueio: falha,
     });
     if (campanhaIdNum !== null) {
       await vincularLeadACampanha(admin, perfil.conta_id, campanhaIdNum, salvo.id, 'disparo');
@@ -276,6 +298,11 @@ export async function POST(req: Request) {
   }
 
   if (!entregue) return NextResponse.json({ erro: falha }, { status: 502 });
+  // Se este lead já está no CRM, a conversa e o estágio acompanham o envio
+  // feito pela campanha. Não cria oportunidade automaticamente.
+  await admin.from('oportunidades')
+    .update({ estagio: 'contatado', probabilidade: 10, atualizado_em: new Date().toISOString() })
+    .eq('conta_id', perfil.conta_id).eq('lead_id', leadPersistido.id).eq('estagio', 'novo');
   return NextResponse.json({
     ok: true, mensagem, contatoAnterior,
     canal: { id: canal.id, nome: canal.nome, provider: canal.provider },

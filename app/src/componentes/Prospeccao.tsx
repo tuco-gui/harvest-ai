@@ -251,8 +251,8 @@ export default function Prospeccao({
 
   const todas = () => setEscolhidos(new Set(leads.map(chave)));
   const nenhuma = () => setEscolhidos(new Set());
-  const soZap = () =>
-    setEscolhidos(new Set(leads.filter((l) => l.tem_whatsapp === true).map(chave)));
+  const soComTelefone = () =>
+    setEscolhidos(new Set(leads.filter((l) => Boolean(l.telefone)).map(chave)));
 
   function limparLista() {
     if (leads.length && !confirm('Limpar a lista atual? O que já foi disparado continua registrado.')) return;
@@ -780,7 +780,7 @@ export default function Prospeccao({
                   <div className="acoes acoes-mini">
                     <button type="button" onClick={todas}>Selecionar todas</button>
                     <button type="button" onClick={nenhuma}>Limpar seleção</button>
-                    <button type="button" onClick={soZap}>Só com WhatsApp</button>
+                    <button type="button" onClick={soComTelefone}>Só com telefone</button>
                     <button type="button" onClick={limparLista}>Limpar lista</button>
                 <button type="button" onClick={enriquecerLista}>Enriquecer lista</button>
                 {leads.some((l) => l.duplicado) && (
@@ -876,7 +876,7 @@ export default function Prospeccao({
                 <div className="sep" />
                 <button type="button" onClick={nenhuma}>Limpar seleção</button>
                 <div className="sep" />
-                <button type="button" onClick={soZap}>Só com WhatsApp</button>
+                <button type="button" onClick={soComTelefone}>Só com telefone</button>
                 <div className="sep" />
                 <button type="button" onClick={limparLista}>Limpar lista</button>
                 <div className="sep" />
@@ -925,7 +925,7 @@ export default function Prospeccao({
                       {l.especialidades && <span className="selo selo-ramo">{l.especialidades}</span>}
                       {l.duplicado && (
                         <span className="ajuda" style={{ display: 'block', color: 'var(--red)' }}>
-                          Já está em {l.campanhaAnterior ? `"${l.campanhaAnterior}"` : 'outra campanha'}
+                          Já cadastrado{l.campanhaAnterior ? ` — também está em "${l.campanhaAnterior}"` : ''}
                         </span>
                       )}
                       {l.place_id && (() => {
@@ -971,7 +971,7 @@ export default function Prospeccao({
                     </span>
                     <span className="zap">
                       <span className="selo" data-zap-selo={l.tem_whatsapp === true ? 'sim' : l.tem_whatsapp === false ? 'nao' : 'incerto'}>
-                        {l.tem_whatsapp === true ? 'WhatsApp' : l.tem_whatsapp === false ? 'Sem WhatsApp' : 'Não verificado'}
+                        {l.tem_whatsapp === true ? 'WhatsApp verificado' : l.telefone ? 'Telefone cadastrado' : 'Sem telefone'}
                       </span>
                       <span className="zap-numero">{l.telefone_original ?? 'sem telefone'}</span>
                       <button type="button" className="ver-detalhes" onClick={(e) => alternarDetalhes(k, e)}>

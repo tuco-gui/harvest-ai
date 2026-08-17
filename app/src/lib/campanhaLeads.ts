@@ -14,10 +14,11 @@ export async function vincularLeadACampanha(
   admin: SupabaseClient, contaId: string, campanhaId: number, leadId: number,
   origem: 'busca' | 'planilha' | 'manual' | 'disparo',
 ): Promise<void> {
-  await admin.from('campanha_leads').upsert(
+  const { error } = await admin.from('campanha_leads').upsert(
     { conta_id: contaId, campanha_id: campanhaId, lead_id: leadId, origem },
     { onConflict: 'campanha_id, lead_id', ignoreDuplicates: true },
   );
+  if (error) throw new Error(`Não foi possível vincular o lead à campanha: ${error.message}`);
 }
 
 /**
@@ -53,8 +54,9 @@ export async function vincularLeadsACampanha(
   leadIds: number[], origem: 'busca' | 'planilha' | 'manual' | 'disparo',
 ): Promise<void> {
   if (!leadIds.length) return;
-  await admin.from('campanha_leads').upsert(
+  const { error } = await admin.from('campanha_leads').upsert(
     leadIds.map((leadId) => ({ conta_id: contaId, campanha_id: campanhaId, lead_id: leadId, origem })),
     { onConflict: 'campanha_id, lead_id', ignoreDuplicates: true },
   );
+  if (error) throw new Error(`Não foi possível vincular os leads à campanha: ${error.message}`);
 }
