@@ -1,5 +1,6 @@
 import { classificarSituacaoContato } from '../../app/src/lib/situacaoContato.ts';
 
+// Gate da release P0: cada situação exibida na campanha precisa ser inequívoca.
 let falhas = 0;
 function ok(condicao: boolean, descricao: string) {
   if (!condicao) { console.error(`  FALHOU - ${descricao}`); falhas++; }
