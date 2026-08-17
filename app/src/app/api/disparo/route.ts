@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { gerarComIA, montarPrompts, type ProvedorIA } from '@/lib/ia';
-import { wahaSessionName, getOrCreateSession, sendText as wahaSendText, usaWaha as ehWaha } from '@/lib/waha';
+import { getOrCreateSession, sendText as wahaSendText, usaWaha as ehWaha } from '@/lib/waha';
 import { normalizarTelefone } from '@/lib/telefone';
 import { estaSuprimido } from '@/lib/supressao';
 import {
@@ -9,7 +9,7 @@ import {
 } from '@/lib/historicoContato';
 import { vincularLeadACampanha } from '@/lib/campanhaLeads';
 import {
-  carregarCanais, resolverCanalDisparo, type CanalWhatsApp,
+  carregarCanais, resolverCanalDisparo, sessaoWahaDoCanal, type CanalWhatsApp,
 } from '@/lib/whatsappCanais';
 import { envioPermitidoNoAmbiente } from '@/lib/ambienteEnvio';
 
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   }
 
   const {
-    lead, indice = 0, campanhaId, canalId = null, modoEnvio = null,
+    lead, indice = 0, campanhaId, canalId = null, canalIds = null, modoEnvio = null,
   } = await req.json().catch(() => ({}) as any);
   if (!lead?.telefone) {
     return NextResponse.json({ erro: 'Lead sem telefone.' }, { status: 400 });
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     campanhaIdNum !== null
       ? admin.from('prospecta_campanhas')
           .select('modo_envio_numero, canal_ids, mensagem_modo, mensagens, contexto_ia')
-          .eq('id', campanhaIdNum).single()
+          .eq('id', campanhaIdNum).eq('conta_id', perfil.conta_id).single()
       : Promise.resolve({ data: null }),
     carregarCanais(admin, perfil.conta_id),
   ]);
@@ -72,8 +72,11 @@ export async function POST(req: Request) {
 
   // No rodízio, se a campanha listou canais específicos, restringe a eles.
   let canaisValidos = canais;
-  if (modo === 'rodizio' && Array.isArray(campanha?.canal_ids) && (campanha!.canal_ids as number[]).length) {
-    const ids = new Set(campanha!.canal_ids as number[]);
+  const idsRodizio = Array.isArray(canalIds) && canalIds.length
+    ? canalIds.filter((id: unknown) => Number.isInteger(id))
+    : campanha?.canal_ids;
+  if (modo === 'rodizio' && Array.isArray(idsRodizio) && idsRodizio.length) {
+    const ids = new Set(idsRodizio as number[]);
     canaisValidos = canais.filter((c) => ids.has(c.id));
   }
 
@@ -87,6 +90,7 @@ export async function POST(req: Request) {
 
   const usaWaha = ehWaha({ whatsapp_provider: canal.provider });
   const provider: ProviderContato = usaWaha ? 'waha' : 'evolution';
+  const sessaoWaha = usaWaha ? sessaoWahaDoCanal(canal) : null;
 
   // Barreira de supressão — Fase 3A. Roda ANTES de qualquer chamada ao
   // provider (WAHA/Evolution) ou à IA.
@@ -108,7 +112,7 @@ export async function POST(req: Request) {
   if (usaWaha) {
     let status;
     try {
-      status = await getOrCreateSession(wahaSessionName(perfil.conta_id));
+      status = await getOrCreateSession(sessaoWaha!);
     } catch {
       const falha = 'Não consegui falar com o WAHA. Verifique se o servidor está no ar.';
       const { data: salvo } = await admin
@@ -212,7 +216,7 @@ export async function POST(req: Request) {
   let falha: string | null = null;
 
   if (usaWaha) {
-    entregue = await wahaSendText(wahaSessionName(perfil.conta_id), telefone, mensagem);
+    entregue = await wahaSendText(sessaoWaha!, telefone, mensagem);
     if (!entregue) falha = 'Não consegui falar com o WAHA.';
   } else {
     const base = cred.evolution_url.replace(/\/+$/, '');

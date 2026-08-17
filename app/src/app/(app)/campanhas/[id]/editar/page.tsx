@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import CampanhaEditar from '@/componentes/CampanhaEditar';
+import { carregarCanais } from '@/lib/whatsappCanais';
 
 export default async function Pagina({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -35,7 +36,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
       .eq('campanha_id', id).eq('conta_id', campanha.conta_id),
     admin.from('campanha_leads').select('lead_id').eq('campanha_id', id),
     admin.from('conta_config_envio').select('intervalo_min, intervalo_max').eq('conta_id', campanha.conta_id).maybeSingle(),
-    admin.from('whatsapp_canais').select('*').eq('conta_id', campanha.conta_id).order('padrao', { ascending: false }).order('id'),
+    carregarCanais(admin, campanha.conta_id).then((data) => ({ data })),
   ]);
 
   const idsExtras = (vinculos ?? [])

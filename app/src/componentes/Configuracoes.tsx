@@ -58,11 +58,7 @@ export default function Configuracoes(p: Props) {
   const [wahaStatus, setWahaStatus] = useState<{ status: string; qr: string | null; numero: string | null } | null>(null);
   const [wahaCarregando, setWahaCarregando] = useState(false);
   const [wahaErro, setWahaErro] = useState<string | null>(null);
-  // Painel de conexão WAHA (Hotfix P0): existe UMA sessão WAHA por CONTA
-  // (wahaSessionName deriva só do conta_id — ver lib/waha.ts), não uma por
-  // canal. Então "conectar" é sempre a mesma sessão, não importa qual linha
-  // WAHA da tabela disparou o painel; guardamos o id só para saber qual
-  // linha estava sendo conectada e fechar o painel de forma óbvia pro usuário.
+  // Cada linha WAHA controla sua própria sessão (tenant + canal).
   const [wahaPainelAberto, setWahaPainelAberto] = useState(false);
   const [wahaCanalAlvo, setWahaCanalAlvo] = useState<number | null>(null);
   const [iaProvedor, setIaProvedor] = useState(p.iaProvedor);
@@ -119,7 +115,7 @@ export default function Configuracoes(p: Props) {
       tentativas++;
       let r: Response;
       try {
-        r = await fetch('/api/waha/session');
+        r = await fetch(`/api/waha/session?canalId=${canalId}`);
       } catch {
         setWahaCarregando(false);
         setWahaErro('Sem conexão com o servidor. Tente novamente.');
@@ -159,8 +155,9 @@ export default function Configuracoes(p: Props) {
   }
 
   async function desconectarWaha() {
+    if (wahaCanalAlvo == null) return;
     setWahaCarregando(true);
-    await fetch('/api/waha/session', { method: 'DELETE' });
+    await fetch(`/api/waha/session?canalId=${wahaCanalAlvo}`, { method: 'DELETE' });
     setWahaStatus(null);
     setWahaCarregando(false);
     fecharPainelWaha();
@@ -375,7 +372,7 @@ export default function Configuracoes(p: Props) {
                 </button>
               </div>
               <p className="ajuda" style={{ marginTop: 10 }}>
-                O canal WAHA usa a sessão já configurada do seu provedor. Evolution exige uma instância
+                Cada canal WAHA usa uma sessão própria. Evolution exige uma instância
                 real conectada — não aparece como conectado se não houver instância viva.
               </p>
 
@@ -395,7 +392,7 @@ export default function Configuracoes(p: Props) {
                       <>
                         <p className="ajuda">
                           Conectado{canalAlvo?.numero ? ` — ${canalAlvo.numero}` : ''}. Desconectar encerra a
-                          sessão do WhatsApp para todos os canais WAHA desta conta (a sessão é única por conta).
+                          sessão somente deste canal. Os demais números permanecem conectados.
                         </p>
                         <button type="button" className="btn-teste" disabled={wahaCarregando} onClick={desconectarWaha}>
                           {wahaCarregando ? 'Desconectando…' : 'Desconectar'}

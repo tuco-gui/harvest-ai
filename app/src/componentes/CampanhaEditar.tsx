@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 
-type Canal = { id: number; nome: string; provider: string; ativo: boolean; padrao: boolean };
+type Canal = { id: number; nome: string; provider: string; status: string; ativo: boolean; padrao: boolean };
 type LeadResumo = { id: number; empresa: string; telefone_original: string | null };
 
 type Campanha = {
@@ -22,6 +22,7 @@ export default function CampanhaEditar({
 }: {
   campanha: Campanha; leadsIniciais: LeadResumo[]; intervaloMin: number; intervaloMax: number; canais: Canal[];
 }) {
+  const canaisConectados = canais.filter((c) => c.ativo && c.status === 'conectado');
   const [nome, setNome] = useState(campanha.nome);
   const [leads, setLeads] = useState(leadsIniciais);
   const [busca, setBusca] = useState('');
@@ -30,9 +31,11 @@ export default function CampanhaEditar({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [modoEnvio, setModoEnvio] = useState<'fixo' | 'rodizio'>(
-    (campanha.modo_envio_numero as 'fixo' | 'rodizio') ?? (canais.length > 1 ? 'rodizio' : 'fixo'),
+    (campanha.modo_envio_numero as 'fixo' | 'rodizio') ?? (canaisConectados.length > 1 ? 'rodizio' : 'fixo'),
   );
-  const [canalIds, setCanalIds] = useState<Set<number>>(new Set(campanha.canal_ids ?? []));
+  const [canalIds, setCanalIds] = useState<Set<number>>(new Set(
+    (campanha.canal_ids ?? []).filter((id) => canaisConectados.some((c) => c.id === id)),
+  ));
 
   const [msgModo, setMsgModo] = useState(campanha.mensagem_modo ?? 'padrao');
   const [msgTextos, setMsgTextos] = useState<string[]>(campanha.mensagens?.length ? campanha.mensagens : ['', '']);
@@ -83,10 +86,18 @@ export default function CampanhaEditar({
   }
 
   function alternarCanal(id: number) {
+    if (modoEnvio === 'fixo') {
+      setCanalIds(new Set([id]));
+      return;
+    }
     setCanalIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
   async function salvar() {
+    if (!canalIds.size) {
+      setAviso('Selecione ao menos um canal conectado.');
+      return;
+    }
     setSalvando(true);
     setAviso(null);
     try {
@@ -167,19 +178,24 @@ export default function CampanhaEditar({
       <section className="secao" style={{ marginTop: 20 }}>
         <h3 style={{ fontSize: 14 }}>Número de envio</h3>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select value={modoEnvio} onChange={(e) => setModoEnvio(e.target.value as 'fixo' | 'rodizio')}
+          <select value={modoEnvio} onChange={(e) => {
+            const modo = e.target.value as 'fixo' | 'rodizio';
+            setModoEnvio(modo);
+            if (modo === 'fixo' && canalIds.size > 1) setCanalIds(new Set([Array.from(canalIds)[0]]));
+          }}
             style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
             <option value="fixo">Canal fixo</option>
             <option value="rodizio">Rodízio entre canais</option>
           </select>
-          {!canais.length && <span style={{ fontSize: 12, color: 'var(--red)' }}>Nenhum canal conectado em Configurações → WhatsApp</span>}
+          {!canaisConectados.length && <span style={{ fontSize: 12, color: 'var(--red)' }}>Nenhum canal conectado em Configurações → WhatsApp</span>}
         </div>
-        {canais.length > 0 && (
+        {canaisConectados.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-            {canais.map((c) => (
+            {canaisConectados.map((c) => (
               <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                <input type="checkbox" checked={canalIds.has(c.id)} onChange={() => alternarCanal(c.id)} disabled={!c.ativo} />
-                {c.nome} ({c.provider}){c.ativo ? '' : ' — inativo'}
+                <input type={modoEnvio === 'fixo' ? 'radio' : 'checkbox'} name={modoEnvio === 'fixo' ? 'canal-fixo' : undefined}
+                  checked={canalIds.has(c.id)} onChange={() => alternarCanal(c.id)} />
+                {c.nome} ({c.provider})
               </label>
             ))}
           </div>

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { normalizarTelefone } from '@/lib/telefone';
 import CampanhaDetalhe from '@/componentes/CampanhaDetalhe';
+import { carregarCanais } from '@/lib/whatsappCanais';
 
 export default async function Pagina({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -30,8 +31,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
         // realidade quando há reuso do lead entre campanhas).
         admin.from('campanha_leads').select('lead_id').eq('campanha_id', id),
         admin.from('conta_config_envio').select('intervalo_min, intervalo_max').eq('conta_id', campanha!.conta_id).maybeSingle(),
-        admin.from('whatsapp_canais').select('*').eq('conta_id', campanha!.conta_id)
-          .order('padrao', { ascending: false }).order('id'),
+        carregarCanais(admin, campanha!.conta_id).then((data) => ({ data })),
         // Métricas duráveis (Entrega 12): calculadas no servidor a partir do
         // histórico real, não de estado do navegador — sobrevivem a refresh.
         admin.from('historico_contato').select('status, lead_id').eq('campanha_id', id),

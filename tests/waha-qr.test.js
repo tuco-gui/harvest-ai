@@ -16,7 +16,7 @@ const assert = require('assert');
 // automaticamente, não ficar mudo em "Não conectado".
 // ---------------------------------------------------------------------
 function criarCanal(provider) {
-  return { status: 'desconhecido', provider, ativo: true };
+  return { status: 'desconectado', provider, ativo: true };
 }
 function devePainelAbrirAoCriar(canal) {
   return canal.provider === 'waha';
@@ -24,11 +24,25 @@ function devePainelAbrirAoCriar(canal) {
 {
   const canalWaha = criarCanal('waha');
   const canalEvolution = criarCanal('evolution');
-  assert.strictEqual(canalWaha.status, 'desconhecido', 'canal nasce desconhecido, nunca conectado');
+  assert.strictEqual(canalWaha.status, 'desconectado', 'canal nasce desconectado, nunca conectado');
   assert.strictEqual(devePainelAbrirAoCriar(canalWaha), true, 'canal WAHA recém-criado deve abrir o painel de QR automaticamente (hotfix)');
   assert.strictEqual(devePainelAbrirAoCriar(canalEvolution), false, 'canal Evolution não usa QR — não abre o painel WAHA');
 }
 console.log('criação de canal WAHA: ok');
+
+// Cada canal tem uma sessão determinística própria. O legado é preservado
+// apenas para o primeiro canal já existente.
+function nomeSessao(contaId, canalId) {
+  const tenant = contaId.replace(/[^a-zA-Z0-9]/g, '');
+  return canalId == null ? `conta_${tenant}` : `harvest_${tenant}_c${canalId}`;
+}
+{
+  const conta = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  assert.notStrictEqual(nomeSessao(conta, 10), nomeSessao(conta, 11), 'dois canais da mesma conta nunca compartilham sessão');
+  assert.notStrictEqual(nomeSessao(conta, 10), nomeSessao('ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee', 10), 'mesmo id em tenants diferentes nunca colide');
+  assert.strictEqual(nomeSessao(conta), 'conta_aaaaaaaabbbbccccddddeeeeeeeeeeee', 'nome legado permanece estável para preservar canal conectado');
+}
+console.log('sessão por tenant/canal: ok');
 
 // ---------------------------------------------------------------------
 // 2) GERAÇÃO DE QR — só existe QR quando o status da sessão é SCAN_QR_CODE.

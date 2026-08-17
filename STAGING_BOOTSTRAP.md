@@ -82,7 +82,7 @@ Auth (`feature/auth-recuperacao-senha`) **já está contido** em `feat/smtp`
 | Integração | Modelo | Resolução no código | Status staging |
 |---|---|---|---|
 | **SerpAPI / Google Maps** | Institucional (Figueira) | `lib/serpapi.ts` → `SERPAPI_KEY` runtime; BYOK por tenant como fallback | código pronto; **secret pendente** (item de bloqueio) |
-| **WAHA** | Institucional (servidor) | `lib/waha.ts` → `WAHA_API_URL`/`WAHA_API_KEY` env; sessão por `conta_id` | depende de secret de staging |
+| **WAHA** | Institucional (servidor) | `lib/waha.ts` → `WAHA_API_URL`/`WAHA_API_KEY` env; sessão por `conta_id + canal_id` | depende de secret de staging |
 | **Evolution** | Por tenant | `conta_credenciais.evolution_*`; isolamento por `conta_id` | depende de credencial por tenant |
 | **Twenty (CRM)** | Fonte pós-qualificação | `lib/twenty.ts` (adapter GraphQL); CRM P0 em `integration/harvest-staging` | código integrado; sync futuro (HAI-002) |
 | **Chatwoot** | Conversas (futuro) | — | fora de escopo P0 |
@@ -109,7 +109,7 @@ o Twenty (HAI-002). Esta divergência está registrada aqui e no roadmap.
 - Conta `Figueira QA`: papel super admin; vê gestão institucional.
 - Conta `Guinffer QA`: papel admin cliente; canais próprios.
 - Canal QA WhatsApp: criado por `+ Conectar número` → sessão WAHA própria do
-  `conta_id` (QR → WORKING → persistência em `whatsapp_canais`). Cada tenant vê
+  `conta_id + canal_id` (QR → WORKING → persistência em `whatsapp_canais`). Cada tenant vê
   **apenas** seus canais (isolamento por `conta_id` em `carregarCanais`).
 
 ## 9. Health esperado (aceite)
@@ -132,8 +132,10 @@ O que não puder funcionar aparece claramente como **NÃO CONFIGURADO** (ou
 
 1. Criar projeto Vercel `harvest-staging` (id `prj_Eqo8e4wKY5eie3GpDuk2nYe3E4cf`),
    conectar repo, apontar branch `integration/harvest-staging` para o alias.
-2. Banco de staging (Supabase `harvest-staging`): aplicar migrations em ordem
-   (`sql/0xx_*.sql` até `021_crm_oportunidades.sql` + `018_smtp_reply_to.sql`).
+2. Banco de staging (Supabase `harvest-staging`): auditar e aplicar somente as
+   migrations realmente pendentes até `021_crm_oportunidades.sql`.
+   **Não aplicar `018_smtp_reply_to.sql` em staging/produção**: `SMTP_REPLY_TO`
+   é resolvido pelo runtime protegido e a migration só atende o fallback local legado.
 3. Seed de tenants QA (`Figueira QA`, `Guinffer QA`) + papéis.
 4. Configurar Environment Variables de staging (nomes em §5) — **via cofre Vercel**.
 5. Deploy da `integration/harvest-staging`.

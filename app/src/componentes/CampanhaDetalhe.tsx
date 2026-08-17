@@ -26,7 +26,7 @@ type Lead = {
   disparo: string;
 };
 
-type Canal = { id: number; nome: string; provider: string; ativo: boolean; padrao: boolean };
+type Canal = { id: number; nome: string; provider: string; status: string; ativo: boolean; padrao: boolean };
 
 type Campanha = {
   id: number; nome: string; origem: string; encontradas: number; com_whatsapp: number;
@@ -34,6 +34,7 @@ type Campanha = {
   mensagem_modo?: string | null; mensagens?: string[] | null; contexto_ia?: string | null;
   cadencia_modo?: string; cadencia_min?: number | null; cadencia_max?: number | null;
   agendado_para?: string | null; agendado_timezone?: string | null;
+  modo_envio_numero?: string; canal_ids?: number[];
 };
 
 type Metricas = {
@@ -74,11 +75,17 @@ export default function CampanhaDetalhe({
   const [resultadosDisparo, setResultadosDisparo] = useState<Record<number, 'enviado' | 'erro' | 'bloqueado'>>({});
 
   // Número de envio (Fase 3B.1): fixo num canal escolhido, ou rodízio entre os ativos.
+  const canaisConectados = canais.filter((c) => c.ativo && c.status === 'conectado');
   const [modoEnvio, setModoEnvio] = useState<'fixo' | 'rodizio'>(
-    canais.length > 1 ? 'rodizio' : 'fixo',
+    campanha.modo_envio_numero === 'rodizio' ? 'rodizio' : 'fixo',
   );
-  const padrao = canais.find((c) => c.padrao && c.ativo) ?? canais.find((c) => c.ativo);
-  const [canalFixoId, setCanalFixoId] = useState<number | null>(padrao?.id ?? null);
+  const padrao = canaisConectados.find((c) => c.padrao) ?? canaisConectados[0];
+  const canalSalvo = canaisConectados.find((c) => campanha.canal_ids?.[0] === c.id);
+  const [canalFixoId, setCanalFixoId] = useState<number | null>(canalSalvo?.id ?? padrao?.id ?? null);
+  const [canaisRodizio, setCanaisRodizio] = useState<Set<number>>(
+    new Set(campanha.canal_ids?.filter((id) => canaisConectados.some((c) => c.id === id))
+      ?? canaisConectados.map((c) => c.id)),
+  );
 
   // A configuração de mensagem/cadência/agendamento agora mora na página
   // dedicada de edição (Entrega 22, ver CampanhaEditar.tsx) — aqui só resta
@@ -233,7 +240,7 @@ export default function CampanhaDetalhe({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lead: l, indice: i, campanhaId: campanha.id,
-          canalId, modoEnvio,
+          canalId, canalIds: Array.from(canaisRodizio), modoEnvio,
         }),
       }).catch(() => null);
       // eslint-disable-next-line no-await-in-loop
@@ -346,19 +353,32 @@ export default function CampanhaDetalhe({
               style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}
             >
               <option value="">Canal padrão</option>
-              {canais.map((c) => (
-                <option key={c.id} value={c.id} disabled={!c.ativo}>
-                  {c.nome} ({c.provider}){c.ativo ? '' : ' — inativo'}
+              {canaisConectados.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome} ({c.provider})
                 </option>
               ))}
             </select>
           )}
           {modoEnvio === 'rodizio' && (
-            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-              {canais.filter((c) => c.ativo).length} canal(is) ativo(s) — alterna por lead
-            </span>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {canaisConectados.map((c) => (
+                <label key={c.id} style={{ fontSize: 12, color: 'var(--ink-2)' }}>
+                  <input type="checkbox" checked={canaisRodizio.has(c.id)} onChange={() => {
+                    setCanaisRodizio((atual) => {
+                      const proximo = new Set(atual);
+                      if (proximo.has(c.id)) proximo.delete(c.id); else proximo.add(c.id);
+                      return proximo;
+                    });
+                  }} /> {c.nome}
+                </label>
+              ))}
+              <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+                {canaisRodizio.size} canal(is) no rodízio
+              </span>
+            </div>
           )}
-          {!canais.length && (
+          {!canaisConectados.length && (
             <span style={{ fontSize: 12, color: 'var(--red)' }}>Nenhum canal conectado em Configurações → WhatsApp</span>
           )}
         </div>
@@ -379,7 +399,8 @@ export default function CampanhaDetalhe({
           {disparando ? (
             <button type="button" onClick={pararDisparo}>Parar disparo</button>
           ) : (
-            <button type="button" disabled={!escolhidos.size} onClick={dispararSelecionados}>
+            <button type="button" disabled={!escolhidos.size || !canaisConectados.length
+              || (modoEnvio === 'fixo' ? canalFixoId == null : canaisRodizio.size === 0)} onClick={dispararSelecionados}>
               Disparar selecionados
             </button>
           )}

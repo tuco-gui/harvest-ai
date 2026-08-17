@@ -74,7 +74,15 @@ export async function PATCH(req: Request) {
   // Número de envio (Fase 3B.1): fixo num canal ou rodízio entre canais.
   if (b.modoEnvio === 'fixo' || b.modoEnvio === 'rodizio') dados.modo_envio_numero = b.modoEnvio;
   if (Array.isArray(b.canalIds)) {
-    dados.canal_ids = b.canalIds.filter((n: unknown) => Number.isInteger(n)) as number[];
+    const canalIds = b.canalIds.filter((n: unknown) => Number.isInteger(n)) as number[];
+    if (canalIds.length) {
+      const { data: canaisDaConta } = await supabaseAdmin().from('whatsapp_canais')
+        .select('id').eq('conta_id', perfil.conta_id).in('id', canalIds);
+      if ((canaisDaConta?.length ?? 0) !== new Set(canalIds).size) {
+        return NextResponse.json({ erro: 'Um dos canais não pertence à conta ativa.' }, { status: 400 });
+      }
+    }
+    dados.canal_ids = canalIds;
   }
 
   // "Criar campanha a partir desta lista" — upgrade em vez de duplicar linha.

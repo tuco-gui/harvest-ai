@@ -1,8 +1,10 @@
 /**
  * Client do WAHA (WhatsApp HTTP API), engine NOWEB. Infra compartilhada do
  * Harvest — WAHA_API_URL/WAHA_API_KEY são env do servidor, nunca por conta.
- * Cada conta ganha uma sessão nomeada deterministicamente a partir do
- * conta_id, nunca gravada em lugar nenhum.
+ * Cada canal ganha uma sessão própria, nomeada deterministicamente a partir
+ * de conta_id + canal_id e persistida em whatsapp_canais.identificador_externo.
+ * A forma antiga (somente conta_id) continua disponível para preservar a
+ * sessão que já estava conectada antes da entrega multicanal.
  */
 
 export type WahaStatus = {
@@ -10,8 +12,9 @@ export type WahaStatus = {
   me?: { id: string; pushName?: string } | null;
 };
 
-export function wahaSessionName(contaId: string): string {
-  return `conta_${contaId.replace(/-/g, '')}`;
+export function wahaSessionName(contaId: string, canalId?: number): string {
+  const tenant = contaId.replace(/[^a-zA-Z0-9]/g, '');
+  return canalId == null ? `conta_${tenant}` : `harvest_${tenant}_c${canalId}`;
 }
 
 /** Número conectado (E.164 sem '+', ex.: 5511951783049) ou null. */
