@@ -28,12 +28,16 @@ export type Oportunidade = {
   telefone: string | null;
   email: string | null;
   origem: string;
+  campanha_id: number | null;
   estagio: string;
   owner_id: string | null;
   valor: number;
   proxima_acao: string | null;
   observacoes: string | null;
   previsao_fechamento: string | null;
+  probabilidade: number;
+  tags: string[];
+  motivo_perda: string | null;
   criado_em: string;
   atualizado_em: string;
 };
@@ -45,12 +49,16 @@ export type OportunidadeInput = {
   telefone?: string | null;
   email?: string | null;
   origem?: string;
+  campanha_id?: number | null;
   estagio?: string;
   owner_id?: string | null;
   valor?: number;
   proxima_acao?: string | null;
   observacoes?: string | null;
   previsao_fechamento?: string | null;
+  probabilidade?: number;
+  tags?: string[];
+  motivo_perda?: string | null;
 };
 
 export interface CrmBackend {
@@ -94,12 +102,16 @@ class SupabaseCrmBackend implements CrmBackend {
         telefone: input.telefone ?? null,
         email: input.email ?? null,
         origem: input.origem ?? 'prospeccao',
+        campanha_id: input.campanha_id ?? null,
         estagio,
         owner_id: input.owner_id ?? null,
         valor: input.valor ?? 0,
         proxima_acao: input.proxima_acao ?? null,
         observacoes: input.observacoes ?? null,
         previsao_fechamento: input.previsao_fechamento ?? null,
+        probabilidade: input.probabilidade ?? 5,
+        tags: input.tags ?? [],
+        motivo_perda: input.motivo_perda ?? null,
       })
       .select('*')
       .single();

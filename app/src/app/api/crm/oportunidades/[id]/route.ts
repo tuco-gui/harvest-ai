@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { crmBackend } from '@/lib/twenty';
 import { perfilTemModulo } from '@/lib/autorizacao';
+import { estagioValido, probabilidadeEstagio } from '@/lib/crmStages';
 
 /**
  * PATCH /api/crm/oportunidades/[id]
@@ -29,7 +30,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (b.contato !== undefined) patch.contato = String(b.contato).trim();
   if (b.telefone !== undefined) patch.telefone = b.telefone ? String(b.telefone).trim() : null;
   if (b.email !== undefined) patch.email = b.email ? String(b.email).trim() : null;
-  if (b.estagio !== undefined) patch.estagio = b.estagio;
+  if (b.estagio !== undefined) {
+    if (!estagioValido(String(b.estagio))) {
+      return NextResponse.json({ erro: 'Estágio inválido.' }, { status: 400 });
+    }
+    patch.estagio = b.estagio;
+    if (b.probabilidade === undefined) patch.probabilidade = probabilidadeEstagio(String(b.estagio));
+  }
   if (b.owner_id !== undefined) {
     if (b.owner_id) {
       const { data: ownerDaConta } = await supabaseAdmin()
@@ -48,6 +55,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (b.proxima_acao !== undefined) patch.proxima_acao = b.proxima_acao ?? null;
   if (b.observacoes !== undefined) patch.observacoes = b.observacoes ?? null;
   if (b.previsao_fechamento !== undefined) patch.previsao_fechamento = b.previsao_fechamento ?? null;
+  if (b.probabilidade !== undefined) {
+    const probabilidade = Number(b.probabilidade);
+    if (!Number.isFinite(probabilidade) || probabilidade < 0 || probabilidade > 100) {
+      return NextResponse.json({ erro: 'Probabilidade deve estar entre 0 e 100.' }, { status: 400 });
+    }
+    patch.probabilidade = probabilidade;
+  }
+  if (b.tags !== undefined) {
+    patch.tags = Array.isArray(b.tags)
+      ? b.tags.map((v: unknown) => String(v).trim()).filter(Boolean).slice(0, 20)
+      : [];
+  }
+  if (b.motivo_perda !== undefined) patch.motivo_perda = b.motivo_perda ? String(b.motivo_perda).trim() : null;
+  if (b.campanha_id !== undefined) {
+    if (b.campanha_id) {
+      const { data: campanha } = await supabaseAdmin().from('prospecta_campanhas').select('id')
+        .eq('id', Number(b.campanha_id)).eq('conta_id', perfil.conta_id).maybeSingle();
+      if (!campanha) return NextResponse.json({ erro: 'Campanha não pertence a esta conta.' }, { status: 400 });
+    }
+    patch.campanha_id = b.campanha_id ? Number(b.campanha_id) : null;
+  }
 
   try {
     const op = await crmBackend().atualizar(perfil.conta_id, opId, patch);
