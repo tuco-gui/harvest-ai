@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import Modal from './Modal';
 import { useRouter } from 'next/navigation';
+import type { SituacaoContato } from '@/lib/situacaoContato';
 
 type Lead = {
   id: number;
@@ -24,6 +25,7 @@ type Lead = {
   email_status: string | null;
   erro_enriquecimento: string | null;
   disparo: string;
+  situacao_contato: SituacaoContato;
 };
 
 type Canal = { id: number; nome: string; provider: string; status: string; ativo: boolean; padrao: boolean };
@@ -73,6 +75,7 @@ export default function CampanhaDetalhe({
   // processado, mesmo quando o envio falhava ou era bloqueado por
   // supressão. Isso fazia a lista contradizer o que de fato saiu.
   const [resultadosDisparo, setResultadosDisparo] = useState<Record<number, 'enviado' | 'erro' | 'bloqueado'>>({});
+  const [filtroSituacao, setFiltroSituacao] = useState<'todos' | SituacaoContato>('todos');
 
   // Número de envio (Fase 3B.1): fixo num canal escolhido, ou rodízio entre os ativos.
   const canaisConectados = canais.filter((c) => c.ativo && c.status === 'conectado');
@@ -136,6 +139,9 @@ export default function CampanhaDetalhe({
   }
 
   const comZap = leads.filter((l) => l.tem_whatsapp === 'sim').length;
+  const leadsVisiveis = filtroSituacao === 'todos'
+    ? leads
+    : leads.filter((lead) => lead.situacao_contato === filtroSituacao);
 
   function alternar(id: number) {
     setEscolhidos((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -378,6 +384,23 @@ export default function CampanhaDetalhe({
         </div>
       </div>
 
+      <div className="barra-lista">
+        <div className="acoes" style={{ flexWrap: 'wrap', rowGap: 8 }}>
+          <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>Mostrar:</span>
+          <select value={filtroSituacao} onChange={(e) => setFiltroSituacao(e.target.value as 'todos' | SituacaoContato)}
+            style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
+            <option value="todos">Todos ({leads.length})</option>
+            <option value="respondido">Responderam</option>
+            <option value="optout">Pediram para sair</option>
+            <option value="sem_resposta">Enviados sem resposta</option>
+            <option value="bloqueado">Bloqueados</option>
+            <option value="erro">Erros</option>
+            <option value="nao_contatado">Ainda não contatados</option>
+          </select>
+          {filtroSituacao !== 'todos' && <span className="ajuda">{leadsVisiveis.length} lead(s) neste filtro</span>}
+        </div>
+      </div>
+
       {progresso && (() => {
         const contagem = Object.values(resultadosDisparo).reduce(
           (acc, r) => ({ ...acc, [r]: acc[r] + 1 }),
@@ -396,7 +419,7 @@ export default function CampanhaDetalhe({
       })()}
 
       <ul className="lista" role="listbox" aria-multiselectable>
-        {leads.map((l) => {
+        {leadsVisiveis.map((l) => {
           const marcado = escolhidos.has(l.id);
           return (
             <li
@@ -446,6 +469,17 @@ export default function CampanhaDetalhe({
                   {l.tem_whatsapp === 'sim' ? 'WhatsApp' : l.tem_whatsapp === 'nao' ? 'Sem WhatsApp' : 'Não verificado'}
                 </span>
                 <span className="zap-numero">{l.telefone_original ?? 'sem telefone'}</span>
+                <span className="ajuda" style={{ display: 'block', color:
+                  l.situacao_contato === 'optout' || l.situacao_contato === 'erro' ? 'var(--red)' : undefined }}>
+                  {{
+                    optout: 'pediu para sair',
+                    respondido: 'respondeu',
+                    sem_resposta: 'enviado — sem resposta',
+                    bloqueado: 'bloqueado',
+                    erro: 'erro no último envio',
+                    nao_contatado: 'ainda não contatado',
+                  }[l.situacao_contato]}
+                </span>
                 {resultadosDisparo[l.id] === 'enviado' && <span className="ajuda">enviado agora</span>}
                 {resultadosDisparo[l.id] === 'bloqueado' && (
                   <span className="ajuda" style={{ color: 'var(--ink-2)' }}>bloqueado — opt-out</span>

@@ -4,6 +4,7 @@ import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { normalizarTelefone } from '@/lib/telefone';
 import CampanhaDetalhe from '@/componentes/CampanhaDetalhe';
 import { carregarCanais } from '@/lib/whatsappCanais';
+import { classificarSituacaoContato } from '@/lib/situacaoContato';
 
 export default async function Pagina({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -34,7 +35,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
         carregarCanais(admin, campanha!.conta_id).then((data) => ({ data })),
         // Métricas duráveis (Entrega 12): calculadas no servidor a partir do
         // histórico real, não de estado do navegador — sobrevivem a refresh.
-        admin.from('historico_contato').select('status, lead_id').eq('campanha_id', id),
+        admin.from('historico_contato').select('status, lead_id, criado_em').eq('campanha_id', id).order('criado_em'),
         // Entrega 22: para "elegíveis" (tem telefone válido e não está
         // suprimido) — supressão é por telefone normalizado dentro da conta,
         // não por lead (ver lib/supressao.ts).
@@ -59,7 +60,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     ? await admin.from('prospecta_leads').select(CAMPOS_LEAD).in('id', idsExtras)
     : { data: [] };
 
-  const leads = [...(leadsPorFk ?? []), ...(leadsExtras ?? [])].sort((a, b) => a.empresa.localeCompare(b.empresa));
+  const leadsBase = [...(leadsPorFk ?? []), ...(leadsExtras ?? [])].sort((a, b) => a.empresa.localeCompare(b.empresa));
 
   // "Mensagens enviadas" (total de envios, pode ter reenvio pro mesmo lead)
   // vs. "Leads contatados" (quantos leads DISTINTOS já receberam pelo menos
@@ -80,6 +81,24 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
   // momento) — por isso essa contagem é sobre elegibilidade agora, não um
   // proxy de nenhuma das métricas de historico_contato acima.
   const telefonesSuprimidos = new Set((supressoes ?? []).map((s) => s.telefone));
+  const statusPorLead = new Map<number, string[]>();
+  for (const linha of linhasHistorico) {
+    if (!linha.lead_id) continue;
+    const atuais = statusPorLead.get(linha.lead_id) ?? [];
+    atuais.push(linha.status);
+    statusPorLead.set(linha.lead_id, atuais);
+  }
+  const leads = leadsBase.map((lead) => {
+    const telefone = normalizarTelefone(lead.telefone_original ?? lead.telefone ?? '');
+    return {
+      ...lead,
+      situacao_contato: classificarSituacaoContato(
+        statusPorLead.get(lead.id) ?? [],
+        Boolean(telefone && telefonesSuprimidos.has(telefone)),
+        lead.disparo === 'sim',
+      ),
+    };
+  });
   const elegiveis = leads.filter((l) => {
     const norm = normalizarTelefone(l.telefone_original ?? l.telefone ?? '');
     return norm && !telefonesSuprimidos.has(norm);
