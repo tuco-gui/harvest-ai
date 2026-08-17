@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import Configuracoes from '@/componentes/Configuracoes';
+import { carregarCanais } from '@/lib/whatsappCanais';
 
 export default async function Pagina() {
   const perfil = await perfilAtual();
@@ -45,8 +46,7 @@ export default async function Pagina() {
       .select('empresa, erro_enriquecimento, enriquecido_em')
       .eq('conta_id', perfil.conta_id).not('erro_enriquecimento', 'is', null)
       .order('enriquecido_em', { ascending: false }).limit(50),
-    admin.from('whatsapp_canais').select('*').eq('conta_id', perfil.conta_id)
-      .order('padrao', { ascending: false }).order('id'),
+    carregarCanais(admin, perfil.conta_id).then((data) => ({ data })),
     admin.from('contas').select('modulos_habilitados').eq('id', perfil.conta_id).maybeSingle(),
   ]);
 

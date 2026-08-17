@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { carregarCanais } from '@/lib/whatsappCanais';
+import { wahaSessionName } from '@/lib/waha';
 
 /**
  * Lista os canais WhatsApp da conta ativa (ou todas, se super_admin sem conta
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
       provider,
       numero,
       identificador_externo: identificador,
-      status: 'desconhecido',
+      status: 'desconectado',
       ativo: true,
       padrao,
     })
@@ -62,5 +63,20 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+
+  // O id só existe depois do insert. É ele que garante uma sessão WAHA única
+  // por canal sem permitir que um novo número reutilize/sobrescreva o anterior.
+  if (provider === 'waha') {
+    const identificador_externo = wahaSessionName(conta, data.id);
+    const { data: atualizado, error: erroSessao } = await admin
+      .from('whatsapp_canais')
+      .update({ identificador_externo })
+      .eq('id', data.id)
+      .eq('conta_id', conta)
+      .select('*')
+      .single();
+    if (erroSessao) return NextResponse.json({ erro: erroSessao.message }, { status: 500 });
+    return NextResponse.json({ canal: atualizado });
+  }
   return NextResponse.json({ canal: data });
 }
