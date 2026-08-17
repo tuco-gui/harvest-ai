@@ -19,7 +19,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     { data: leadsComErro },
     { data: conversas },
   ] = await Promise.all([
-    admin.from('contas').select('id, nome, slug, ativo').eq('id', id).single(),
+    admin.from('contas').select('id, nome, slug, ativo, modulos_habilitados').eq('id', id).single(),
     admin.from('perfis').select('id, nome, email, papel, criado_em').eq('conta_id', id).order('criado_em'),
     admin.from('conta_credenciais').select('*').eq('conta_id', id).maybeSingle(),
     admin.from('prospecta_campanhas').select('id, nome, origem, criado_em, encontradas, com_whatsapp')

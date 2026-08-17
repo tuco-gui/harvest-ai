@@ -11,7 +11,7 @@ import type { Perfil } from './supabase/server';
  * super_admin enxerga tudo (não há conta a restringir).
  */
 
-export type Modulo = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento';
+export type Modulo = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento' | 'crm';
 
 /** Módulos que nunca ficam escondidos para um admin de conta (já são operacionais). */
 const MODULOS_PADRAO: Modulo[] = ['whatsapp', 'ia', 'usuarios', 'chamados', 'status'];
@@ -23,11 +23,25 @@ export function modulosDaConta(
   modulosHabilitados: string[] | null | undefined,
   papel: Perfil['papel'],
 ): Set<Modulo> {
-  if (papel === 'super_admin') {
-    return new Set<Modulo>([...MODULOS_PADRAO, ...MODULOS_FIGUEIRA]);
-  }
   const hab = (modulosHabilitados ?? MODULOS_PADRAO) as Modulo[];
+  if (papel === 'super_admin') {
+    // A Figueira mantém acesso aos módulos institucionais, mas módulos
+    // comerciais opcionais (como CRM) continuam dependentes da habilitação
+    // da conta ativa. Assim o super admin testa exatamente o que o cliente verá.
+    return new Set<Modulo>([...MODULOS_PADRAO, ...MODULOS_FIGUEIRA, ...hab]);
+  }
   return new Set<Modulo>(hab.filter((m) => !MODULOS_FIGUEIRA.includes(m)));
+}
+
+/** Verificação completa server-side para páginas e APIs de módulos opcionais. */
+export async function perfilTemModulo(
+  admin: SupabaseClient,
+  perfil: Perfil,
+  modulo: Modulo,
+): Promise<boolean> {
+  if (!perfil.conta_id) return false;
+  const habilitados = await carregarModulos(admin, perfil);
+  return temModulo(perfil, habilitados, modulo);
 }
 
 /** Tem acesso a um módulo? server-side. */

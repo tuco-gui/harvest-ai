@@ -46,8 +46,17 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ erro: 'Só o super admin edita contas.' }, { status: 403 });
   }
 
-  const { id, nome } = await req.json().catch(() => ({}) as any);
+  const { id, nome, modulos_habilitados } = await req.json().catch(() => ({}) as any);
   if (!id) return NextResponse.json({ erro: 'Falta a conta.' }, { status: 400 });
+
+  if (Array.isArray(modulos_habilitados)) {
+    const permitidos = new Set(['whatsapp', 'ia', 'usuarios', 'chamados', 'status', 'enriquecimento', 'crm']);
+    const modulos = [...new Set(modulos_habilitados.filter((m): m is string => typeof m === 'string' && permitidos.has(m)))];
+    const { error } = await supabaseAdmin().from('contas').update({ modulos_habilitados: modulos }).eq('id', id);
+    if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, modulos_habilitados: modulos });
+  }
+
   if (typeof nome !== 'string' || nome.trim().length < 2) {
     return NextResponse.json({ erro: 'Informe o nome da empresa.' }, { status: 400 });
   }

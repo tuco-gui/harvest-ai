@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabaseNoNavegador } from '@/lib/supabase/browser';
 
 type Conta = { id: string; nome: string };
-export type ModuloVisivel = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento';
+export type ModuloVisivel = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento' | 'crm';
 
 type Props = {
   nome: string;
@@ -132,6 +132,11 @@ export default function Topo(p: Props) {
         <Link href="/campanhas" aria-current={caminho.startsWith('/campanhas') ? 'page' : undefined}>
           Campanhas
         </Link>
+        {p.papel !== 'operador' && p.modulos.includes('crm') && (
+          <Link href="/crm" aria-current={caminho.startsWith('/crm') ? 'page' : undefined}>
+            CRM
+          </Link>
+        )}
         <Link href="/configuracoes" aria-current={caminho.startsWith('/configuracoes') ? 'page' : undefined}>
           Configurações
         </Link>

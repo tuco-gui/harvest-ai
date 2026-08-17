@@ -104,6 +104,13 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     return norm && !telefonesSuprimidos.has(norm);
   }).length;
 
+  const { data: contaDaCampanha } = await admin
+    .from('contas')
+    .select('modulos_habilitados')
+    .eq('id', campanha!.conta_id)
+    .maybeSingle();
+  const crmHabilitado = ((contaDaCampanha?.modulos_habilitados as string[] | null) ?? []).includes('crm');
+
   return (
     <CampanhaDetalhe
       campanha={campanha}
@@ -111,6 +118,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
       intervaloMin={envio?.intervalo_min ?? 30}
       intervaloMax={envio?.intervalo_max ?? 60}
       canais={canais ?? []}
+      crmHabilitado={crmHabilitado}
       metricas={{ enviadas, leadsContatados, erros, bloqueados, respondidos, optouts, elegiveis }}
     />
   );

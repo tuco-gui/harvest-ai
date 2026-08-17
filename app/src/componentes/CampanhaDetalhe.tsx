@@ -57,10 +57,10 @@ const CADENCIAS: Record<string, [number, number] | null> = {
 };
 
 export default function CampanhaDetalhe({
-  campanha, leads: leadsIniciais, intervaloMin, intervaloMax, canais, metricas,
+  campanha, leads: leadsIniciais, intervaloMin, intervaloMax, canais, metricas, crmHabilitado = false,
 }: {
   campanha: Campanha; leads: Lead[]; intervaloMin: number; intervaloMax: number; canais: Canal[];
-  metricas?: Metricas;
+  metricas?: Metricas; crmHabilitado?: boolean;
 }) {
   const router = useRouter();
   const [leads, setLeads] = useState(leadsIniciais);
@@ -112,6 +112,35 @@ export default function CampanhaDetalhe({
       especialidades: l.especialidades ?? '',
     });
     setAvisoLead(null);
+  }
+
+  // P0.3 — Qualificar: lead do Harvest vira oportunidade no CRM. Não duplica
+  // (a rota devolve a existente se já houver vínculo por lead_id).
+  const [qualificandoId, setQualificandoId] = useState<number | null>(null);
+  async function qualificarLead(l: Lead) {
+    if (qualificandoId !== null) return;
+    setQualificandoId(l.id);
+    try {
+      const r = await fetch('/api/crm/oportunidades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_id: l.id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const msg = d.duplicada
+          ? `Já existe oportunidade para ${l.empresa || 'este lead'}.`
+          : `${l.empresa || 'Lead'} qualificado para o CRM.`;
+        alert(msg);
+        router.refresh();
+      } else {
+        alert(d.erro ?? 'Não consegui qualificar o lead.');
+      }
+    } catch {
+      alert('Sem conexão com o servidor.');
+    } finally {
+      setQualificandoId(null);
+    }
   }
 
   async function salvarLead() {
@@ -493,8 +522,13 @@ export default function CampanhaDetalhe({
                 </button>
                 {' · '}
                 <button type="button" className="ver-detalhes" onClick={(e) => { e.stopPropagation(); abrirEdicaoLead(l); }}>
-                  editar lead
+                  Editar lead
                 </button>
+                {crmHabilitado && (
+                  <button type="button" className="ver-detalhes" disabled={qualificandoId === l.id} onClick={(e) => { e.stopPropagation(); qualificarLead(l); }}>
+                    {qualificandoId === l.id ? 'Qualificando…' : 'Qualificar'}
+                  </button>
+                )}
               </span>
 
               {expandidos.has(l.id) && (
