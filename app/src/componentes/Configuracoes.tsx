@@ -57,6 +57,10 @@ export default function Configuracoes(p: Props) {
   const [whatsappProvider, setWhatsappProvider] = useState(p.whatsappProvider);
   const [wahaStatus, setWahaStatus] = useState<{ status: string; qr: string | null; numero: string | null } | null>(null);
   const [wahaCarregando, setWahaCarregando] = useState(false);
+  const [wahaErro, setWahaErro] = useState<string | null>(null);
+  // Cada linha WAHA controla sua própria sessão (tenant + canal).
+  const [wahaPainelAberto, setWahaPainelAberto] = useState(false);
+  const [wahaCanalAlvo, setWahaCanalAlvo] = useState<number | null>(null);
   const [iaProvedor, setIaProvedor] = useState(p.iaProvedor);
   const [iaKey, setIaKey] = useState('');
   const [iaModelo, setIaModelo] = useState(p.iaModelo);
@@ -93,21 +97,49 @@ export default function Configuracoes(p: Props) {
     setTestando(null);
   }
 
-  async function conectarWaha() {
+  // Conecta a sessão WAHA da conta e faz polling até virar WORKING/erro.
+  // Hotfix P0: essa função e o estado dela já existiam (comentário
+  // Fase 3B), mas a UI multicanal nunca chamava mais isso nem renderizava
+  // wahaStatus — resultado era canal criado, WAHA nunca era acionado, QR
+  // nunca aparecia. Este hotfix reconecta a chamada a um botão real por
+  // canal WAHA (ver seção "WhatsApp — canais" abaixo).
+  async function conectarWaha(canalId: number) {
+    setWahaPainelAberto(true);
+    setWahaCanalAlvo(canalId);
+    setWahaErro(null);
+    setWahaStatus(null);
     setWahaCarregando(true);
     let tentativas = 0;
     const MAX_TENTATIVAS = 60; // ~2min a 2s por poll — teto pra um WAHA quebrado não pollar pra sempre
     const poll = async () => {
       tentativas++;
-      const r = await fetch('/api/waha/session');
-      const d = await r.json();
-      if (!r.ok) { setWahaCarregando(false); setWahaStatus(null); return; }
-      setWahaStatus(d);
-      if (d.status === 'WORKING' || d.status === 'FAILED' || d.status === 'ERRO') {
+      let r: Response;
+      try {
+        r = await fetch(`/api/waha/session?canalId=${canalId}`);
+      } catch {
         setWahaCarregando(false);
+        setWahaErro('Sem conexão com o servidor. Tente novamente.');
+        return;
+      }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setWahaCarregando(false);
+        setWahaErro(d.erro ?? 'Não consegui falar com o WAHA. Tente novamente.');
+        return;
+      }
+      setWahaStatus(d);
+      if (d.status === 'WORKING') {
+        setWahaCarregando(false);
+        // O canal só reflete "conectado" depois que o servidor reconcilia
+        // (reconciliarStatusWaha, chamado em carregarCanais) — refresh
+        // busca esse estado atualizado sem exigir F5 manual do usuário.
+        router.refresh();
+      } else if (d.status === 'FAILED' || d.status === 'ERRO') {
+        setWahaCarregando(false);
+        setWahaErro('A sessão do WhatsApp falhou. Clique em "Tentar novamente".');
       } else if (tentativas >= MAX_TENTATIVAS) {
         setWahaCarregando(false);
-        setWahaStatus({ ...d, status: 'ERRO' });
+        setWahaErro('Demorou demais para conectar. Clique em "Tentar novamente".');
       } else {
         setTimeout(poll, 2000);
       }
@@ -115,11 +147,21 @@ export default function Configuracoes(p: Props) {
     poll();
   }
 
+  function fecharPainelWaha() {
+    setWahaPainelAberto(false);
+    setWahaCanalAlvo(null);
+    setWahaStatus(null);
+    setWahaErro(null);
+  }
+
   async function desconectarWaha() {
+    if (wahaCanalAlvo == null) return;
     setWahaCarregando(true);
-    await fetch('/api/waha/session', { method: 'DELETE' });
+    await fetch(`/api/waha/session?canalId=${wahaCanalAlvo}`, { method: 'DELETE' });
     setWahaStatus(null);
     setWahaCarregando(false);
+    fecharPainelWaha();
+    router.refresh();
   }
 
   // ---- Canais WhatsApp multicanal (Fase 3B.1) ----
@@ -145,8 +187,13 @@ export default function Configuracoes(p: Props) {
     });
     setSalvandoCanal(false);
     if (r.ok) {
+      const d = await r.json().catch(() => ({}));
       setNovoCanalNome(''); setNovoCanalNumero(''); setNovoCanalInstancia('');
       router.refresh();
+      // Fluxo esperado (Hotfix P0): criar canal WAHA não conecta sozinho —
+      // sem isso, o canal fica "Não conectado" pra sempre. Abre o painel de
+      // QR imediatamente após salvar, sem exigir um segundo clique.
+      if (novoCanalProvider === 'waha' && d.canal?.id) conectarWaha(d.canal.id);
     } else {
       const d = await r.json().catch(() => ({ erro: 'Não consegui conectar o número.' }));
       setAviso(d.erro ?? 'Não consegui conectar o número.');
@@ -264,6 +311,22 @@ export default function Configuracoes(p: Props) {
                       </td>
                       <td>{c.padrao ? '★' : ''}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
+                        {c.provider === 'waha' && c.ativo && c.status !== 'conectado' && (
+                          <>
+                            <button type="button" className="ver-detalhes" style={{ fontWeight: 600 }}
+                                    onClick={() => conectarWaha(c.id)}>Conectar</button>
+                            {' · '}
+                          </>
+                        )}
+                        {c.provider === 'waha' && c.ativo && c.status === 'conectado' && (
+                          <>
+                            <button type="button" className="ver-detalhes"
+                                    onClick={() => { setWahaPainelAberto(true); setWahaCanalAlvo(c.id); }}>
+                              Desconectar
+                            </button>
+                            {' · '}
+                          </>
+                        )}
                         <button type="button" className="ver-detalhes"
                                 onClick={() => alternarPadraoCanal(c.id)}>{c.padrao ? 'Canal padrão' : 'Definir como padrão'}</button>
                         {' · '}
@@ -309,9 +372,74 @@ export default function Configuracoes(p: Props) {
                 </button>
               </div>
               <p className="ajuda" style={{ marginTop: 10 }}>
-                O canal WAHA usa a sessão já configurada do seu provedor. Evolution exige uma instância
+                Cada canal WAHA usa uma sessão própria. Evolution exige uma instância
                 real conectada — não aparece como conectado se não houver instância viva.
               </p>
+
+              {wahaPainelAberto && (() => {
+                const canalAlvo = p.canais.find((c) => c.id === wahaCanalAlvo);
+                const jaConectado = canalAlvo?.status === 'conectado';
+                return (
+                  <div className="cartaocfg" style={{ marginTop: 14, border: '1px solid var(--rule)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <b style={{ fontSize: 14 }}>
+                        Conexão WhatsApp (WAHA){canalAlvo ? ` — ${canalAlvo.nome}` : ''}
+                      </b>
+                      <button type="button" className="ver-detalhes" onClick={fecharPainelWaha}>fechar</button>
+                    </div>
+
+                    {jaConectado ? (
+                      <>
+                        <p className="ajuda">
+                          Conectado{canalAlvo?.numero ? ` — ${canalAlvo.numero}` : ''}. Desconectar encerra a
+                          sessão somente deste canal. Os demais números permanecem conectados.
+                        </p>
+                        <button type="button" className="btn-teste" disabled={wahaCarregando} onClick={desconectarWaha}>
+                          {wahaCarregando ? 'Desconectando…' : 'Desconectar'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {/* Estados: Gerando QR → QR presente (Aguardando leitura) →
+                           Conectando (status intermediário) → Conectado (fecha e
+                           atualiza a tabela sozinho) → Erro (com ação de retry).
+                           Nunca mostra "Não conectado" sem dizer o próximo passo. */}
+                        {wahaCarregando && !wahaStatus && !wahaErro && (
+                          <p className="ajuda">Gerando QR Code…</p>
+                        )}
+
+                        {wahaStatus?.status === 'SCAN_QR_CODE' && wahaStatus.qr && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+                            <img src={wahaStatus.qr} alt="QR Code do WhatsApp" style={{ maxWidth: 260 }} />
+                            <p className="ajuda">
+                              Abra o WhatsApp no celular do número que vai conectar → Aparelhos conectados →
+                              Conectar um aparelho → escaneie o código acima. Aguardando leitura…
+                            </p>
+                            <button type="button" className="btn-teste" disabled={wahaCarregando}
+                                    onClick={() => wahaCanalAlvo && conectarWaha(wahaCanalAlvo)}>
+                              Atualizar QR
+                            </button>
+                          </div>
+                        )}
+
+                        {wahaStatus && !wahaErro && wahaStatus.status !== 'SCAN_QR_CODE' && wahaStatus.status !== 'WORKING' && (
+                          <p className="ajuda">Conectando… (status: {wahaStatus.status})</p>
+                        )}
+
+                        {wahaErro && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+                            <p className="ajuda" style={{ color: 'var(--red)' }}>{wahaErro}</p>
+                            <button type="button" className="btn-teste" disabled={wahaCarregando}
+                                    onClick={() => wahaCanalAlvo && conectarWaha(wahaCanalAlvo)}>
+                              Tentar novamente
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </section>
 

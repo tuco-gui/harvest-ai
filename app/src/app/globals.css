@@ -451,3 +451,32 @@ a:hover{color:var(--ink)}
   gap:10px;margin-top:4px;
 }
 .cartao-saude{padding:12px 14px}
+
+/* ---------------------------------------------------------------- modal
+   Institucional (Entrega 22) — único padrão de modal do Harvest. Confirmação
+   de arquivamento, edição de lead e outras ações pequenas usam isto; fluxos
+   complexos (editar campanha inteira) são página dedicada, não modal. */
+.modal-fundo{
+  position:fixed;inset:0;z-index:900;
+  background:rgba(0,0,0,.45);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.modal{
+  width:100%;background:var(--sunken);border:1px solid var(--rule-2);border-radius:2px;
+  box-shadow:0 24px 64px rgba(0,0,0,.35);
+  max-height:calc(100vh - 40px);display:flex;flex-direction:column;
+}
+.modal-topo{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:18px 20px;border-bottom:1px solid var(--rule);flex:none;
+}
+.modal-topo h3{margin:0;font-family:var(--display);font-weight:800;font-size:16px;letter-spacing:-.01em;color:var(--ink)}
+.modal-fechar{width:28px;height:28px;border-radius:2px;color:var(--ink-3);display:grid;place-items:center;flex:none}
+.modal-fechar:hover{color:var(--ink);background:var(--hover)}
+.modal-corpo{padding:20px;overflow:auto;font-size:13.5px;color:var(--ink-2)}
+.modal-acoes{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.modal-acoes .perigo{background:var(--red);color:#fff}
+.modal-acoes .perigo:hover:not(:disabled){background:var(--red-fundo)}
+.acao-icone{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;border:1px solid var(--rule-2);background:var(--sunken);color:var(--ink-2);text-decoration:none;font-size:13px;cursor:pointer;line-height:1}
+.acao-icone:hover{background:var(--rule-2);color:var(--ink)}
+.acao-icone-perigo:hover{color:var(--red);border-color:var(--red)}

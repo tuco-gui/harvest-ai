@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Modal from './Modal';
 
 type Canal = { id: number; nome: string; provider: string; ativo: boolean; padrao: boolean };
 
@@ -26,9 +28,14 @@ type Campanha = {
 const NOME_ORIGEM: Record<string, string> = { busca: 'Busca', planilha: 'Planilha', manual: 'Manual' };
 
 export default function Campanhas({
-  campanhas, listas = [], podeConfigurar, canais,
-}: { campanhas: Campanha[]; listas?: Campanha[]; podeConfigurar: boolean; canais: Canal[] }) {
+  campanhas, arquivadas = [], listas = [], podeConfigurar, canais,
+}: {
+  campanhas: Campanha[]; arquivadas?: Campanha[]; listas?: Campanha[]; podeConfigurar: boolean; canais: Canal[];
+}) {
   const router = useRouter();
+  const [paraArquivar, setParaArquivar] = useState<Campanha | null>(null);
+  const [arquivando, setArquivando] = useState(false);
+  const [mostrarArquivadas, setMostrarArquivadas] = useState(false);
 
   async function promoverParaCampanha(l: Campanha) {
     const r = await fetch('/api/campanhas', {
@@ -38,24 +45,25 @@ export default function Campanhas({
     if (r.ok) router.refresh();
   }
 
-  async function editar(c: Campanha) {
-    const novo = prompt('Novo nome da campanha:', c.nome);
-    if (!novo || !novo.trim() || novo.trim() === c.nome) return;
-    const r = await fetch('/api/campanhas', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: c.id, nome: novo.trim() }),
-    });
-    if (r.ok) router.refresh();
+  async function confirmarArquivar() {
+    if (!paraArquivar) return;
+    setArquivando(true);
+    try {
+      const r = await fetch('/api/campanhas', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: paraArquivar.id }),
+      });
+      if (r.ok) {
+        setParaArquivar(null);
+        router.refresh();
+      }
+    } finally {
+      setArquivando(false);
+    }
   }
 
-  async function excluir(c: Campanha) {
-    if (!confirm(`Excluir a campanha "${c.nome}"? Os leads continuam existindo, só deixam de pertencer a ela.`)) return;
-    const r = await fetch('/api/campanhas', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: c.id }),
-    });
-    if (r.ok) router.refresh();
-  }
+  const temHistorico = (c: Campanha) =>
+    (c.enviadas ?? 0) > 0 || (c.respondeu ?? 0) > 0 || (c.bloqueados ?? 0) > 0 || (c.erros ?? 0) > 0;
 
   return (
     <div className="pagina pagina-larga">
@@ -71,7 +79,7 @@ export default function Campanhas({
             <tr>
               <th>Campanha</th><th>Origem</th><th>Quando</th>
               <th>Encontradas</th><th>Com WhatsApp</th><th>Enviadas</th><th>Erro</th><th>Bloqueado</th><th>Respondeu</th>
-              {podeConfigurar && <th></th>}
+              {podeConfigurar && <th style={{ textAlign: 'right' }}>Ações</th>}
             </tr>
           </thead>
           <tbody>
@@ -91,18 +99,28 @@ export default function Campanhas({
                 <td style={{ color: c.bloqueados ? 'var(--ink-2)' : 'var(--ink-3)' }}>{c.bloqueados}</td>
                 <td style={{ color: c.respondeu ? 'var(--ink)' : 'var(--ink-3)' }}>{c.respondeu}</td>
                 {podeConfigurar && (
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <button type="button" className="ver-detalhes" onClick={() => editar(c)}>editar</button>
-                    {' · '}
-                    <button type="button" className="ver-detalhes" style={{ color: 'var(--red)' }} onClick={() => excluir(c)}>
-                      excluir
+                  <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    <Link href={`/campanhas/${c.id}`} title="Visualizar" aria-label="Visualizar" className="acao-icone">
+                      👁
+                    </Link>
+                    {' '}
+                    <Link href={`/campanhas/${c.id}/editar`} title="Editar" aria-label="Editar" className="acao-icone">
+                      ✎
+                    </Link>
+                    {' '}
+                    <button
+                      type="button" title="Arquivar" aria-label="Arquivar"
+                      className="acao-icone acao-icone-perigo"
+                      onClick={() => setParaArquivar(c)}
+                    >
+                      🗄
                     </button>
                   </td>
                 )}
               </tr>
             ))}
             {!campanhas.length && (
-              <tr><td colSpan={podeConfigurar ? 10 : 9} style={{ color: 'var(--ink-3)' }}>Nenhuma campanha ainda — comece uma busca em Prospecção.</td></tr>
+              <tr><td colSpan={podeConfigurar ? 10 : 9} style={{ color: 'var(--ink-3)' }}>Nenhuma campanha ativa — comece uma busca em Prospecção.</td></tr>
             )}
           </tbody>
         </table>
@@ -115,6 +133,40 @@ export default function Campanhas({
           conectado, o disparo avisa antes de falhar.
         </p>
       </section>
+
+      {arquivadas.length > 0 && (
+        <section className="secao" style={{ marginTop: 24 }}>
+          <button
+            type="button" className="ver-detalhes"
+            onClick={() => setMostrarArquivadas((v) => !v)}
+          >
+            {mostrarArquivadas ? '▾' : '▸'} Arquivadas ({arquivadas.length})
+          </button>
+          {mostrarArquivadas && (
+            <table className="tabela" style={{ marginTop: 10 }}>
+              <thead>
+                <tr><th>Campanha</th><th>Origem</th><th>Quando</th><th>Enviadas</th><th>Respondeu</th><th></th></tr>
+              </thead>
+              <tbody>
+                {arquivadas.map((c) => (
+                  <tr key={c.id} style={{ color: 'var(--ink-3)' }}>
+                    <td>{c.nome}</td>
+                    <td>{NOME_ORIGEM[c.origem] ?? c.origem}</td>
+                    <td>{new Date(c.criado_em).toLocaleString('pt-BR')}</td>
+                    <td>{c.enviadas}</td>
+                    <td>{c.respondeu}</td>
+                    <td>
+                      <Link href={`/campanhas/${c.id}`} className="acao-icone" title="Visualizar" aria-label="Visualizar">
+                        👁
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
 
       {listas.length > 0 && (
         <section className="secao" style={{ marginTop: 24 }}>
@@ -144,10 +196,10 @@ export default function Campanhas({
                         criar campanha
                       </button>
                       {' · '}
-                      <button type="button" className="ver-detalhes" onClick={() => editar(l)}>editar</button>
+                      <Link href={`/campanhas/${l.id}/editar`} className="ver-detalhes">editar</Link>
                       {' · '}
-                      <button type="button" className="ver-detalhes" style={{ color: 'var(--red)' }} onClick={() => excluir(l)}>
-                        excluir
+                      <button type="button" className="ver-detalhes" style={{ color: 'var(--red)' }} onClick={() => setParaArquivar(l)}>
+                        arquivar
                       </button>
                     </td>
                   )}
@@ -157,6 +209,31 @@ export default function Campanhas({
           </table>
         </section>
       )}
+
+      <Modal
+        titulo="Arquivar campanha"
+        aberto={!!paraArquivar}
+        onFechar={() => setParaArquivar(null)}
+      >
+        {paraArquivar && (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '0 0 10px' }}>
+              Arquivar <strong>{paraArquivar.nome}</strong>?
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--ink-3)', margin: '0 0 14px' }}>
+              {temHistorico(paraArquivar)
+                ? 'Esta campanha já tem disparos, respostas ou opt-outs registrados. O histórico é preservado — ela só sai da listagem ativa e passa para "Arquivadas".'
+                : 'A campanha e seus leads continuam existindo — ela só sai da listagem ativa e passa para "Arquivadas". Nada é excluído.'}
+            </p>
+            <div className="modal-acoes">
+              <button type="button" onClick={() => setParaArquivar(null)} disabled={arquivando}>Cancelar</button>
+              <button type="button" className="perigo" onClick={confirmarArquivar} disabled={arquivando}>
+                {arquivando ? 'Arquivando…' : 'Arquivar'}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

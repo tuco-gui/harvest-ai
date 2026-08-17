@@ -27,7 +27,49 @@ export type CanalWhatsApp = {
 
 /** Canais elegíveis para envio: ativos, da conta, e com provider conectado/viável. */
 function canalElegivel(c: CanalWhatsApp): boolean {
-  return c.ativo && (c.status === 'conectado' || c.status === 'desconhecido');
+  return c.ativo && c.status === 'conectado';
+}
+
+/** Sessão persistida do canal. Nunca volta silenciosamente para outra linha. */
+export function sessaoWahaDoCanal(canal: CanalWhatsApp): string {
+  if (canal.provider !== 'waha') throw new Error('Canal não usa WAHA.');
+  return canal.identificador_externo?.trim() || wahaSessionName(canal.conta_id, canal.id);
+}
+
+/**
+ * Materializa uma sessão distinta em cada canal antigo. O primeiro canal
+ * legado preserva `conta_<tenant>` para não derrubar o número que já estava
+ * conectado; todo canal adicional recebe `harvest_<tenant>_c<id>`.
+ */
+async function garantirSessoesWaha(
+  admin: SupabaseClient,
+  canais: CanalWhatsApp[],
+): Promise<CanalWhatsApp[]> {
+  const waha = canais.filter((c) => c.provider === 'waha');
+  if (!waha.length) return canais;
+  const legado = wahaSessionName(waha[0].conta_id);
+  let legadoReservado = waha.some((c) => c.identificador_externo === legado);
+  const semSessao = waha
+    .filter((c) => !c.identificador_externo?.trim())
+    .sort((a, b) => Number(b.status === 'conectado') - Number(a.status === 'conectado')
+      || Number(b.padrao) - Number(a.padrao) || a.id - b.id);
+
+  for (const canal of semSessao) {
+    const identificador = !legadoReservado
+      ? legado
+      : wahaSessionName(canal.conta_id, canal.id);
+    legadoReservado = true;
+    const { data } = await admin
+      .from('whatsapp_canais')
+      .update({ identificador_externo: identificador, atualizado_em: new Date().toISOString() })
+      .eq('id', canal.id)
+      .eq('conta_id', canal.conta_id)
+      .is('identificador_externo', null)
+      .select('*')
+      .maybeSingle();
+    if (data) Object.assign(canal, data as CanalWhatsApp);
+  }
+  return canais;
 }
 
 /**
@@ -75,7 +117,7 @@ export async function carregarCanais(
     .eq('conta_id', contaId)
     .order('padrao', { ascending: false })
     .order('id');
-  const canais = (data as CanalWhatsApp[] | null) ?? [];
+  const canais = await garantirSessoesWaha(admin, (data as CanalWhatsApp[] | null) ?? []);
   // Reconcilia status/número dos canais WAHA com a sessão real (corrige o
   // backfill, que não tinha o número/status da sessão). Evolution só fica
   // conectado se a instância existir de verdade — validado no disparo.
@@ -102,8 +144,8 @@ export function resolverCanalDisparo(
 /**
  * Reconcilia o status (e número) de um canal WAHA com a sessão real do provider.
  *
- * Fonte de verdade: a sessão WAHA da conta (identificador da sessão derivado do
- * conta_id). O canal é só o espelho persistido. Se a sessão estiver WORKING, o
+ * Fonte de verdade: a sessão WAHA própria do canal (identificador persistido).
+ * Se a sessão estiver WORKING, o
  * canal fica conectado e ganha o número real; se parada/falhou, fica
  * desconectado. Nunca criamos QR novo aqui — isso é responsabilidade do fluxo
  * de conexão (Configurações). Retorna o canal atualizado ou null se a sessão
@@ -118,7 +160,7 @@ export async function reconciliarStatusWaha(
 ): Promise<CanalWhatsApp> {
   if (canal.provider !== 'waha' || !canal.ativo) return canal;
 
-  const sessao = wahaSessionName(canal.conta_id);
+  const sessao = sessaoWahaDoCanal(canal);
   let statusWaha: string | null = null;
   let numero: string | null = null;
   try {

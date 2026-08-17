@@ -74,7 +74,15 @@ export async function PATCH(req: Request) {
   // Número de envio (Fase 3B.1): fixo num canal ou rodízio entre canais.
   if (b.modoEnvio === 'fixo' || b.modoEnvio === 'rodizio') dados.modo_envio_numero = b.modoEnvio;
   if (Array.isArray(b.canalIds)) {
-    dados.canal_ids = b.canalIds.filter((n: unknown) => Number.isInteger(n)) as number[];
+    const canalIds = b.canalIds.filter((n: unknown) => Number.isInteger(n)) as number[];
+    if (canalIds.length) {
+      const { data: canaisDaConta } = await supabaseAdmin().from('whatsapp_canais')
+        .select('id').eq('conta_id', perfil.conta_id).in('id', canalIds);
+      if ((canaisDaConta?.length ?? 0) !== new Set(canalIds).size) {
+        return NextResponse.json({ erro: 'Um dos canais não pertence à conta ativa.' }, { status: 400 });
+      }
+    }
+    dados.canal_ids = canalIds;
   }
 
   // "Criar campanha a partir desta lista" — upgrade em vez de duplicar linha.
@@ -131,22 +139,30 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
-/** Apaga a campanha — nunca os leads dela. Só desvincula (campanha_id=null),
- *  porque o lead já pode ter recebido mensagem e tem histórico que vale
- *  manter mesmo sem a campanha original existir mais. */
+/**
+ * Arquiva a campanha (Entrega 22). NUNCA apaga a linha — nem os leads —
+ * porque uma campanha praticamente sempre já tem disparos, respostas,
+ * opt-outs ou métricas que valem a pena preservar mesmo depois de encerrada.
+ * "Arquivar" é `status='cancelada'` (reaproveita o enum já existente da
+ * migration 020 em vez de criar coluna nova); a campanha some da listagem
+ * ativa e vai para "Arquivadas", mas continua acessível e com histórico
+ * intacto. Não existe, propositalmente, um caminho de exclusão definitiva
+ * nesta rodada — a instrução institucional pede autorização específica
+ * antes de expor isso, e um método HTTP DELETE não é essa autorização.
+ */
 export async function DELETE(req: Request) {
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
   if (perfil.papel === 'operador') {
-    return NextResponse.json({ erro: 'Seu perfil não exclui campanhas.' }, { status: 403 });
+    return NextResponse.json({ erro: 'Seu perfil não arquiva campanhas.' }, { status: 403 });
   }
 
   const { id } = await req.json().catch(() => ({}) as any);
   if (!id) return NextResponse.json({ erro: 'Falta a campanha.' }, { status: 400 });
 
   const admin = supabaseAdmin();
-  await admin.from('prospecta_leads').update({ campanha_id: null }).eq('campanha_id', id).eq('conta_id', perfil.conta_id);
-  const { error } = await admin.from('prospecta_campanhas').delete().eq('id', id).eq('conta_id', perfil.conta_id);
+  const { error } = await admin
+    .from('prospecta_campanhas').update({ status: 'cancelada' }).eq('id', id).eq('conta_id', perfil.conta_id);
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, arquivada: true });
 }

@@ -64,6 +64,7 @@ const mk = (id: number, over: Partial<CanalWhatsApp> = {}): CanalWhatsApp => ({
   ok(escolherCanalFixo(canais, 99) === null, 'fixo com id inexistente -> null (rejeitado)');
   // canal pedido inativo -> null
   ok(escolherCanalFixo([mk(1, { ativo: false })], 1) === null, 'fixo em canal inativo -> null');
+  ok(escolherCanalFixo([mk(1, { status: 'desconhecido' })], 1) === null, 'fixo desconhecido -> null (somente WORKING pode enviar)');
 }
 
 // --- Isolamento de tenant: o resolvedor nunca retorna canal fora do array ---
