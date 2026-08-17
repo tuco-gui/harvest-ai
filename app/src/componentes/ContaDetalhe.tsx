@@ -20,11 +20,14 @@ const NOME_STATUS: Record<string, string> = { aberta: 'Aberto', respondida: 'Res
 export default function ContaDetalhe({
   conta, usuarios, integracoes, campanhas, erros, chamados,
 }: {
-  conta: { id: string; nome: string; slug: string; ativo: boolean };
+  conta: { id: string; nome: string; slug: string; ativo: boolean; modulos_habilitados: string[] | null };
   usuarios: Usuario[]; integracoes: Integracoes; campanhas: Campanha[]; erros: Erro[]; chamados: Chamado[];
 }) {
   const router = useRouter();
-  const [aba, setAba] = useState<'usuarios' | 'integracoes' | 'campanhas' | 'erros' | 'chamados'>('usuarios');
+  const [aba, setAba] = useState<'usuarios' | 'modulos' | 'integracoes' | 'campanhas' | 'erros' | 'chamados'>('usuarios');
+  const [modulos, setModulos] = useState<string[]>(conta.modulos_habilitados ?? ['whatsapp', 'ia', 'usuarios', 'chamados', 'status']);
+  const [salvandoModulos, setSalvandoModulos] = useState(false);
+  const [avisoModulos, setAvisoModulos] = useState<string | null>(null);
 
   async function trabalharNestaConta() {
     await fetch('/api/conta-ativa', {
@@ -32,6 +35,28 @@ export default function ContaDetalhe({
       body: JSON.stringify({ conta_id: conta.id }),
     });
     router.push('/');
+  }
+
+  async function alternarCrm() {
+    const novos = modulos.includes('crm')
+      ? modulos.filter((m) => m !== 'crm')
+      : [...modulos, 'crm'];
+    setSalvandoModulos(true);
+    setAvisoModulos(null);
+    const r = await fetch('/api/contas', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: conta.id, modulos_habilitados: novos }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setSalvandoModulos(false);
+    if (!r.ok) {
+      setAvisoModulos(d.erro ?? 'Não foi possível alterar o módulo.');
+      return;
+    }
+    setModulos(d.modulos_habilitados ?? novos);
+    setAvisoModulos(novos.includes('crm') ? 'CRM liberado para esta conta.' : 'CRM desativado para esta conta.');
+    router.refresh();
   }
 
   const badge = (rotulo: string, ok: boolean | string | null) => (
@@ -55,6 +80,7 @@ export default function ContaDetalhe({
 
       <div className="modos" style={{ marginTop: 16, marginBottom: 20 }}>
         <button aria-pressed={aba === 'usuarios'} onClick={() => setAba('usuarios')}>Usuários ({usuarios.length})</button>
+        <button aria-pressed={aba === 'modulos'} onClick={() => setAba('modulos')}>Módulos</button>
         <button aria-pressed={aba === 'integracoes'} onClick={() => setAba('integracoes')}>Integrações</button>
         <button aria-pressed={aba === 'campanhas'} onClick={() => setAba('campanhas')}>Campanhas ({campanhas.length})</button>
         <button aria-pressed={aba === 'erros'} onClick={() => setAba('erros')}>
@@ -80,6 +106,33 @@ export default function ContaDetalhe({
             {!usuarios.length && <tr><td colSpan={4} style={{ color: 'var(--ink-3)' }}>Nenhum usuário ainda.</td></tr>}
           </tbody>
         </table>
+      )}
+
+      {aba === 'modulos' && (
+        <div className="cartaocfg">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+            <div>
+              <strong>CRM</strong>
+              <p className="ajuda" style={{ margin: '4px 0 0' }}>
+                Pipeline de oportunidades, qualificação de leads e gestão comercial.
+              </p>
+            </div>
+            <button
+              type="button"
+              className={modulos.includes('crm') ? 'btn-teste' : 'salvar'}
+              disabled={salvandoModulos}
+              onClick={alternarCrm}
+            >
+              {salvandoModulos ? 'Salvando…' : modulos.includes('crm') ? 'Desativar CRM' : 'Liberar CRM'}
+            </button>
+          </div>
+          <p className="ajuda" style={{ marginTop: 12 }}>
+            {modulos.includes('crm')
+              ? 'O CRM está visível para administradores desta conta.'
+              : 'O CRM está oculto e as APIs permanecem bloqueadas para esta conta.'}
+          </p>
+          {avisoModulos && <p className="ajuda" style={{ marginTop: 8 }}>{avisoModulos}</p>}
+        </div>
       )}
 
       {aba === 'integracoes' && (

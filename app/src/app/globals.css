@@ -480,3 +480,29 @@ a:hover{color:var(--ink)}
 .acao-icone{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;border:1px solid var(--rule-2);background:var(--sunken);color:var(--ink-2);text-decoration:none;font-size:13px;cursor:pointer;line-height:1}
 .acao-icone:hover{background:var(--rule-2);color:var(--ink)}
 .acao-icone-perigo:hover{color:var(--red);border-color:var(--red)}
+
+/* ===== CRM Kanban (P0) ===== */
+.crm-kanban{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding:6px 2px 18px}
+.coluna{flex:0 0 240px;background:var(--sunken);border:1px solid var(--rule);border-radius:4px;display:flex;flex-direction:column;min-height:120px}
+.coluna-alvo{border-color:var(--ink-3);background:var(--hover)}
+.coluna-cabecalho{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--rule);font-size:13px;font-weight:700;color:var(--ink);font-family:var(--display);letter-spacing:-.01em}
+.coluna-contagem{font-weight:600;color:var(--ink-3);background:var(--rule-2);border-radius:10px;padding:1px 8px;font-size:11px}
+.coluna-cards{list-style:none;margin:0;padding:8px;display:flex;flex-direction:column;gap:8px;flex:1}
+.cartao{background:var(--bg);border:1px solid var(--rule);border-radius:3px;padding:10px;cursor:grab;display:flex;flex-direction:column;gap:3px;box-shadow:0 1px 0 var(--rule)}
+.cartao:active{cursor:grabbing}
+.cartao-empresa{font-size:13.5px;font-weight:700;color:var(--ink);font-family:var(--display);letter-spacing:-.01em}
+.cartao-contato{font-size:12px;color:var(--ink-2)}
+.cartao-valor{font-size:13px;font-weight:600;color:var(--ink)}
+.cartao-owner{font-size:11px;color:var(--ink-3)}
+.cartao-acao{font-size:11px;color:var(--ink-2);font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.42);display:grid;place-items:stretch end;z-index:60}
+.crm-drawer{width:min(440px,100%);background:var(--bg);height:100%;overflow:auto;box-shadow:-6px 0 24px rgba(0,0,0,.22);display:flex;flex-direction:column}
+.drawer-cabecalho{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--bg);z-index:1}
+.drawer-cabecalho h2{margin:0;font-family:var(--display);font-weight:800;font-size:16px;letter-spacing:-.01em;color:var(--ink)}
+.drawer-form{display:flex;flex-direction:column;gap:12px;padding:18px}
+.drawer-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--ink-2);font-weight:600}
+.drawer-form input,.drawer-form select,.drawer-form textarea{height:36px;padding:0 10px;background:var(--sunken);border:1px solid var(--rule);border-radius:2px;font-size:14px;color:var(--ink);font-family:inherit}
+.drawer-form textarea{height:72px;padding:8px 10px;resize:vertical}
+.drawer-rodape{display:flex;justify-content:flex-end;margin-top:6px}
+.btn-primario{background:var(--ink);color:var(--bg);border:0;border-radius:2px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--display)}
+.btn-primario:disabled{opacity:.5;cursor:default}
