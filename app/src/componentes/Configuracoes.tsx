@@ -280,6 +280,73 @@ export default function Configuracoes(p: Props) {
 
       {aba === 'conexoes' && (
         <>
+          {/* Painel de diagnóstico — só super admin vê */}
+          {p.eSuperAdmin && (
+            <section className="secao">
+              <h2>Status atual da conta</h2>
+              <p className="resumo-secao">
+                Resumo do que está configurado nesta conta. Chaves nunca são exibidas — apenas
+                se estão salvas ou não.
+              </p>
+              <div className="cartaocfg">
+                <table className="tabela">
+                  <thead>
+                    <tr><th>Serviço</th><th>Configuração</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Busca (SerpAPI)</td>
+                      <td style={{ color: 'var(--ink-3)' }}>Chave institucional Figueira</td>
+                      <td><span className="selo" style={{ borderColor: p.temSerpapi ? 'var(--green)' : 'var(--rule-2)', color: p.temSerpapi ? 'var(--green)' : 'var(--ink-2)' }}>{p.temSerpapi ? '✓ Chave salva' : '✗ Sem chave'}</span></td>
+                    </tr>
+                    <tr>
+                      <td>WhatsApp — provider</td>
+                      <td style={{ color: 'var(--ink-3)', textTransform: 'capitalize' }}>{p.whatsappProvider}</td>
+                      <td><span className="selo" style={{ borderColor: 'var(--rule-2)', color: 'var(--ink-2)' }}>
+                        {p.canais.length} canal(is) cadastrado(s)
+                      </span></td>
+                    </tr>
+                    {p.whatsappProvider === 'evolution' && (
+                      <tr>
+                        <td>Evolution — URL / Instância</td>
+                        <td style={{ color: 'var(--ink-3)', fontSize: 12, wordBreak: 'break-all' }}>
+                          {p.evolutionUrl ? p.evolutionUrl : <em>não configurada</em>}
+                          {p.evolutionInstancia ? ` · ${p.evolutionInstancia}` : ''}
+                        </td>
+                        <td><span className="selo" style={{ borderColor: p.temEvolutionKey ? 'var(--green)' : 'var(--rule-2)', color: p.temEvolutionKey ? 'var(--green)' : 'var(--ink-2)' }}>{p.temEvolutionKey ? '✓ Key salva' : '✗ Sem key'}</span></td>
+                      </tr>
+                    )}
+                    <tr>
+                      <td>Inteligência Artificial</td>
+                      <td style={{ color: 'var(--ink-3)' }}>
+                        {p.iaProvedor}{p.iaModelo ? ` · ${p.iaModelo}` : ''}
+                      </td>
+                      <td><span className="selo" style={{ borderColor: p.temIa ? 'var(--green)' : 'var(--rule-2)', color: p.temIa ? 'var(--green)' : 'var(--ink-2)' }}>{p.temIa ? '✓ Key salva' : '✗ Sem key'}</span></td>
+                    </tr>
+                    {p.mostraEnriquecimento && (
+                      <>
+                        <tr>
+                          <td>Decisor (LinkedIn)</td>
+                          <td style={{ color: 'var(--ink-3)' }}>{p.decisorProvedor} · LinkedIn: {p.linkedinProvedor}</td>
+                          <td><span className="selo" style={{ borderColor: p.temPerplexity || p.temSerper || p.temTavily ? 'var(--green)' : 'var(--rule-2)', color: p.temPerplexity || p.temSerper || p.temTavily ? 'var(--green)' : 'var(--ink-2)' }}>
+                            {[p.temPerplexity && 'Perplexity', p.temSerper && 'Serper', p.temTavily && 'Tavily'].filter(Boolean).join(' · ') || '✗ Sem chave'}
+                          </span></td>
+                        </tr>
+                        <tr>
+                          <td>E-mail (enriquecimento)</td>
+                          <td style={{ color: 'var(--ink-3)' }}>{p.emailProvedor}</td>
+                          <td><span className="selo" style={{ borderColor: p.temAnymail || p.temApollo || p.temSnov ? 'var(--green)' : 'var(--rule-2)', color: p.temAnymail || p.temApollo || p.temSnov ? 'var(--green)' : 'var(--ink-2)' }}>
+                            {[p.temAnymail && 'Anymail', p.temApollo && 'Apollo', p.temSnov && 'Snov'].filter(Boolean).join(' · ') || '✗ Sem chave'}
+                          </span></td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           <section className="secao">
             <h2>WhatsApp — canais</h2>
             <p className="resumo-secao">
