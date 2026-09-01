@@ -46,7 +46,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ erro: 'Só o super admin edita contas.' }, { status: 403 });
   }
 
-  const { id, nome, modulos_habilitados } = await req.json().catch(() => ({}) as any);
+  const { id, nome, modulos_habilitados, ambiente, whatsapp_qa_whitelist } = await req.json().catch(() => ({}) as any);
   if (!id) return NextResponse.json({ erro: 'Falta a conta.' }, { status: 400 });
 
   if (Array.isArray(modulos_habilitados)) {
@@ -55,6 +55,15 @@ export async function PATCH(req: Request) {
     const { error } = await supabaseAdmin().from('contas').update({ modulos_habilitados: modulos }).eq('id', id);
     if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, modulos_habilitados: modulos });
+  }
+
+  // ADR-009: marca a conta como 'teste' (guarda fail-closed de WhatsApp) e sua whitelist de QA.
+  if (ambiente === 'teste' || ambiente === 'producao') {
+    const { error } = await supabaseAdmin().from('contas')
+      .update({ ambiente, whatsapp_qa_whitelist: String(whatsapp_qa_whitelist ?? '').trim() || null })
+      .eq('id', id);
+    if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, ambiente });
   }
 
   if (typeof nome !== 'string' || nome.trim().length < 2) {

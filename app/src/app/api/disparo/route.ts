@@ -40,17 +40,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Telefone do lead é inválido.' }, { status: 400 });
   }
   const campanhaIdNum = typeof campanhaId === 'number' ? campanhaId : null;
+  const admin = supabaseAdmin();
 
-  // Guarda fail-closed de ambiente (staging): roda ANTES de qualquer outra
-  // coisa, inclusive da barreira de supressão — em WHATSAPP_MODE=test,
-  // número fora da whitelist de QA nunca chega perto de um provider real,
-  // mesmo que secrets de staging estejam mal configurados.
-  const permissaoAmbiente = envioPermitidoNoAmbiente(telefone);
+  // Guarda fail-closed de ambiente (ADR-009): roda ANTES de qualquer outra
+  // coisa, inclusive da barreira de supressão — numa conta marcada como
+  // 'teste', número fora da whitelist de QA da conta nunca chega perto de
+  // um provider real.
+  const permissaoAmbiente = await envioPermitidoNoAmbiente(admin, perfil.conta_id, telefone);
   if (!permissaoAmbiente.ok) {
     return NextResponse.json({ erro: permissaoAmbiente.motivo, bloqueadoPorAmbiente: true }, { status: 403 });
   }
-
-  const admin = supabaseAdmin();
 
   // O id recebido da tela é a identidade canônica. Reencontrar o lead por
   // place_id criava/selecionava outro registro em alguns casos e separava a

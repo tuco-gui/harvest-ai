@@ -76,7 +76,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const telefone = normalizarTelefone(ctx.oportunidade.telefone ?? '');
   if (!telefone) return NextResponse.json({ erro: 'Oportunidade sem telefone válido.' }, { status: 400 });
-  const permissao = envioPermitidoNoAmbiente(telefone);
+  const permissao = await envioPermitidoNoAmbiente(ctx.admin, contaId, telefone);
   if (!permissao.ok) return NextResponse.json({ erro: permissao.motivo }, { status: 403 });
   if (await estaSuprimido(ctx.admin, contaId, telefone)) {
     return NextResponse.json({ erro: 'Contato em opt-out/supressão. O envio foi bloqueado.', suprimido: true }, { status: 403 });

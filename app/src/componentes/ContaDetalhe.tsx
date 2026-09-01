@@ -20,7 +20,10 @@ const NOME_STATUS: Record<string, string> = { aberta: 'Aberto', respondida: 'Res
 export default function ContaDetalhe({
   conta, usuarios, integracoes, campanhas, erros, chamados,
 }: {
-  conta: { id: string; nome: string; slug: string; ativo: boolean; modulos_habilitados: string[] | null };
+  conta: {
+    id: string; nome: string; slug: string; ativo: boolean; modulos_habilitados: string[] | null;
+    ambiente: string | null; whatsapp_qa_whitelist: string | null;
+  };
   usuarios: Usuario[]; integracoes: Integracoes; campanhas: Campanha[]; erros: Erro[]; chamados: Chamado[];
 }) {
   const router = useRouter();
@@ -28,6 +31,10 @@ export default function ContaDetalhe({
   const [modulos, setModulos] = useState<string[]>(conta.modulos_habilitados ?? ['whatsapp', 'ia', 'usuarios', 'chamados', 'status']);
   const [salvandoModulos, setSalvandoModulos] = useState(false);
   const [avisoModulos, setAvisoModulos] = useState<string | null>(null);
+  const [ambiente, setAmbiente] = useState(conta.ambiente ?? 'producao');
+  const [whitelist, setWhitelist] = useState(conta.whatsapp_qa_whitelist ?? '');
+  const [salvandoAmbiente, setSalvandoAmbiente] = useState(false);
+  const [avisoAmbiente, setAvisoAmbiente] = useState<string | null>(null);
 
   async function trabalharNestaConta() {
     await fetch('/api/conta-ativa', {
@@ -56,6 +63,25 @@ export default function ContaDetalhe({
     }
     setModulos(d.modulos_habilitados ?? novos);
     setAvisoModulos(novos.includes('crm') ? 'CRM liberado para esta conta.' : 'CRM desativado para esta conta.');
+    router.refresh();
+  }
+
+  async function salvarAmbiente(novoAmbiente: string) {
+    setSalvandoAmbiente(true);
+    setAvisoAmbiente(null);
+    const r = await fetch('/api/contas', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: conta.id, ambiente: novoAmbiente, whatsapp_qa_whitelist: whitelist }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setSalvandoAmbiente(false);
+    if (!r.ok) {
+      setAvisoAmbiente(d.erro ?? 'Não foi possível alterar o ambiente.');
+      return;
+    }
+    setAmbiente(novoAmbiente);
+    setAvisoAmbiente('Ambiente salvo.');
     router.refresh();
   }
 
@@ -132,6 +158,39 @@ export default function ContaDetalhe({
               : 'O CRM está oculto e as APIs permanecem bloqueadas para esta conta.'}
           </p>
           {avisoModulos && <p className="ajuda" style={{ marginTop: 8 }}>{avisoModulos}</p>}
+
+          <div style={{ borderTop: '1px solid var(--rule)', marginTop: 20, paddingTop: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+              <div>
+                <strong>Ambiente de teste (ADR-009)</strong>
+                <p className="ajuda" style={{ margin: '4px 0 0' }}>
+                  Numa conta de teste, o WhatsApp só envia para números da whitelist de QA abaixo — fora dela, bloqueado.
+                </p>
+              </div>
+              <button
+                type="button"
+                className={ambiente === 'teste' ? 'btn-teste' : 'salvar'}
+                disabled={salvandoAmbiente}
+                onClick={() => salvarAmbiente(ambiente === 'teste' ? 'producao' : 'teste')}
+              >
+                {salvandoAmbiente ? 'Salvando…' : ambiente === 'teste' ? 'Voltar para produção' : 'Marcar como teste'}
+              </button>
+            </div>
+            {ambiente === 'teste' && (
+              <div style={{ marginTop: 12 }}>
+                <label className="ajuda" htmlFor="whitelist-qa">Whitelist de QA (telefones em E.164, separados por vírgula)</label>
+                <textarea
+                  id="whitelist-qa"
+                  value={whitelist}
+                  onChange={(e) => setWhitelist(e.target.value)}
+                  onBlur={() => salvarAmbiente('teste')}
+                  rows={2}
+                  style={{ width: '100%', marginTop: 6 }}
+                />
+              </div>
+            )}
+            {avisoAmbiente && <p className="ajuda" style={{ marginTop: 8 }}>{avisoAmbiente}</p>}
+          </div>
         </div>
       )}
 

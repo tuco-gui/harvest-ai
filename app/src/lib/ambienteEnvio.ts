@@ -1,34 +1,39 @@
-/**
- * Guarda de segurança "fail-closed" para staging (Entrega 15 / Fase de
- * evolução — STAGING). Objetivo: mesmo que alguém configure secrets de
- * staging errados (ex.: aponte staging para o WAHA de produção), NENHUMA
- * mensagem sai para um número real de terceiro nesse ambiente.
- *
- * Regra: se WHATSAPP_MODE=test, todo disparo só é permitido se o telefone
- * (E.164, só dígitos) estiver na whitelist WHATSAPP_QA_WHITELIST (lista
- * separada por vírgula). Fora da whitelist → bloqueado, sem exceção.
- *
- * Em produção (WHATSAPP_MODE ausente ou != 'test') esta função sempre
- * libera — não altera nenhum comportamento de produção.
- */
-export function envioPermitidoNoAmbiente(telefone: string): { ok: true } | { ok: false; motivo: string } {
-  const modo = (process.env.WHATSAPP_MODE ?? '').trim().toLowerCase();
-  if (modo !== 'test') return { ok: true };
+import type { SupabaseClient } from '@supabase/supabase-js';
 
-  const bruta = process.env.WHATSAPP_QA_WHITELIST ?? '';
+/**
+ * Guarda de segurança "fail-closed" por conta (ADR-009). Substitui o antigo
+ * guard global por env var (WHATSAPP_MODE/WHATSAPP_QA_WHITELIST) — este
+ * projeto não tem mais um deploy de staging separado; testes rodam dentro da
+ * própria produção, numa conta marcada como contas.ambiente = 'teste'.
+ *
+ * Regra: se a conta está marcada como 'teste', todo disparo só é permitido
+ * se o telefone (E.164, só dígitos) estiver na whitelist da conta
+ * (contas.whatsapp_qa_whitelist, lista separada por vírgula). Fora da
+ * whitelist → bloqueado, sem exceção.
+ *
+ * Contas 'producao' (padrão) sempre liberam — não altera comportamento.
+ */
+export async function envioPermitidoNoAmbiente(
+  admin: SupabaseClient,
+  contaId: string,
+  telefone: string,
+): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const { data: conta } = await admin
+    .from('contas')
+    .select('ambiente, whatsapp_qa_whitelist')
+    .eq('id', contaId)
+    .maybeSingle();
+  if (conta?.ambiente !== 'teste') return { ok: true };
+
+  const bruta = conta.whatsapp_qa_whitelist ?? '';
   const whitelist = new Set(
-    bruta.split(',').map((n) => n.replace(/\D/g, '')).filter(Boolean),
+    bruta.split(',').map((n: string) => n.replace(/\D/g, '')).filter(Boolean),
   );
   const digitos = telefone.replace(/\D/g, '');
 
   if (whitelist.has(digitos)) return { ok: true };
   return {
     ok: false,
-    motivo: 'WHATSAPP_MODE=test: este ambiente só pode enviar para números da whitelist de QA (WHATSAPP_QA_WHITELIST).',
+    motivo: 'Esta é uma conta de teste: só pode enviar para números da whitelist de QA da conta.',
   };
-}
-
-/** True quando este deploy está rodando em modo de teste (staging). */
-export function ehAmbienteDeTeste(): boolean {
-  return (process.env.WHATSAPP_MODE ?? '').trim().toLowerCase() === 'test';
 }

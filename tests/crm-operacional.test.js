@@ -26,7 +26,7 @@ test('atividades e mensagens validam módulo, oportunidade e tenant', () => {
 
 test('envio CRM preserva opt-out, whitelist e canal conectado', () => {
   const rota = ler('app/src/app/api/crm/oportunidades/[id]/mensagens/route.ts');
-  assert.match(rota, /envioPermitidoNoAmbiente\(telefone\)/);
+  assert.match(rota, /envioPermitidoNoAmbiente\(ctx\.admin, contaId, telefone\)/);
   assert.match(rota, /estaSuprimido\(ctx\.admin, contaId, telefone\)/);
   assert.match(rota, /c\.id === canalId && c\.ativo && c\.status === 'conectado'/);
   assert.match(rota, /status\.status !== 'WORKING'/);
