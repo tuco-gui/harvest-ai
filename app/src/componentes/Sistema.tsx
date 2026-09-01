@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-type Smtp = { host: string; porta: number; usuario: string; remetente: string; temSenha: boolean };
+type Smtp = { host: string; porta: number; usuario: string; remetente: string; replyTo: string; temSenha: boolean };
 
 export default function Sistema({ smtp }: { smtp: Smtp }) {
   const router = useRouter();
@@ -13,6 +13,7 @@ export default function Sistema({ smtp }: { smtp: Smtp }) {
   const [smtpUsuario, setSmtpUsuario] = useState(smtp.usuario);
   const [smtpSenha, setSmtpSenha] = useState('');
   const [smtpRemetente, setSmtpRemetente] = useState(smtp.remetente);
+  const [smtpReplyTo, setSmtpReplyTo] = useState(smtp.replyTo);
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
   const [recado, setRecado] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export default function Sistema({ smtp }: { smtp: Smtp }) {
       body: JSON.stringify({
         smtp_host: smtpHost, smtp_porta: smtpPorta, smtp_usuario: smtpUsuario,
         smtp_senha: smtpSenha || undefined, smtp_remetente: smtpRemetente,
+        smtp_reply_to: smtpReplyTo,
       }),
     });
     const d = await r.json();
@@ -76,6 +78,13 @@ export default function Sistema({ smtp }: { smtp: Smtp }) {
               <label className="label" htmlFor="sr">Remetente (opcional)</label>
               <input id="sr" value={smtpRemetente} onChange={(e) => setSmtpRemetente(e.target.value)}
                      placeholder="Harvest AI <naoresponda@figueiramarketing.com.br>" />
+            </div>
+          </div>
+          <div className="linha-form">
+            <div className="grupo">
+              <label className="label" htmlFor="srt">Reply-To (opcional)</label>
+              <input id="srt" value={smtpReplyTo} onChange={(e) => setSmtpReplyTo(e.target.value)}
+                     placeholder="contato@figueiramarketing.com.br" />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>

@@ -9,7 +9,7 @@ export default async function Pagina() {
 
   const { data: smtp } = await supabaseAdmin()
     .from('config_sistema')
-    .select('smtp_host, smtp_porta, smtp_usuario, smtp_remetente, smtp_senha')
+    .select('smtp_host, smtp_porta, smtp_usuario, smtp_remetente, smtp_reply_to, smtp_senha')
     .eq('id', 1).maybeSingle();
 
   return (
@@ -19,6 +19,7 @@ export default async function Pagina() {
         porta: smtp?.smtp_porta ?? 587,
         usuario: smtp?.smtp_usuario ?? '',
         remetente: smtp?.smtp_remetente ?? '',
+        replyTo: smtp?.smtp_reply_to ?? '',
         temSenha: !!smtp?.smtp_senha,
       }}
     />
