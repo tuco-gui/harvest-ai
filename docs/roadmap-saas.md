@@ -425,6 +425,17 @@ realmente ativo é `SupabaseCrmBackend`, que virou o CRM (`oportunidades`,
 corrigir por causa da troca Evolution→WAHA — Chatwoot nunca esteve
 conectado.
 
+**Decisão vigente (owner, 02/09/2026): Harvest + Twenty + Chatwoot +
+WAHA/Evolution.** Confirma o ADR-007/Plano Mestre — Twenty é o CRM fonte da
+verdade pós-qualificação, Chatwoot é a fonte da verdade de conversas, o
+Harvest é a experiência unificada por cima dos dois. Não está mais em
+debate se serão usados. Uma linha de investigação paralela (POC "Twenty +
+WAHA sem Chatwoot", `01_AUDITORIAS/POC_TWENTY_WAHA_ARQUITETURA_2026-09-02.md`)
+concluiu inconclusiva e fica **SUPERSEDED** por esta decisão — reclassificada
+como `POSSIBILIDADE FUTURA / NÃO PRIORITÁRIA`, sem exclusão do relatório.
+Plano de implementação da arquitetura confirmada:
+[`plano-hai-002-twenty-chatwoot.md`](plano-hai-002-twenty-chatwoot.md).
+
 **SMTP.** ✅ Resolvido — configurável pela tela (Contas → super admin), na
 Fase 8b. Falta só ligar num provedor de verdade quando você tiver a conta.
 
