@@ -396,6 +396,35 @@ vezes no mesmo dia. Reinicie o `rest` **antes** de testar qualquer escrita
 depois de rodar uma migração nova — e um restart só cobre todas as migrações
 pendentes de uma vez, não precisa reiniciar depois de cada uma.
 
+**WAHA não entrega webhook pra dois destinos ao mesmo tempo.** Hoje
+`getOrCreateSession` (`app/src/lib/waha.ts`) cria a sessão só com
+`config.engine`, nunca com `config.webhooks` — quem recebe o evento de
+mensagem recebida é definido de forma global na instância WAHA (env var ou
+painel do próprio WAHA), não por sessão, e não há nada no código do Harvest
+que registre múltiplos destinos. Resultado: se o mesmo número está conectado
+ao Harvest (via canal WAHA) e a um agente conversacional no n8n, só um dos
+dois recebe a resposta do lead — o outro fica sem retorno. Suspeita do
+Guilherme (02/09/2026): foi isso que aconteceu com o número da Guinffer
+conectado no CRM, que não recebia os retornos. Duas saídas propostas: (i)
+fazer o WAHA multiplexar o webhook pra vários destinos (ou o Harvest
+reenviar pro n8n o que recebe), ou (ii) construir o agente
+conversacional/follow-up direto dentro do Harvest, tirando o n8n do meio
+pra esse fluxo. Ainda não decidido qual caminho seguir — precisa de
+confirmação de como o webhook está configurado hoje na instância WAHA
+antes de escolher.
+
+**Chatwoot/Twenty — checado, nunca chegou a existir.** No início a ideia era
+Chatwoot como mensageria e Twenty como CRM. Levantamento (02/09/2026): não há
+nenhuma linha de código viva usando Chatwoot — só 3 comentários antigos
+citando uma "Fase 3D" que nunca foi construída (`app/src/lib/inbound.ts`,
+`app/src/lib/optoutResposta.ts`, `docs/deploy.md`). Twenty também nunca foi
+ligado: `app/src/lib/twenty.ts` define `TwentyCrmBackend` mas todo método
+lança `'Twenty backend não configurado (NÃO VERIFICADO)'`; o backend
+realmente ativo é `SupabaseCrmBackend`, que virou o CRM (`oportunidades`,
+`crm_atividades`) dentro do próprio Harvest. Ou seja: não existe nada pra
+corrigir por causa da troca Evolution→WAHA — Chatwoot nunca esteve
+conectado.
+
 **SMTP.** ✅ Resolvido — configurável pela tela (Contas → super admin), na
 Fase 8b. Falta só ligar num provedor de verdade quando você tiver a conta.
 
