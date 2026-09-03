@@ -113,9 +113,8 @@ export async function processarEventoInbound(
   // --- Fase 3C: refletir a classificação no funil ---
   const agora = new Date().toISOString();
 
-  // 1) Opt-out: marca supressão central (já bloqueia disparo via 016) e
-  //    registra no histórico (origem='resposta', status='optout').
   if (classificacao === 'optout') {
+    // 1) Opt-out: supressão + histórico + mover oportunidade para optout.
     await suprimirTelefone(admin, contaId, evento.telefone, 'opt_out');
     await admin.from('historico_contato').insert({
       conta_id: contaId,
@@ -128,9 +127,10 @@ export async function processarEventoInbound(
       origem: 'resposta',
       motivo_bloqueio: 'Opt-out solicitado pelo contato via mensagem inbound.',
     });
+    // Mover oportunidade aberta para optout (encerrado).
+    await moverOportunidadeInbound(admin, contaId, leadId, evento.telefone, 'optout', agora);
   } else {
-    // 2) Resposta comum: marca o lead como "respondeu" (sem sobrescrever a
-    //    primeira resposta) e registra entrada no histórico.
+    // 2) Resposta comum: marcar lead + histórico + mover oportunidade para respondeu.
     if (leadId) {
       await admin.from('prospecta_leads')
         .update({ respondeu_em: agora, status: 'respondeu', atualizado_em: agora })
@@ -147,7 +147,62 @@ export async function processarEventoInbound(
       status: 'recebido',
       origem: 'resposta',
     });
+    // Mover oportunidade de contatado→respondeu (só avança, nunca retrocede).
+    await moverOportunidadeInbound(admin, contaId, leadId, evento.telefone, 'respondeu', agora);
   }
 
   return { ok: true, eventoId: inserido.id, leadId, campanhaId };
+}
+
+/**
+ * Move a oportunidade aberta para o estágio indicado quando uma mensagem
+ * inbound é recebida. Só avança (contatado→respondeu) ou encerra
+ * (→optout). Nunca retrocede estágios mais avançados (qualificando+).
+ *
+ * Busca por lead_id primeiro (match exato), depois por telefone (fallback
+ * para oportunidades criadas manualmente sem lead_id no prospecção).
+ * Só opera em estágios do pipeline (novo/contatado) — oportunidades em
+ * estágios avançados ou já encerradas são ignoradas.
+ */
+async function moverOportunidadeInbound(
+  admin: SupabaseClient,
+  contaId: string,
+  leadId: number | null,
+  telefone: string,
+  estagioAlvo: 'respondeu' | 'optout',
+  agora: string,
+): Promise<void> {
+  const ESTAGIOS_PERMITIDOS = ['novo', 'contatado'];
+  const probabilidade = estagioAlvo === 'optout' ? 0 : 20;
+
+  // Busca por lead_id primeiro.
+  let oportunidade: { id: number; estagio: string } | null = null;
+  if (leadId) {
+    const { data } = await admin.from('oportunidades')
+      .select('id, estagio')
+      .eq('conta_id', contaId).eq('lead_id', leadId)
+      .in('estagio', ESTAGIOS_PERMITIDOS)
+      .order('criado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    oportunidade = data;
+  }
+
+  // Fallback: buscar por telefone (oportunidades sem lead_id no prospecção).
+  if (!oportunidade && telefone) {
+    const { data } = await admin.from('oportunidades')
+      .select('id, estagio')
+      .eq('conta_id', contaId).eq('telefone', telefone)
+      .in('estagio', ESTAGIOS_PERMITIDOS)
+      .order('criado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    oportunidade = data;
+  }
+
+  if (!oportunidade) return;
+
+  await admin.from('oportunidades')
+    .update({ estagio: estagioAlvo, probabilidade, atualizado_em: agora })
+    .eq('id', oportunidade.id).eq('conta_id', contaId);
 }

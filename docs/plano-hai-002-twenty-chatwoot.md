@@ -693,3 +693,63 @@ Twenty pronto para qualquer conta real.
 
 **Próxima tarefa:** rodar o POC E2E mínimo (Seção 11) usando a conta
 `Figueira QA`, depois seguir para o adapter Chatwoot.
+
+---
+
+## 19. INBOUND corrigido — oportunidade avança automaticamente (03/09/2026)
+
+**Problema:** quando um contato respondia no WhatsApp, a resposta chegava ao
+Harvest via webhook WAHA/Evolution → `inbound.ts`, mas:
+1. A oportunidade ficava presa em `contatado` — não avançava para `respondeu`
+2. A campanha já contabilizava "respondeu" (via `historico_contato.status='recebido'`)
+3. A conversa já aparecia na aba "Conversa" (via `inbound_eventos` no GET)
+4. Faltava o link automático: inbound → `oportunidades.estagio`
+
+**Causa raiz:** `lib/inbound.ts` atualizava `prospecta_leads.status='respondeu'`
+e inseria `historico_contato`, mas NÃO atualizava `oportunidades.estagio`.
+
+**Correção (commit 03/09/2026):**
+
+1. **`lib/inbound.ts`** — adicionada função `moverOportunidadeInbound()`:
+   - Busca oportunidade por `lead_id` (match exato) ou `telefone` (fallback)
+   - Só opera em estágios `novo`/`contatado` (nunca retrocede qualificando+)
+   - Resposta comum → `contatado`/`novo` → `respondeu` (probabilidade 20%)
+   - Opt-out → qualquer pipeline → `optout` (probabilidade 0%)
+   - Chamada automaticamente após inserção de `historico_contato`
+
+2. **`componentes/CrmPipeline.tsx`** — adicionado polling de 15s:
+   - `useEffect` com `setInterval` busca mensagens + oportunidade atualizada
+   - Quando oportunidade muda de estágio (ex: `contatado`→`respondeu` via inbound),
+     atualiza o kanban automaticamente
+   - Usuário vê novas mensagens na aba Conversa sem fechar/reabrir a ficha
+
+**Fluxo completo inbound (antes vs depois):**
+
+```
+ANTES:
+WhatsApp → WAHA/Evolution → webhook → inbound.ts
+  → inbound_eventos ✓
+  → prospecta_leads.respondeu_em ✓
+  → historico_contato (status='recebido') ✓
+  → oportunidades.estagio: NÃO ATUALIZADO ✗
+
+DEPOIS:
+WhatsApp → WAHA/Evolution → webhook → inbound.ts
+  → inbound_eventos ✓
+  → prospecta_leads.respondeu_em ✓
+  → historico_contato (status='recebido') ✓
+  → oportunidades.estagio: contatado→respondeu ✓ (novo→respondeu ✓)
+  → polling CrmPipeline: kanban atualizado ✓
+```
+
+**Opt-out já funcionava** (palavras-chave em `optoutResposta.ts`: "sair",
+"parar", "cancelar", etc.) — agora também move a oportunidade para `optout`.
+
+**Deduplicação** já existia via constraint `(conta_id, provider,
+message_id_externo)` em `inbound_eventos` — sem alteração necessária.
+
+**Teste E2E pendente:** validar com número QA que:
+1. Harvest envia mensagem → WhatsApp recebe
+2. Contato responde → resposta aparece na aba Conversa
+3. Oportunidade avança de `contatado` para `respondeu` no kanban
+4. Campanha registra "respondeu" no contador

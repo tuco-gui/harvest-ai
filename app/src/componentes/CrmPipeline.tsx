@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ESTAGIOS_CRM, ESTAGIOS_ENCERRADOS, ESTAGIOS_PIPELINE,
   probabilidadeEstagio,
@@ -51,6 +51,32 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais }
   const [canalId, setCanalId] = useState(String(canais[0]?.id ?? ''));
   const [enviando, setEnviando] = useState(false);
   const [novaAtividade, setNovaAtividade] = useState({ tipo: 'tarefa', titulo: '', vence_em: '' });
+
+  // Polling: atualiza mensagens e estágio da oportunidade a cada 15s
+  // enquanto a ficha está aberta na aba conversa.
+  useEffect(() => {
+    if (!ficha || aba !== 'conversa') return;
+    const interval = setInterval(async () => {
+      const [mr, or2] = await Promise.all([
+        fetch(`/api/crm/oportunidades/${ficha.id}/mensagens`),
+        fetch(`/api/crm/oportunidades`),
+      ]);
+      if (mr.ok) {
+        const md = await mr.json();
+        setMensagens(md.mensagens ?? []);
+      }
+      // Atualizar estágio se o backend moveu (ex: contatado→respondeu via inbound).
+      if (or2.ok) {
+        const od = await or2.json();
+        const atualizada = (od.oportunidades ?? []).find((o: any) => o.id === ficha.id);
+        if (atualizada && atualizada.estagio !== ficha.estagio) {
+          setFicha(atualizada);
+          setOps((atual) => atual.map((x) => x.id === ficha.id ? atualizada : x));
+        }
+      }
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [ficha?.id, aba]);
 
   const encerradosIds = useMemo(() => new Set(ESTAGIOS_ENCERRADOS.map((e) => e.id)), []);
   const visiveis = useMemo(() => ops.filter((op) => {
