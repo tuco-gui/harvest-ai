@@ -542,3 +542,154 @@ testes.
 
 **Próxima tarefa (aguardando aprovação do owner):** E2E REAL TWENTY +
 CHATWOOT COM CREDENCIAIS SEGURAS.
+
+---
+
+## 16. E2E real Twenty + Chatwoot — resultado (03/09/2026)
+
+Owner aprovou explicitamente rodar o E2E real contra os serviços em
+produção. Execução feita via
+`infrastructure/openbao/verify-twenty-chatwoot-e2e.sh`: worker Docker Swarm
+efêmero na VPS lê `TWENTY_API_KEY`/`CHATWOOT_API_TOKEN` direto do OpenBao
+(`twenty/readonly`, `chatwoot/readonly`) e faz só chamadas de leitura
+(GET/introspection) — nenhuma escrita em Twenty ou Chatwoot, nenhum valor de
+credencial impresso em log em nenhum momento.
+
+**Bloqueio 1 — `/graphql` vs `/rest`: resolvido.**
+`GET https://crm.figueiramarketing.com.br/rest/workspaceMembers` → HTTP 200
+com `TWENTY_API_KEY`. O `TWENTY_BASE_URL` já migrado para o OpenBao é o
+domínio puro (`https://crm.figueiramarketing.com.br`, sem sufixo), então o
+adapter (`twenty.ts`), que monta `{base}/rest/...` internamente, já está
+correto — não precisa de nenhuma mudança de env/secret.
+
+**Bloqueio 2 — campo customizado `harvestLeadId`: CONFIRMADO AUSENTE.**
+Introspection real (`__type(name: "Opportunity")`) no workspace retornou
+estes campos, e nenhum é `harvestLeadId`:
+`amount, attachments, closeDate, company, companyId, createdAt, createdBy,
+deletedAt, id, name, noteTargets, owner, ownerId, pointOfContact,
+pointOfContactId, position, searchVector, stage, taskTargets,
+timelineActivities, updatedAt, updatedBy`.
+Consequência: `criar()` e `jaExistePorLead()` em `app/src/lib/twenty.ts`
+vão falhar (ou silenciosamente não filtrar por lead) contra o workspace
+real como estão hoje, porque dependem de um campo que não existe.
+**Bloqueia qualquer ativação real do adapter Twenty até uma destas duas
+ações (decisão do owner, não tomada nesta rodada):**
+(a) criar o campo customizado `harvestLeadId` em Settings → Objects →
+Opportunity no workspace Twenty, ou
+(b) mudar a estratégia de deduplicação/vínculo do adapter para não depender
+dele (ex.: usar outro campo existente, ou uma tabela de vínculo local
+como já existe `crm_vinculos` para conta↔workspace).
+
+**Bloqueio 3 — shape Chatwoot: confirmado.**
+`GET /api/v1/accounts/1/inboxes` com `CHATWOOT_API_TOKEN` → HTTP 200,
+payload real:
+`{id:1, name:"SZ4", channel_type:"Channel::Api"}`,
+`{id:4, name:"Guilherme014 - WhatsApp", channel_type:"Channel::Api"}`.
+Bate exatamente com `chatwoot_account_id=1` / `chatwoot_inbox_whatsapp_id=4`
+já mapeados na Seção 13 — nenhum ajuste necessário no adapter
+`chatwoot.ts` nem no `sql/025_crm_vinculos.sql`.
+
+**Estado após esta rodada:** adapters Twenty/Chatwoot continuam
+desativados (`crmBackend()` ainda retorna `SupabaseCrmBackend`,
+`chatwoot.ts` ainda não é importado por nenhuma rota). Nenhum código foi
+alterado nesta rodada — só leitura/verificação real. O único bloqueio
+restante para ativar o adapter Twenty é o campo `harvestLeadId` (decisão
+(a) ou (b) acima). Chatwoot está tecnicamente pronto para ativação real
+assim que houver decisão de escopo (Seção 3) sobre quando `enviarMensagem`
+passa a ser chamado em produção.
+
+**Próxima tarefa (aguardando decisão do owner):** escolher (a) ou (b) para
+o campo de vínculo `harvestLeadId`/`crm_vinculos` antes de ativar o adapter
+Twenty.
+
+## 17. Campo `harvestLeadId` criado + ativação por flag (03/09/2026)
+
+Owner escolheu a opção (a) da Seção 16: criar o campo customizado no
+workspace Twenty em vez de mudar a estratégia de vínculo.
+
+**Campo criado.** `harvestLeadId` (TEXT, nullable, unique) adicionado ao
+objeto Opportunity via MCP do Twenty, autorizado explicitamente pelo owner
+no chat. Confirma que `criar()`/`jaExistePorLead()` em `twenty.ts` agora têm
+onde escrever/filtrar — o Bloqueio 2 da Seção 16 está resolvido.
+
+**E2E real de escrita confirmado.** Criada uma Opportunity de teste com
+`harvestLeadId` preenchido via MCP do Twenty; confirmado que o filtro
+`harvestLeadId[eq]` (mesma query usada por `jaExistePorLead` no adapter)
+encontra o registro. Registro de teste apagado (soft delete) em seguida —
+nenhum dado de teste ficou no workspace real.
+
+**Ativação por flag implementada.** `crmBackend()` em
+[twenty.ts](../app/src/lib/twenty.ts:416) passou a ser `crmBackend(contaId)`
+(assíncrona): lê `modulos_habilitados` da conta e devolve `TwentyCrmBackend`
+só se a conta tiver o módulo `'twenty_crm'` habilitado; caso contrário
+continua em `SupabaseCrmBackend` (padrão, zero risco de regressão para as
+contas reais). Mesmo padrão de flag já usado para `'crm'` em
+`ContaDetalhe.tsx`/`Contas.tsx`/`api/contas/route.ts`. `'twenty_crm'` foi
+adicionado ao `Set` de módulos permitidos em
+[api/contas/route.ts](../app/src/app/api/contas/route.ts:53) — hoje só pode
+ser ligado via chamada direta à API ou UPDATE direto no banco (nenhum botão
+de UI dedicado foi criado, YAGNI até haver uma conta de teste escolhida para
+apontar o toggle).
+
+Os 5 pontos de chamada atualizados para `await crmBackend(perfil.conta_id)`:
+[api/crm/oportunidades/route.ts](../app/src/app/api/crm/oportunidades/route.ts)
+(GET + POST, 3 usos), [api/crm/oportunidades/[id]/route.ts](../app/src/app/api/crm/oportunidades/%5Bid%5D/route.ts),
+[app/(app)/crm/page.tsx](<../app/src/app/(app)/crm/page.tsx>).
+
+`tsc --noEmit` limpo e `next build` completo sem erros (não há `npm test`
+configurado neste projeto — só `dev`/`build`/`start`/`lint`).
+
+**Estado após esta rodada:** código pronto para ativação por conta,
+`TwentyCrmBackend` real (REST) por trás de um flag que continua desligado
+por padrão para todo mundo. **Nenhuma conta real foi migrada** — falta
+decidir qual `conta_id` é a conta de homologação/teste (critério de aceite
+da Seção 11, POC E2E mínimo) antes de ligar `twenty_crm` pela primeira vez.
+
+**Próxima tarefa (aguardando decisão do owner):** indicar a conta de
+teste/homologação para ativar `twenty_crm` e rodar o POC E2E mínimo da
+Seção 11 com o backend Twenty real em uso (não só leitura de introspection).
+
+## 18. Conta de teste criada + enum de `stage` verificado (03/09/2026)
+
+Seguindo [[feedback-conta-qa-harvest]] (regra: POC/E2E do Harvest sempre usa
+uma conta institucional de homologação, nunca conta de cliente real, sem
+perguntar `conta_id`).
+
+**Conta `Figueira QA` criada** direto na tabela `contas` de produção
+(migration `sql/024_ambiente_por_conta.sql` — ainda não aplicada até esta
+rodada — foi aplicada primeiro): `id=c8aaa6f0-33d6-46e2-b45f-c40e49e41037`,
+`slug=figueira-qa`, `ambiente='teste'`, `modulos_habilitados` inclui `crm` e
+`twenty_crm`. Linhas `conta_credenciais`/`conta_config_envio` criadas junto
+(mesmo padrão do `POST /api/contas`).
+
+**Enum real de `Opportunity.stage` verificado via MCP do Twenty**
+(`find_many_opportunities`/`create_one_opportunity` schemas):
+`NEW | SCREENING | MEETING | PROPOSAL | CUSTOMER` — 5 valores, sem
+equivalente a "perdido". `harvestLeadId` confirmado presente no schema
+(consistente com a Seção 17).
+
+**Bug real encontrado e corrigido antes do E2E:** `twenty.ts` mandava os IDs
+internos do Harvest (`novo`, `ganho`, `perdido`, ...) direto como `stage` no
+payload do Twenty — a criação teria falhado (`stage` fora do enum) e a
+leitura (`twentyParaOportunidade`) descartava silenciosamente qualquer
+`stage` real por não bater com `estagioValido()`, sempre voltando pro padrão
+`novo`. Corrigido:
+- [crmStages.ts](../app/src/lib/crmStages.ts) ganhou
+  `estagioParaTwentyStage`/`twentyStageParaEstagio` (mapa Harvest↔Twenty,
+  conforme já previsto na Seção 9). Os 4 estágios de fechamento negativo do
+  Harvest mapeiam para `NEW` — Twenty não tem estágio de "perdido" nesse
+  workspace; marcado com comentário `ponytail:` como limitação conhecida.
+- [twenty.ts](../app/src/lib/twenty.ts) `criar()`/`atualizar()`/
+  `twentyParaOportunidade()` passaram a usar o mapa. `criar()` também ganhou
+  `position: 'last'`, que é obrigatório na criação (schema real via MCP não
+  batia com o payload antigo, que não enviava esse campo).
+- `tsc --noEmit` limpo depois da mudança.
+
+**Estado após esta rodada:** conta de teste pronta, `twenty_crm` habilitado
+nela, bug de mapeamento de estágio corrigido. Falta rodar o POC E2E mínimo
+da Seção 11 de fato (criar lead → oportunidade real no Twenty pela conta
+`Figueira QA`, via app, não via MCP direto) antes de considerar o adapter
+Twenty pronto para qualquer conta real.
+
+**Próxima tarefa:** rodar o POC E2E mínimo (Seção 11) usando a conta
+`Figueira QA`, depois seguir para o adapter Chatwoot.

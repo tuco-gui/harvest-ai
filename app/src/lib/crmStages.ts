@@ -45,3 +45,43 @@ export function nomeEstagio(id: string): string {
 export function probabilidadeEstagio(id: string): number {
   return ESTAGIOS_CRM.find((e) => e.id === id)?.probabilidade ?? 0;
 }
+
+/**
+ * Twenty↔Harvest stage. VERIFICADO em 03/09/2026 contra o workspace real via
+ * MCP: o enum de `Opportunity.stage` no Twenty é NEW/SCREENING/MEETING/
+ * PROPOSAL/CUSTOMER (5 valores) — sem equivalente a "perdido". Os 4 estágios
+ * de fechamento negativo do Harvest (sem_interesse/optout/invalido/perdido)
+ * não têm alvo no Twenty; mapeiam para NEW.
+ * ponytail: perda de granularidade nos estágios de "fechado sem sucesso" ao
+ * sincronizar com o Twenty — se isso importar, criar um Select customizado
+ * "Motivo de perda" no workspace e mapear aqui.
+ */
+export const ESTAGIO_PARA_TWENTY_STAGE: Record<string, string> = {
+  novo: 'NEW',
+  contatado: 'NEW',
+  respondeu: 'NEW',
+  qualificando: 'SCREENING',
+  reuniao: 'MEETING',
+  proposta: 'PROPOSAL',
+  ganho: 'CUSTOMER',
+  sem_interesse: 'NEW',
+  optout: 'NEW',
+  invalido: 'NEW',
+  perdido: 'NEW',
+};
+
+const TWENTY_STAGE_PARA_ESTAGIO: Record<string, string> = {
+  NEW: 'novo',
+  SCREENING: 'qualificando',
+  MEETING: 'reuniao',
+  PROPOSAL: 'proposta',
+  CUSTOMER: 'ganho',
+};
+
+export function twentyStageParaEstagio(stage: string | null | undefined): string {
+  return (stage && TWENTY_STAGE_PARA_ESTAGIO[stage]) || ESTAGIO_PADRAO;
+}
+
+export function estagioParaTwentyStage(id: string): string {
+  return ESTAGIO_PARA_TWENTY_STAGE[id] ?? 'NEW';
+}

@@ -17,7 +17,7 @@
  * stack do Harvest (Supabase multi-tenant).
  */
 import { supabaseAdmin, perfilAtual } from './supabase/server';
-import { ESTAGIO_PADRAO, estagioValido } from './crmStages';
+import { ESTAGIO_PADRAO, estagioValido, estagioParaTwentyStage, twentyStageParaEstagio } from './crmStages';
 
 export type Oportunidade = {
   id: number;
@@ -154,17 +154,15 @@ class SupabaseCrmBackend implements CrmBackend {
 }
 
 /**
- * Campo bruto da Opportunity na Twenty REST API. Nomes exatos NÃO VERIFICADOS
- * contra o workspace real (plano HAI-002, Seção 6/13) — melhor esforço com
- * base no schema padrão do objeto Opportunity do Twenty. A Twenty gera a API
- * a partir do schema de cada workspace ("schema-per-tenant") — não existe
- * referência estática de campos; a doc real só existe em
- * Settings → API & Webhooks daquele workspace, com uma API key válida
- * (confirmado em docs.twenty.com/developers/extend/api, 02/09/2026).
+ * Campo bruto da Opportunity na Twenty REST API. VERIFICADO em 03/09/2026
+ * contra o workspace real via MCP (find_many_opportunities/
+ * create_one_opportunity schemas): `stage` é um enum fechado
+ * (NEW/SCREENING/MEETING/PROPOSAL/CUSTOMER — ver crmStages.ts para o mapa
+ * com os estágios do Harvest) e `position` é obrigatório na criação.
  *
- * `harvestLeadId`: campo customizado ASSUMIDO (NÃO VERIFICADO) para guardar o
- * id do lead do Harvest na Opportunity — necessário para jaExistePorLead sem
- * usar telefone fuzzy como chave. Precisa existir no workspace antes de usar.
+ * `harvestLeadId`: campo customizado CONFIRMADO no workspace (schema real:
+ * "ID do lead correspondente no Harvest AI") — usado por jaExistePorLead sem
+ * telefone fuzzy como chave.
  */
 type TwentyOpportunity = {
   id: string;
@@ -215,7 +213,7 @@ function twentyParaOportunidade(contaId: string, o: TwentyOpportunity): Oportuni
     email: o.pointOfContact?.emails?.primaryEmail ?? null,
     origem: 'twenty',
     campanha_id: null,
-    estagio: (o.stage && estagioValido(o.stage) ? o.stage : ESTAGIO_PADRAO),
+    estagio: twentyStageParaEstagio(o.stage),
     owner_id: null,
     valor: o.amount?.amountMicros ? o.amount.amountMicros / 1_000_000 : 0,
     proxima_acao: null,
@@ -233,7 +231,8 @@ function twentyParaOportunidade(contaId: string, o: TwentyOpportunity): Oportuni
  * Integração real com o Twenty (REST API). listar/buscar implementados
  * (plano HAI-002, Seção 14); demais métodos ainda são stub. Requer
  * TWENTY_API_URL e TWENTY_API_KEY no ambiente — ausentes hoje, então
- * `crmBackend()` continua devolvendo `SupabaseCrmBackend` por padrão.
+ * `crmBackend(contaId)` só devolve `TwentyCrmBackend` para contas com o
+ * módulo 'twenty_crm' habilitado; as demais continuam em `SupabaseCrmBackend`.
  * Endpoints/campos NÃO VERIFICADOS contra workspace real (Seção 13).
  */
 class TwentyCrmBackend implements CrmBackend {
@@ -365,12 +364,14 @@ class TwentyCrmBackend implements CrmBackend {
     const estagio = input.estagio && estagioValido(input.estagio) ? input.estagio : ESTAGIO_PADRAO;
     const payload: Record<string, unknown> = {
       name: input.empresa ?? '',
-      stage: estagio,
+      stage: estagioParaTwentyStage(estagio),
       amount: { amountMicros: Math.round((input.valor ?? 0) * 1_000_000) },
       closeDate: input.previsao_fechamento ?? null,
       companyId,
       pointOfContactId,
       harvestLeadId: input.lead_id ?? null,
+      // "position" é obrigatório na criação (VERIFICADO via schema do MCP do Twenty).
+      position: 'last',
     };
     const json = await this.request('/opportunities', { method: 'POST', body: JSON.stringify(payload) });
     const criada: TwentyOpportunity | undefined = json?.data?.createOpportunity;
@@ -383,7 +384,7 @@ class TwentyCrmBackend implements CrmBackend {
     if (patch.empresa !== undefined) payload.name = patch.empresa;
     if (patch.estagio !== undefined) {
       if (!estagioValido(patch.estagio)) throw new Error(`Twenty: estágio inválido "${patch.estagio}".`);
-      payload.stage = patch.estagio;
+      payload.stage = estagioParaTwentyStage(patch.estagio);
     }
     if (patch.valor !== undefined) payload.amount = { amountMicros: Math.round(patch.valor * 1_000_000) };
     if (patch.previsao_fechamento !== undefined) payload.closeDate = patch.previsao_fechamento;
@@ -412,11 +413,20 @@ class TwentyCrmBackend implements CrmBackend {
   }
 }
 
-/** Backend ativo: Supabase (operacional). Trocar aqui quando o Twenty entrar. */
-export function crmBackend(): CrmBackend {
-  // ponytail: quando TWENTY_API_URL/TWENTY_API_KEY existirem, retornar
-  // TwentyCrmBackend após implementar o transporte GraphQL. Por ora, Supabase.
-  return new SupabaseCrmBackend();
+/**
+ * Backend ativo por conta: Twenty se a conta tiver o módulo 'twenty_crm' em
+ * `modulos_habilitados` (mesmo padrão de flag do módulo 'crm' em
+ * ContaDetalhe.tsx/api/contas), senão Supabase (padrão, zero risco de
+ * regressão para as demais contas).
+ */
+export async function crmBackend(contaId: string): Promise<CrmBackend> {
+  const { data } = await supabaseAdmin()
+    .from('contas')
+    .select('modulos_habilitados')
+    .eq('id', contaId)
+    .maybeSingle();
+  const modulos: string[] = data?.modulos_habilitados ?? [];
+  return modulos.includes('twenty_crm') ? new TwentyCrmBackend() : new SupabaseCrmBackend();
 }
 
 /** Owner: seleção manual (P0). pickOwner fuzzy do VineCRM NÃO é usado. */

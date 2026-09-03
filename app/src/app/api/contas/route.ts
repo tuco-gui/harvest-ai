@@ -50,7 +50,7 @@ export async function PATCH(req: Request) {
   if (!id) return NextResponse.json({ erro: 'Falta a conta.' }, { status: 400 });
 
   if (Array.isArray(modulos_habilitados)) {
-    const permitidos = new Set(['whatsapp', 'ia', 'usuarios', 'chamados', 'status', 'enriquecimento', 'crm']);
+    const permitidos = new Set(['whatsapp', 'ia', 'usuarios', 'chamados', 'status', 'enriquecimento', 'crm', 'twenty_crm']);
     const modulos = [...new Set(modulos_habilitados.filter((m): m is string => typeof m === 'string' && permitidos.has(m)))];
     const { error } = await supabaseAdmin().from('contas').update({ modulos_habilitados: modulos }).eq('id', id);
     if (error) return NextResponse.json({ erro: error.message }, { status: 500 });

@@ -19,7 +19,8 @@ export async function GET() {
     return NextResponse.json({ erro: 'CRM não habilitado para esta conta.' }, { status: 403 });
   }
 
-  const ops = await crmBackend().listar(perfil.conta_id);
+  const backend = await crmBackend(perfil.conta_id);
+  const ops = await backend.listar(perfil.conta_id);
   return NextResponse.json({ oportunidades: ops });
 }
 
@@ -38,8 +39,10 @@ export async function POST(req: Request) {
   const leadId = b.lead_id ? Number(b.lead_id) : null;
   if (b.lead_id && !leadId) return NextResponse.json({ erro: 'Lead inválido.' }, { status: 400 });
 
+  const backend = await crmBackend(perfil.conta_id);
+
   // Não duplicar: se já existe oportunidade para este lead, devolve a existente.
-  if (leadId && await crmBackend().jaExistePorLead(perfil.conta_id, leadId)) {
+  if (leadId && await backend.jaExistePorLead(perfil.conta_id, leadId)) {
     const { data } = await supabaseAdmin()
       .from('oportunidades')
       .select('*')
@@ -92,7 +95,7 @@ export async function POST(req: Request) {
   const probabilidade = Number.isFinite(probabilidadeInformada)
     ? Math.min(100, Math.max(0, probabilidadeInformada))
     : 5;
-  const op = await crmBackend().criar(perfil.conta_id, {
+  const op = await backend.criar(perfil.conta_id, {
     lead_id: leadId,
     empresa,
     contato,

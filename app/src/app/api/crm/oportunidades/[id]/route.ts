@@ -78,7 +78,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    const op = await crmBackend().atualizar(perfil.conta_id, opId, patch);
+    const backend = await crmBackend(perfil.conta_id);
+    const op = await backend.atualizar(perfil.conta_id, opId, patch);
     if (!op) return NextResponse.json({ erro: 'Oportunidade não encontrada.' }, { status: 404 });
     return NextResponse.json({ oportunidade: op });
   } catch (e: any) {

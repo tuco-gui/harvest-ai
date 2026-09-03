@@ -14,7 +14,7 @@ export default async function PaginaCrm() {
   const admin = supabaseAdmin();
   if (!(await perfilTemModulo(admin, perfil, 'crm'))) redirect('/');
 
-  const backend = crmBackend();
+  const backend = await crmBackend(perfil.conta_id);
   const [ops, ownersData, campanhasData, canais] = await Promise.all([
     backend.listar(perfil.conta_id),
     admin
