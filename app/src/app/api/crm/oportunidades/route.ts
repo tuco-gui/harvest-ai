@@ -11,9 +11,6 @@ import { perfilTemModulo } from '@/lib/autorizacao';
 export async function GET() {
   const perfil = await perfilAtual();
   if (!perfil) return NextResponse.json({ erro: 'Sessão expirada.' }, { status: 401 });
-  if (perfil.papel === 'operador') {
-    return NextResponse.json({ erro: 'Seu perfil não acessa o CRM.' }, { status: 403 });
-  }
   if (!perfil.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
   if (!(await perfilTemModulo(supabaseAdmin(), perfil, 'crm'))) {
     return NextResponse.json({ erro: 'CRM não habilitado para esta conta.' }, { status: 403 });

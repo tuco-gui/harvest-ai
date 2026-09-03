@@ -8,7 +8,6 @@ import { carregarCanais } from '@/lib/whatsappCanais';
 export default async function PaginaCrm() {
   const perfil = await perfilAtual();
   if (!perfil) redirect('/entrar');
-  if (perfil.papel === 'operador') redirect('/');
   if (!perfil.conta_id) redirect('/contas');
 
   const admin = supabaseAdmin();
@@ -48,6 +47,7 @@ export default async function PaginaCrm() {
         canais={canais.filter((c) => c.ativo && c.status === 'conectado').map((c) => ({
           id: c.id, nome: c.nome, numero: c.numero, provider: c.provider,
         }))}
+        papel={perfil.papel}
       />
     </div>
   );

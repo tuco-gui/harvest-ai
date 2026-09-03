@@ -132,7 +132,7 @@ export default function Topo(p: Props) {
         <Link href="/campanhas" aria-current={caminho.startsWith('/campanhas') ? 'page' : undefined}>
           Campanhas
         </Link>
-        {p.papel !== 'operador' && p.modulos.includes('crm') && (
+        {p.modulos.includes('crm') && (
           <Link href="/crm" aria-current={caminho.startsWith('/crm') ? 'page' : undefined}>
             CRM
           </Link>
