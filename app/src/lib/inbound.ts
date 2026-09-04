@@ -172,16 +172,14 @@ async function moverOportunidadeInbound(
   estagioAlvo: 'respondeu' | 'optout',
   agora: string,
 ): Promise<void> {
-  const ESTAGIOS_PERMITIDOS = ['novo', 'contatado'];
   const probabilidade = estagioAlvo === 'optout' ? 0 : 20;
 
   // Busca por lead_id primeiro.
-  let oportunidade: { id: number; estagio: string } | null = null;
+  let oportunidade: { id: number; estagio: string; funil_id: number | null } | null = null;
   if (leadId) {
     const { data } = await admin.from('oportunidades')
-      .select('id, estagio')
+      .select('id, estagio, funil_id')
       .eq('conta_id', contaId).eq('lead_id', leadId)
-      .in('estagio', ESTAGIOS_PERMITIDOS)
       .order('criado_em', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -191,9 +189,8 @@ async function moverOportunidadeInbound(
   // Fallback: buscar por telefone (oportunidades sem lead_id no prospecção).
   if (!oportunidade && telefone) {
     const { data } = await admin.from('oportunidades')
-      .select('id, estagio')
+      .select('id, estagio, funil_id')
       .eq('conta_id', contaId).eq('telefone', telefone)
-      .in('estagio', ESTAGIOS_PERMITIDOS)
       .order('criado_em', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -202,7 +199,23 @@ async function moverOportunidadeInbound(
 
   if (!oportunidade) return;
 
+  // Só avança de estágios iniciais (novo/contatado) — nunca retrocede de etapas avançadas.
+  const estagioLower = oportunidade.estagio.toLowerCase();
+  if (!['novo', 'contatado'].includes(estagioLower)) return;
+
+  // Resolver nome canônico do estágio alvo a partir do funil (para manter case consistente).
+  let estagioFinal = estagioAlvo === 'optout' ? 'Opt-out' : 'Respondeu';
+  if (oportunidade.funil_id) {
+    const nomeAlvo = estagioAlvo === 'optout' ? 'Opt-out' : 'Respondeu';
+    const { data: estFunil } = await admin.from('funil_estagios')
+      .select('nome')
+      .eq('funil_id', oportunidade.funil_id)
+      .ilike('nome', nomeAlvo)
+      .maybeSingle();
+    if (estFunil?.nome) estagioFinal = estFunil.nome;
+  }
+
   await admin.from('oportunidades')
-    .update({ estagio: estagioAlvo, probabilidade, atualizado_em: agora })
+    .update({ estagio: estagioFinal, probabilidade, atualizado_em: agora })
     .eq('id', oportunidade.id).eq('conta_id', contaId);
 }

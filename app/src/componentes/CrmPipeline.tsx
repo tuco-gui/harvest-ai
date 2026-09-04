@@ -99,27 +99,30 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     : ESTAGIOS_ENCERRADOS;
 
   const encerradosIds = useMemo(() => new Set(estagiosEncerrados.map((e) => e.id)), [estagiosEncerrados]);
+  const normalizar = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_');
+  const encerradosNorm = useMemo(() => new Set([...encerradosIds].map(normalizar)), [encerradosIds]);
   const visiveis = useMemo(() => ops.filter((op) => {
     const texto = `${op.empresa} ${op.contato} ${op.telefone ?? ''} ${(op.tags ?? []).join(' ')}`.toLowerCase();
+    const opEst = normalizar(op.estagio);
     return (!busca || texto.includes(busca.toLowerCase()))
       && (!ownerFiltro || op.owner_id === ownerFiltro)
       && (!campanhaFiltro || String(op.campanha_id ?? '') === campanhaFiltro)
-      && (mostrarEncerrados ? encerradosIds.has(op.estagio) : !encerradosIds.has(op.estagio));
-  }), [ops, busca, ownerFiltro, campanhaFiltro, mostrarEncerrados, encerradosIds]);
+      && (mostrarEncerrados ? encerradosNorm.has(opEst) : !encerradosNorm.has(opEst));
+  }), [ops, busca, ownerFiltro, campanhaFiltro, mostrarEncerrados, encerradosNorm]);
 
   const metricas = useMemo(() => {
-    const abertos = ops.filter((o) => !encerradosIds.has(o.estagio) && o.estagio !== 'ganho');
+    const abertos = ops.filter((o) => !encerradosNorm.has(normalizar(o.estagio)) && normalizar(o.estagio) !== 'ganho');
     return {
       abertas: abertos.length,
       valorAberto: abertos.reduce((s, o) => s + Number(o.valor || 0), 0),
       ponderado: abertos.reduce((s, o) => s + Number(o.valor || 0) * Number(o.probabilidade || 0) / 100, 0),
-      ganhos: ops.filter((o) => o.estagio === 'ganho').length,
-      respostas: ops.filter((o) => ['respondeu', 'qualificando', 'reuniao', 'proposta', 'ganho'].includes(o.estagio)).length,
+      ganhos: ops.filter((o) => normalizar(o.estagio) === 'ganho').length,
+      respostas: ops.filter((o) => ['respondeu', 'qualificando', 'reuniao', 'proposta', 'ganho'].includes(normalizar(o.estagio))).length,
     };
-  }, [ops, encerradosIds]);
+  }, [ops, encerradosNorm]);
 
   const estagios = mostrarEncerrados ? estagiosEncerrados : estagiosPipeline;
-  const agrupar = (estagio: string) => visiveis.filter((o) => o.estagio === estagio);
+  const agrupar = (estagio: string) => visiveis.filter((o) => normalizar(o.estagio) === estagio);
   const nomeOwner = (id: string | null) => owners.find((o) => o.id === id)?.nome ?? 'Sem responsável';
   const nomeCampanha = (id: number | null) => campanhas.find((c) => c.id === id)?.nome ?? null;
   const valorFmt = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -140,7 +143,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   }
 
   async function moverPara(op: Oportunidade, estagio: string) {
-    if (op.estagio === estagio) return;
+    if (normalizar(op.estagio) === estagio) return;
     if (!podeEditar && !podeEditarPropria(op)) return;
     const anterior = op;
     const atualizado = { ...op, estagio, probabilidade: probabilidadeEstagio(estagio) };
@@ -199,8 +202,8 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     setTextoMensagem('');
     const historico = await fetch(`/api/crm/oportunidades/${ficha.id}/mensagens`);
     const hd = await json(historico); if (historico.ok) setMensagens(hd.mensagens ?? []);
-    if (ficha.estagio === 'novo') {
-      const atualizado = { ...ficha, estagio: 'contatado', probabilidade: 10 };
+    if (normalizar(ficha.estagio) === 'novo') {
+      const atualizado = { ...ficha, estagio: 'Contatado', probabilidade: 10 };
       setFicha(atualizado); setOps((atual) => atual.map((x) => x.id === ficha.id ? atualizado : x));
     }
   }
