@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin, COOKIE_CONTA } from '@/lib/supabase/server';
 
 /**
- * Troca de workspace. Qualquer usuário com mais de 1 membership pode trocar.
- * Super admin pode acessar qualquer conta ativa.
+ * Troca de workspace.
+ * - Super admin: pode acessar qualquer conta ativa (sem depender de membership)
+ * - Usuário comum: precisa de membership em conta_usuarios
  */
 export async function POST(req: Request) {
   const perfil = await perfilAtual();
@@ -33,7 +34,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Conta não encontrada ou inativa.' }, { status: 404 });
   }
 
-  // Validar que o usuário tem membership nesta conta
+  // Super admin: acesso global, SEMPRE permitido
+  if (perfil.papel === 'super_admin') {
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set(COOKIE_CONTA, String(conta_id), {
+      httpOnly: true, sameSite: 'lax', secure: true, path: '/', maxAge: 60 * 60 * 12,
+    });
+    return res;
+  }
+
+  // Usuário comum: validar membership
   const { data: membro } = await admin
     .from('conta_usuarios')
     .select('id')
@@ -42,18 +52,8 @@ export async function POST(req: Request) {
     .eq('ativo', true)
     .maybeSingle();
 
-  if (!membro && perfil.papel !== 'super_admin') {
+  if (!membro) {
     return NextResponse.json({ erro: 'Você não tem acesso a esta conta.' }, { status: 403 });
-  }
-
-  // Super admin sem membership: criar membership temporária para acessar
-  if (!membro && perfil.papel === 'super_admin') {
-    await admin.from('conta_usuarios').insert({
-      user_id: perfil.id,
-      conta_id,
-      papel: 'admin',
-      ativo: true,
-    });
   }
 
   const res = NextResponse.json({ ok: true });

@@ -15,25 +15,26 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   const admin = supabaseAdmin();
   const ehSuper = perfil.papel === 'super_admin';
 
-  // Carregar workspaces do usuário (qualquer um com memberships)
-  const { data: memberships } = await admin
+  // Carregar workspaces do usuário
+  // Se conta_usuarios não existe, fallback para lista completa (super_admin)
+  let contas: { id: string; nome: string }[] = [];
+
+  const { data: memberships, error: memError } = await admin
     .from('conta_usuarios')
     .select('conta_id, papel, contas(id, nome, ativo)')
     .eq('user_id', perfil.id)
     .eq('ativo', true);
 
-  // Filtrar contas ativas e extrair dados
-  const contasDoUsuario = (memberships ?? [])
-    .filter((m: any) => m.contas?.ativo)
-    .map((m: any) => ({ id: m.conta_id, nome: m.contas.nome }));
-
-  // Super admin: se não tem memberships, mostrar todas as contas ativas
-  const contas = ehSuper && contasDoUsuario.length === 0
-    ? (await admin.from('contas').select('id, nome').eq('ativo', true).order('nome')).data ?? []
-    : contasDoUsuario;
-
-  // Se usuário tem mais de 1 workspace mas nenhum selecionado, precisa escolher
-  const temMultiplas = contas.length > 1 && !perfil.conta_id;
+  if (!memError && memberships) {
+    // Tabela existe — usar memberships
+    contas = (memberships ?? [])
+      .filter((m: any) => m.contas?.ativo)
+      .map((m: any) => ({ id: m.conta_id, nome: m.contas.nome }));
+  } else if (ehSuper) {
+    // Tabela não existe ou erro — super admin vê todas as contas
+    const { data } = await admin.from('contas').select('id, nome').eq('ativo', true).order('nome');
+    contas = data ?? [];
+  }
 
   let contaNome = 'Selecione uma conta';
   if (perfil.conta_id) {
@@ -42,7 +43,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   } else if (contas.length === 1) {
     contaNome = contas[0].nome;
   } else if (ehSuper) {
-    contaNome = 'Nenhuma conta';
+    contaNome = 'Todas as contas';
   }
 
   const iniciais = (perfil.nome ?? perfil.email ?? '?')

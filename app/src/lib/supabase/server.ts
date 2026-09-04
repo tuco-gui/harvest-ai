@@ -37,11 +37,11 @@ export function supabaseAdmin() {
 
 export type Perfil = {
   id: string;
-  conta_id: string | null;      // conta em que ele está trabalhando agora (membership)
+  conta_id: string | null;      // conta em que ele está trabalhando agora
   conta_propria: string | null; // primeira conta do usuário (fallback legado)
   nome: string | null;
   email: string | null;
-  papel: 'super_admin' | 'admin' | 'operador'; // papel NA CONTA ATUAL (membership)
+  papel: 'super_admin' | 'admin' | 'operador';
   avatar_url: string | null;
   telefone: string | null;
   senha_provisoria: boolean;
@@ -51,13 +51,12 @@ export type Perfil = {
 export const COOKIE_CONTA = 'harvest_conta';
 
 /**
- * Quem está pedindo, e de qual conta. Base de toda decisão de acesso.
+ * Resolução de workspace com fallback legado.
  *
- * Resolução (pós-migration 027 — multi-workspace):
- * 1. Identidade global → perfis (id, nome, email, avatar, etc.)
- * 2. Workspace ativa → cookie harvest_conta → conta_usuarios
- * 3. Se super_admin sem cookie → null (precisa escolher)
- * 4. Se usuário comum sem cookie → primeira membership ativa (auto-select)
+ * Prioridade:
+ * 1. Se perfis.papel = 'super_admin' → acesso global, usa cookie, SEMPRE funciona
+ * 2. Se conta_usuarios existe → usa membership
+ * 3. Se conta_usuarios NÃO existe → fallback para perfis.conta_id (legado)
  */
 export async function perfilAtual(): Promise<Perfil | null> {
   const sb = await supabaseDoUsuario();
@@ -67,63 +66,92 @@ export async function perfilAtual(): Promise<Perfil | null> {
   // 1. Identidade global (perfis)
   const { data: perfis } = await sb
     .from('perfis')
-    .select('id, nome, email, avatar_url, telefone, senha_provisoria')
+    .select('id, conta_id, nome, email, papel, avatar_url, telefone, senha_provisoria')
     .eq('id', user.id)
     .maybeSingle();
 
   if (!perfis) return null;
 
-  // 2. Buscar memberships ativas do usuário
+  const papelGlobal = (perfis as any).papel as string | null;
+  const ehSuperAdmin = papelGlobal === 'super_admin';
+
+  const cookieJar = await cookies();
+  const escolhida = cookieJar.get(COOKIE_CONTA)?.value;
+
   const admin = supabaseAdmin();
-  const { data: memberships } = await admin
+
+  // 2. SUPER ADMIN: acesso global, SEMPRE funciona
+  if (ehSuperAdmin) {
+    let contaIdAtiva: string | null = null;
+
+    if (escolhida) {
+      // Validar que a conta existe e está ativa
+      const { data: existe } = await admin
+        .from('contas').select('id').eq('id', escolhida).eq('ativo', true).maybeSingle();
+      if (existe) {
+        contaIdAtiva = escolhida;
+      }
+    }
+
+    return {
+      id: perfis.id,
+      conta_id: contaIdAtiva,
+      conta_propria: null,
+      nome: perfis.nome,
+      email: perfis.email,
+      papel: 'super_admin',
+      avatar_url: perfis.avatar_url,
+      telefone: perfis.telefone,
+      senha_provisoria: perfis.senha_provisoria,
+    };
+  }
+
+  // 3. Usuário comum: tentar conta_usuarios (multi-workspace)
+  const { data: memberships, error: memError } = await admin
     .from('conta_usuarios')
     .select('conta_id, papel')
     .eq('user_id', user.id)
     .eq('ativo', true);
 
-  const ehSuperAdmin = (memberships ?? []).some(m => m.papel === 'super_admin');
+  // Se a tabela não existe ou deu erro, fallback para perfis.conta_id (legado)
+  if (memError || !memberships) {
+    const papel = (papelGlobal ?? 'operador') as 'admin' | 'operador';
+    return {
+      id: perfis.id,
+      conta_id: (perfis as any).conta_id ?? null,
+      conta_propria: (perfis as any).conta_id ?? null,
+      nome: perfis.nome,
+      email: perfis.email,
+      papel,
+      avatar_url: perfis.avatar_url,
+      telefone: perfis.telefone,
+      senha_provisoria: perfis.senha_provisoria,
+    };
+  }
 
-  // 3. Resolver workspace ativa
-  const cookieJar = await cookies();
-  const escolhida = cookieJar.get(COOKIE_CONTA)?.value;
-
+  // 4. Usuário com memberships
   let contaIdAtiva: string | null = null;
-  let papelAtivo: 'super_admin' | 'admin' | 'operador' = 'operador';
+  let papelAtivo: 'admin' | 'operador' = 'operador';
 
-  if (ehSuperAdmin) {
-    // Super admin: usa cookie se fornecido, senão null (precisa escolher)
-    if (escolhida) {
-      const { data: existe } = await admin
-        .from('contas').select('id').eq('id', escolhida).maybeSingle();
-      if (existe) {
-        contaIdAtiva = escolhida;
-        papelAtivo = 'super_admin';
-      }
-    }
-  } else if (escolhida) {
-    // Usuário comum com cookie: valida membership
-    const membro = (memberships ?? []).find(m => m.conta_id === escolhida);
+  if (escolhida) {
+    // Validar membership para a conta escolhida
+    const membro = memberships.find(m => m.conta_id === escolhida);
     if (membro) {
       contaIdAtiva = membro.conta_id;
       papelAtivo = membro.papel as 'admin' | 'operador';
     }
-  } else if (memberships && memberships.length > 0) {
-    // Sem cookie: auto-select se só tem 1 membership
+  } else if (memberships.length > 0) {
+    // Auto-select se só tem 1 membership
     if (memberships.length === 1) {
       contaIdAtiva = memberships[0].conta_id;
       papelAtivo = memberships[0].papel as 'admin' | 'operador';
-      // Salvar cookie para próximas requests
       cookieJar.set(COOKIE_CONTA, contaIdAtiva!, {
         httpOnly: true, sameSite: 'lax', secure: true, path: '/', maxAge: 60 * 60 * 12,
       });
     }
-    // Se tem mais de 1 e nenhum cookie → contaIdAtiva = null (precisa escolher)
   }
 
-  // conta_propria = primeira membership (ou null se super_admin sem memberships)
-  const contaPropria = memberships && memberships.length > 0
-    ? memberships[0].conta_id
-    : null;
+  const contaPropria = memberships.length > 0 ? memberships[0].conta_id : null;
 
   return {
     id: perfis.id,

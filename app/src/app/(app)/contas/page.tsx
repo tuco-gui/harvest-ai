@@ -8,14 +8,32 @@ export default async function Pagina() {
   if (perfil.papel !== 'super_admin') redirect('/');
 
   const admin = supabaseAdmin();
-  const [{ data: contas }, { data: memberships }] = await Promise.all([
-    admin.from('contas').select('id, nome, slug, ativo, criado_em, modulos_habilitados').order('criado_em'),
-    admin.from('conta_usuarios').select('conta_id').eq('ativo', true),
-  ]);
+  const { data: contas } = await admin
+    .from('contas')
+    .select('id, nome, slug, ativo, criado_em, modulos_habilitados')
+    .order('criado_em');
 
+  // Contar usuários por conta via conta_usuarios (com fallback legado)
   const nUsuariosPorConta: Record<string, number> = {};
-  for (const m of memberships ?? []) {
-    nUsuariosPorConta[m.conta_id] = (nUsuariosPorConta[m.conta_id] ?? 0) + 1;
+
+  const { data: memberships, error: memError } = await admin
+    .from('conta_usuarios')
+    .select('conta_id')
+    .eq('ativo', true);
+
+  if (!memError && memberships) {
+    for (const m of memberships) {
+      nUsuariosPorConta[m.conta_id] = (nUsuariosPorConta[m.conta_id] ?? 0) + 1;
+    }
+  } else {
+    // Fallback: contar via perfis.conta_id (legado)
+    const { data: perfis } = await admin
+      .from('perfis')
+      .select('conta_id')
+      .not('conta_id', 'is', null);
+    for (const p of perfis ?? []) {
+      if (p.conta_id) nUsuariosPorConta[p.conta_id] = (nUsuariosPorConta[p.conta_id] ?? 0) + 1;
+    }
   }
 
   return (

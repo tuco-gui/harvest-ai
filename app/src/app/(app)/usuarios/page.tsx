@@ -19,22 +19,39 @@ export default async function Pagina() {
   }
 
   const admin = supabaseAdmin();
+  let usuarios: { id: string; nome: string | null; email: string | null; papel: string }[] = [];
 
-  // Buscar membros da workspace via conta_usuarios + perfis
-  const { data: memberships } = await admin
+  // Tentar via conta_usuarios (multi-workspace)
+  const { data: memberships, error: memError } = await admin
     .from('conta_usuarios')
     .select('user_id, papel, ativo, criado_em, perfis(id, nome, email)')
     .eq('conta_id', perfil.conta_id)
     .order('criado_em');
 
-  const usuarios = (memberships ?? [])
-    .filter((m: any) => m.perfis && m.ativo)
-    .map((m: any) => ({
-      id: m.perfis.id,
-      nome: m.perfis.nome,
-      email: m.perfis.email,
-      papel: m.papel,
+  if (!memError && memberships) {
+    // Tabela existe — usar memberships
+    usuarios = (memberships ?? [])
+      .filter((m: any) => m.perfis && m.ativo)
+      .map((m: any) => ({
+        id: m.perfis.id,
+        nome: m.perfis.nome,
+        email: m.perfis.email,
+        papel: m.papel,
+      }));
+  } else {
+    // Fallback: buscar via perfis.conta_id (legado)
+    const { data: perfisLegado } = await admin
+      .from('perfis')
+      .select('id, nome, email, papel')
+      .eq('conta_id', perfil.conta_id)
+      .order('criado_em');
+    usuarios = (perfisLegado ?? []).map((p: any) => ({
+      id: p.id,
+      nome: p.nome,
+      email: p.email,
+      papel: p.papel,
     }));
+  }
 
   const [{ data: conta }, { data: smtp }] = await Promise.all([
     admin.from('contas').select('nome').eq('id', perfil.conta_id).single(),
