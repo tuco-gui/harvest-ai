@@ -25,13 +25,14 @@ const NOVA_OPORTUNIDADE = {
   proxima_acao: '', previsao_fechamento: '', observacoes: '', tags: '',
 };
 
-export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel, perfilId }: {
+export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel, perfilId, estagiosFunil = [] }: {
   oportunidades: Oportunidade[];
   owners: Owner[];
   campanhas: Campanha[];
   canais: Canal[];
   papel?: string;
   perfilId?: string;
+  estagiosFunil?: { id: number; nome: string; ordem: number; grupo: string; probabilidade: number }[];
 }) {
   const podeEditar = papel !== 'operador';
   const podeEditarPropria = (op: Oportunidade) =>
@@ -83,7 +84,21 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     return () => clearInterval(interval);
   }, [ficha?.id, aba]);
 
-  const encerradosIds = useMemo(() => new Set(ESTAGIOS_ENCERRADOS.map((e) => e.id)), []);
+  // Usar estágios do funil se disponíveis, senão os hardcoded
+  const estagiosPipeline = estagiosFunil.length
+    ? estagiosFunil.filter((e) => e.grupo === 'pipeline').map((e) => ({
+        id: e.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_'),
+        nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'pipeline', probabilidade: e.probabilidade,
+      }))
+    : ESTAGIOS_PIPELINE;
+  const estagiosEncerrados = estagiosFunil.length
+    ? estagiosFunil.filter((e) => e.grupo === 'encerrado').map((e) => ({
+        id: e.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_'),
+        nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'encerrado', probabilidade: e.probabilidade,
+      }))
+    : ESTAGIOS_ENCERRADOS;
+
+  const encerradosIds = useMemo(() => new Set(estagiosEncerrados.map((e) => e.id)), [estagiosEncerrados]);
   const visiveis = useMemo(() => ops.filter((op) => {
     const texto = `${op.empresa} ${op.contato} ${op.telefone ?? ''} ${(op.tags ?? []).join(' ')}`.toLowerCase();
     return (!busca || texto.includes(busca.toLowerCase()))
@@ -103,7 +118,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     };
   }, [ops, encerradosIds]);
 
-  const estagios = mostrarEncerrados ? ESTAGIOS_ENCERRADOS : ESTAGIOS_PIPELINE;
+  const estagios = mostrarEncerrados ? estagiosEncerrados : estagiosPipeline;
   const agrupar = (estagio: string) => visiveis.filter((o) => o.estagio === estagio);
   const nomeOwner = (id: string | null) => owners.find((o) => o.id === id)?.nome ?? 'Sem responsável';
   const nomeCampanha = (id: number | null) => campanhas.find((c) => c.id === id)?.nome ?? null;

@@ -297,11 +297,71 @@ export async function POST(req: Request) {
   }
 
   if (!entregue) return NextResponse.json({ erro: falha }, { status: 502 });
-  // Se este lead já está no CRM, a conversa e o estágio acompanham o envio
-  // feito pela campanha. Não cria oportunidade automaticamente.
-  await admin.from('oportunidades')
-    .update({ estagio: 'contatado', probabilidade: 10, atualizado_em: new Date().toISOString() })
-    .eq('conta_id', perfil.conta_id).eq('lead_id', leadPersistido.id).eq('estagio', 'novo');
+
+  // --- CRM: criar ou avançar oportunidade ---
+  // 1. Se o lead já tem oportunidade, avança de novo→contatado (como antes).
+  // 2. Se NÃO tem, cria uma oportunidade nesta campanha no estágio inicial
+  //    do funil da campanha (ou 'contatado' se não houver funil).
+  const agora = new Date().toISOString();
+
+  // Buscar dados da campanha (funil + estágio inicial)
+  let estagioInicial = 'contatado';
+  let funilIdCrm: number | null = null;
+  if (campanhaIdNum) {
+    const { data: campDados } = await admin
+      .from('prospecta_campanhas')
+      .select('funil_id, estagio_inicial')
+      .eq('id', campanhaIdNum).maybeSingle();
+    if (campDados) {
+      funilIdCrm = campDados.funil_id ?? null;
+      estagioInicial = campDados.estagio_inicial || 'contatado';
+    }
+  }
+
+  // Buscar probabilidade do estágio no funil (se houver)
+  let probabilidade = 10;
+  if (funilIdCrm && estagioInicial) {
+    const { data: estFunil } = await admin
+      .from('funil_estagios')
+      .select('probabilidade')
+      .eq('funil_id', funilIdCrm)
+      .ilike('nome', estagioInicial)
+      .maybeSingle();
+    if (estFunil) probabilidade = estFunil.probabilidade;
+  }
+
+  // Buscar oportunidade existente para este lead
+  const { data: opExistente } = await admin
+    .from('oportunidades')
+    .select('id, estagio')
+    .eq('conta_id', perfil.conta_id!)
+    .eq('lead_id', leadPersistido.id)
+    .maybeSingle();
+
+  if (opExistente) {
+    // Se está em 'novo', avança para o estágio inicial da campanha
+    if (opExistente.estagio === 'novo') {
+      await admin.from('oportunidades')
+        .update({ estagio: estagioInicial, probabilidade, atualizado_em: agora })
+        .eq('id', opExistente.id);
+    }
+  } else {
+    // Criar nova oportunidade
+    await admin.from('oportunidades').insert({
+      conta_id: perfil.conta_id!,
+      lead_id: leadPersistido.id,
+      empresa: leadPersistido.empresa ?? '',
+      contato: '',
+      telefone,
+      origem: 'prospeccao',
+      estagio: estagioInicial,
+      probabilidade,
+      campanha_id: campanhaIdNum,
+      funil_id: funilIdCrm,
+      owner_id: perfil!.id,
+    });
+  }
+
   return NextResponse.json({
     ok: true, mensagem, contatoAnterior,
     canal: { id: canal.id, nome: canal.nome, provider: canal.provider },

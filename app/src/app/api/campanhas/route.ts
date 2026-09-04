@@ -41,11 +41,18 @@ export async function POST(req: Request) {
     comWhatsapp = (leadsDaLista ?? []).filter((l: any) => l.tem_whatsapp === 'sim').length;
   }
 
+  // Funil e estágio inicial — opcional na criação, pode ser definido depois na edição.
+  const funilId = b.funil_id ? Number(b.funil_id) : null;
+  const estagioInicial = typeof b.estagio_inicial === 'string' && b.estagio_inicial.trim()
+    ? b.estagio_inicial.trim() : 'novo';
+
   const { data, error } = await supabaseAdmin()
     .from('prospecta_campanhas')
     .insert({
       conta_id: perfil.conta_id, criado_por: perfil.id, nome, origem, tipo,
       encontradas, com_whatsapp: comWhatsapp,
+      funil_id: funilId,
+      estagio_inicial: estagioInicial,
     })
     .select('id').single();
 
@@ -138,6 +145,13 @@ export async function PATCH(req: Request) {
       dados.cadencia_min = min;
       dados.cadencia_max = max;
     }
+  }
+
+  // Funil e estágio inicial — pode ser definido/alterado a qualquer momento.
+  if (b.funil_id === null) dados.funil_id = null;
+  else if (b.funil_id) dados.funil_id = Number(b.funil_id);
+  if (typeof b.estagio_inicial === 'string' && b.estagio_inicial.trim()) {
+    dados.estagio_inicial = b.estagio_inicial.trim();
   }
 
   if (!Object.keys(dados).length) return NextResponse.json({ ok: true });

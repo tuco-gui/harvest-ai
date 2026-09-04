@@ -8,6 +8,7 @@ type LeadResumo = { id: number; empresa: string; telefone_original: string | nul
 
 type Campanha = {
   id: number; nome: string; status?: string;
+  funil_id?: number | null; estagio_inicial?: string | null;
   modo_envio_numero?: string | null; canal_ids?: number[] | null;
   mensagem_modo?: string | null; mensagens?: string[] | null; contexto_ia?: string | null;
   cadencia_modo?: string; cadencia_min?: number | null; cadencia_max?: number | null;
@@ -18,9 +19,11 @@ const CADENCIAS: Record<string, [number, number] | null> = {
 };
 
 export default function CampanhaEditar({
-  campanha, leadsIniciais, intervaloMin, intervaloMax, canais,
+  campanha, leadsIniciais, intervaloMin, intervaloMax, canais, funis = [], estagiosDoFunil = [],
 }: {
   campanha: Campanha; leadsIniciais: LeadResumo[]; intervaloMin: number; intervaloMax: number; canais: Canal[];
+  funis?: { id: number; nome: string }[];
+  estagiosDoFunil?: { id: number; nome: string; ordem: number; grupo: string; probabilidade: number }[];
 }) {
   const canaisConectados = canais.filter((c) => c.ativo && c.status === 'conectado');
   const [nome, setNome] = useState(campanha.nome);
@@ -43,6 +46,9 @@ export default function CampanhaEditar({
   const [cadenciaModo, setCadenciaModo] = useState(campanha.cadencia_modo ?? 'padrao');
   const [cadenciaMin, setCadenciaMin] = useState(campanha.cadencia_min ?? 40);
   const [cadenciaMax, setCadenciaMax] = useState(campanha.cadencia_max ?? 90);
+
+  const [funilId, setFunilId] = useState<number | null>(campanha.funil_id ?? (funis.length > 0 ? funis[0].id : null));
+  const [estagioInicial, setEstagioInicial] = useState(campanha.estagio_inicial ?? 'Contatado');
 
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -115,6 +121,8 @@ export default function CampanhaEditar({
       const body: Record<string, unknown> = {
         id: campanha.id,
         nome: nome.trim() || campanha.nome,
+        funil_id: funilId,
+        estagio_inicial: estagioInicial,
         modoEnvio,
         canalIds: Array.from(canalIds),
         mensagemModo: msgModo === 'padrao' ? null : msgModo,
@@ -148,10 +156,42 @@ export default function CampanhaEditar({
         Nome, leads, canal de envio, mensagem e cadência — tudo persiste no servidor ao salvar.
       </p>
 
-      <section className="secao">
+      <section className="secao" style={{ marginTop: 20 }}>
         <h3 style={{ fontSize: 14 }}>Nome</h3>
         <input value={nome} onChange={(e) => setNome(e.target.value)}
           style={{ height: 38, width: '100%', maxWidth: 480, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }} />
+      </section>
+
+      <section className="secao" style={{ marginTop: 20 }}>
+        <h3 style={{ fontSize: 14 }}>Funil / Pipeline</h3>
+        <p className="ajuda" style={{ marginBottom: 8 }}>
+          Ao enviar a primeira mensagem, o lead será criado como oportunidade neste funil e estágio.
+        </p>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {funis.length > 0 ? (
+            <>
+              <select value={funilId ?? ''} onChange={(e) => {
+                const novoId = e.target.value ? Number(e.target.value) : null;
+                setFunilId(novoId);
+              }}
+                style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
+                {funis.map((f) => (
+                  <option key={f.id} value={f.id}>{f.nome}</option>
+                ))}
+              </select>
+              <select value={estagioInicial} onChange={(e) => setEstagioInicial(e.target.value)}
+                style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
+                {estagiosDoFunil.map((e) => (
+                  <option key={e.id} value={e.nome}>{e.nome} ({e.probabilidade}%)</option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+              Nenhum funil disponível. <a href="/funis" style={{ color: 'var(--accent)' }}>Criar um funil</a>
+            </span>
+          )}
+        </div>
       </section>
 
       <section className="secao" style={{ marginTop: 20 }}>
