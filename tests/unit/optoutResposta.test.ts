@@ -39,6 +39,12 @@ ok(classificarMensagem(null) === 'resposta', 'classificar: null -> resposta (nã
 ok(ehOptOut('Não perturbe!'), 'opt-out: acento + exclamação ignorados');
 ok(ehOptOut('  pare  '), 'opt-out: espaços nas bordas ignorados');
 
+// --- falsos positivos corrigidos (keyword em mensagem longa) ---
+ok(!ehOptOut('3 — Cancelar'), 'não opt-out: "3 — Cancelar" (lista de opções)');
+ok(!ehOptOut('Opções: 1 Confirmar, 2 Reagendar, 3 Cancelar'), 'não opt-out: lista de opções com cancelar');
+ok(!ehOptOut('Bom dia, Junior! Passando para lembrar que nossa reunião é hoje às 10:00. Se não confirmou, responda: 1 Confirmar, 2 Reagendar, 3 Cancelar'), 'não opt-out: lembrete de reunião com opção cancelar');
+ok(!ehOptOut('Remover este item do carrinho'), 'não opt-out: "Remover este item do carrinho" (5 palavras)');
+
 if (falhas) {
   console.error(`\n${falhas} teste(s) falharam.`);
   process.exit(1);

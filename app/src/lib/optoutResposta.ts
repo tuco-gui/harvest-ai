@@ -26,11 +26,12 @@ const PALAVRAS_OPT_OUT = [
   'nao mande mensagem', 'nao me mande', 'sem mensagem',
 ];
 
-/** Normaliza para comparação: minúsculo, sem acento, colapsa espaços. */
+/** Normaliza para comparação: minúsculo, sem acento, colapsa espaços, remove pontuação solta. */
 function normalizarTexto(t: string): string {
   return t
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase()
+    .replace(/[—–\-\/,;:!?.]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -39,13 +40,34 @@ export type ClassificacaoMensagem = 'optout' | 'resposta';
 
 /**
  * Classifica uma mensagem inbound de texto.
- * Retorna 'optout' se bater uma palavra-chave de parada; senão 'resposta'.
- * Mensagem nula/vazia → 'resposta' (não é opt-out por omissão).
+ * Retorna 'optout' se a mensagem for uma solicitação clara e primária de
+ * parada (curta, sem muitas palavras além da keyword); senão 'resposta'.
+ *
+ * Evita falsos positivos: "3 — Cancelar" em lista de opções NÃO é opt-out.
+ * Só é opt-out se a mensagem for predominantemente uma keyword de parada
+ * (até 5 palavras) ou se contiver frase explícita de opt-out.
  */
 export function classificarMensagem(mensagem: string | null | undefined): ClassificacaoMensagem {
   if (!mensagem || !mensagem.trim()) return 'resposta';
   const texto = normalizarTexto(mensagem);
-  if (PALAVRAS_OPT_OUT.some((p) => texto.includes(normalizarTexto(p)))) return 'optout';
+
+  // Fase 1: frases explícitas de opt-out (multi-palavra, alta certeza).
+  const FRASES_EXPLICITAS = [
+    'nao quero mais', 'nao mande mais', 'nao me mande',
+    'nao perturbe', 'nao mande mensagem', 'sem mensagem',
+    'quero sair', 'me descadastre', 'descadastrar',
+    'pare de me mandar', 'para de mandar', 'stop',
+  ];
+  if (FRASES_EXPLICITAS.some((f) => texto.includes(f))) return 'optout';
+
+  // Fase 2: keyword curta — só é opt-out se a mensagem tiver até 3 palavras
+  // e NÃO começar com número (evita "3 Cancelar" de lista de opções).
+  const palavras = texto.split(/\s+/).length;
+  const comecaComNumero = /^\d/.test(texto);
+  if (palavras <= 3 && !comecaComNumero && PALAVRAS_OPT_OUT.some((p) => texto.includes(normalizarTexto(p)))) {
+    return 'optout';
+  }
+
   return 'resposta';
 }
 

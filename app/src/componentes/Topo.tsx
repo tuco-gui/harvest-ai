@@ -81,7 +81,7 @@ export default function Topo(p: Props) {
       body: JSON.stringify({ conta_id: id }),
     });
     setMenu(null);
-    router.refresh();
+    router.push('/');
   }
 
   async function sair() {

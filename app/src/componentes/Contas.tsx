@@ -66,7 +66,7 @@ export default function Contas({
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conta_id: id }),
     });
-    router.refresh();
+    router.push('/');
   }
 
   async function alternarCrm(c: Conta) {
