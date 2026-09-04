@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { crmBackend, ownerAtual } from '@/lib/twenty';
 import { perfilTemModulo } from '@/lib/autorizacao';
+import { isAdmin } from '@/lib/crmControleAcesso';
 
 /**
- * GET  /api/crm/oportunidades  → lista do tenant (isola por conta_id via RLS).
+ * GET  /api/crm/oportunidades  → lista do tenant.
+ * - admin/super_admin: vê todas as oportunidades da conta
+ * - operador: vê SOMENTE suas oportunidades (owner_id = seu id)
  * POST /api/crm/oportunidades → qualifica um lead OU cria oportunidade manual.
  * Não duplica quando houver lead_id; criação manual exige empresa ou contato.
  */
@@ -18,7 +21,10 @@ export async function GET() {
 
   const backend = await crmBackend(perfil.conta_id);
   const ops = await backend.listar(perfil.conta_id);
-  return NextResponse.json({ oportunidades: ops });
+  const filtradas = isAdmin(perfil.papel)
+    ? ops
+    : ops.filter(o => o.owner_id === perfil.id);
+  return NextResponse.json({ oportunidades: filtradas });
 }
 
 export async function POST(req: Request) {

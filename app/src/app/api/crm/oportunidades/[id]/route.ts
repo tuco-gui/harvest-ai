@@ -3,18 +3,18 @@ import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { crmBackend } from '@/lib/twenty';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import { estagioValido, probabilidadeEstagio } from '@/lib/crmStages';
+import { podeAcessarOportunidade, isAdmin } from '@/lib/crmControleAcesso';
 
 /**
  * PATCH /api/crm/oportunidades/[id]
  * Atualiza estágio, owner, valor, próxima ação ou observações.
- * O isolamento por tenant é garantido pela RLS (conta_id = minha_conta()).
+ * - admin/super_admin: pode editar qualquer oportunidade da conta
+ * - operador: pode editar SOMENTE suas oportunidades (owner_id = seu id)
+ *   e NÃO pode reatribuir (owner_id é ignorado para operadores)
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const perfil = await perfilAtual();
   if (!perfil) return NextResponse.json({ erro: 'Sessão expirada.' }, { status: 401 });
-  if (perfil.papel === 'operador') {
-    return NextResponse.json({ erro: 'Seu perfil não edita o CRM.' }, { status: 403 });
-  }
   if (!perfil.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
   if (!(await perfilTemModulo(supabaseAdmin(), perfil, 'crm'))) {
     return NextResponse.json({ erro: 'CRM não habilitado para esta conta.' }, { status: 403 });
@@ -23,6 +23,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const opId = Number(id);
   if (!opId) return NextResponse.json({ erro: 'Oportunidade inválida.' }, { status: 400 });
+
+  const acesso = await podeAcessarOportunidade(supabaseAdmin(), perfil, opId);
+  if (!acesso.ok) return NextResponse.json({ erro: acesso.erro }, { status: 403 });
 
   const b = await req.json().catch(() => ({}) as any);
   const patch: Record<string, unknown> = {};
@@ -38,6 +41,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (b.probabilidade === undefined) patch.probabilidade = probabilidadeEstagio(String(b.estagio));
   }
   if (b.owner_id !== undefined) {
+    if (!isAdmin(perfil.papel)) {
+      return NextResponse.json({ erro: 'Somente admin pode reatribuir leads.' }, { status: 403 });
+    }
     if (b.owner_id) {
       const { data: ownerDaConta } = await supabaseAdmin()
         .from('perfis')

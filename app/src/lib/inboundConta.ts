@@ -12,13 +12,20 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * devolvem null — quem chama não deve inventar um vínculo.
  */
 
-const REGEX_SESSION_WAHA = /^conta_([0-9a-f]{32})$/i;
+/**
+ * Dois formatos de nome de sessão:
+ * - Legado (single-canal): `conta_<uuid_sem_hifens>` (32 hex chars)
+ * - Multicanal: `harvest_<uuid_sem_hifens>_c<canalId>`
+ * Ambos contêm o UUID (32 hex) em alguma posição — extraímos o primeiro
+ * match de 32 hex consecutios para reconstruir o conta_id.
+ */
+const REGEX_UUID_HEX = /[0-9a-f]{32}/i;
 
-/** Reconstrói o UUID a partir do nome de sessão (`conta_<uuid sem hífen>`, ver wahaSessionName em lib/waha.ts). */
+/** Reconstrói o UUID a partir de 32 hex consecutivos no nome da sessão. */
 function contaIdDoSessionWaha(sessionName: string): string | null {
-  const m = REGEX_SESSION_WAHA.exec(sessionName);
+  const m = REGEX_UUID_HEX.exec(sessionName);
   if (!m) return null;
-  const hex = m[1];
+  const hex = m[0];
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 

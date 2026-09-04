@@ -25,14 +25,17 @@ const NOVA_OPORTUNIDADE = {
   proxima_acao: '', previsao_fechamento: '', observacoes: '', tags: '',
 };
 
-export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel }: {
+export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel, perfilId }: {
   oportunidades: Oportunidade[];
   owners: Owner[];
   campanhas: Campanha[];
   canais: Canal[];
   papel?: string;
+  perfilId?: string;
 }) {
   const podeEditar = papel !== 'operador';
+  const podeEditarPropria = (op: Oportunidade) =>
+    papel === 'operador' ? op.owner_id === perfilId : true;
   const [ops, setOps] = useState(oportunidades);
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [estagioAlvo, setEstagioAlvo] = useState<string | null>(null);
@@ -123,6 +126,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
   async function moverPara(op: Oportunidade, estagio: string) {
     if (op.estagio === estagio) return;
+    if (!podeEditar && !podeEditarPropria(op)) return;
     const anterior = op;
     const atualizado = { ...op, estagio, probabilidade: probabilidadeEstagio(estagio) };
     setOps((atual) => atual.map((x) => x.id === op.id ? atualizado : x));
@@ -236,7 +240,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             onDrop={() => { const op = ops.find((o) => o.id === arrastando); if (op) void moverPara(op, est.id); setArrastando(null); setEstagioAlvo(null); }}>
             <header className="crm-coluna-cabecalho"><div><span className={`crm-estagio-ponto crm-estagio-${est.id}`} />{est.nome}</div><b>{itens.length}</b><small>{valorFmt(total)}</small></header>
             <ul className="crm-coluna-cards">
-              {itens.map((op) => <li key={op.id} className="crm-cartao" draggable={podeEditar}
+              {itens.map((op) =>               <li key={op.id} className="crm-cartao" draggable={podeEditar || podeEditarPropria(op)}
                 onDragStart={() => setArrastando(op.id)} onDragEnd={() => { setArrastando(null); setEstagioAlvo(null); }} onClick={() => void abrirFicha(op)}>
                 <div className="crm-cartao-topo"><strong>{op.empresa || op.contato || 'Sem nome'}</strong><span>{op.probabilidade ?? 0}%</span></div>
                 {op.contato && op.empresa && <p>{op.contato}</p>}<div className="crm-cartao-valor">{valorFmt(op.valor)}</div>
@@ -278,7 +282,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             <label>Telefone<input value={ficha.telefone ?? ''} onChange={(e) => setFicha({ ...ficha, telefone: e.target.value })} /></label>
             <label>E-mail<input value={ficha.email ?? ''} onChange={(e) => setFicha({ ...ficha, email: e.target.value })} /></label>
             <label>Etapa<select value={ficha.estagio} onChange={(e) => setFicha({ ...ficha, estagio: e.target.value, probabilidade: probabilidadeEstagio(e.target.value) })}>{ESTAGIOS_CRM.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
-            <label>Responsável<select value={ficha.owner_id ?? ''} onChange={(e) => setFicha({ ...ficha, owner_id: e.target.value || null })}><option value="">Sem responsável</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
+            <label>Responsável<select value={ficha.owner_id ?? ''} onChange={(e) => setFicha({ ...ficha, owner_id: e.target.value || null })} disabled={!podeEditar}><option value="">Sem responsável</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
             <label>Valor<input type="number" min="0" step="0.01" value={ficha.valor} onChange={(e) => setFicha({ ...ficha, valor: Number(e.target.value) })} /></label>
             <label>Probabilidade<input type="number" min="0" max="100" value={ficha.probabilidade} onChange={(e) => setFicha({ ...ficha, probabilidade: Number(e.target.value) })} /></label>
             <label>Previsão<input type="date" value={ficha.previsao_fechamento ?? ''} onChange={(e) => setFicha({ ...ficha, previsao_fechamento: e.target.value || null })} /></label>
@@ -287,13 +291,13 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             <label className="campo-largo">Próxima ação<textarea value={ficha.proxima_acao ?? ''} onChange={(e) => setFicha({ ...ficha, proxima_acao: e.target.value })} /></label>
             {encerradosIds.has(ficha.estagio) && <label className="campo-largo">Motivo do encerramento<textarea value={ficha.motivo_perda ?? ''} onChange={(e) => setFicha({ ...ficha, motivo_perda: e.target.value })} /></label>}
             <label className="campo-largo">Observações<textarea value={ficha.observacoes ?? ''} onChange={(e) => setFicha({ ...ficha, observacoes: e.target.value })} /></label>
-          </div><div className="crm-meta">Criada em {dataFmt(ficha.criado_em)} · Atualizada em {dataFmt(ficha.atualizado_em)}</div>{podeEditar && <button className="btn-primario" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar alterações'}</button>}</form>
+          </div><div className="crm-meta">Criada em {dataFmt(ficha.criado_em)} · Atualizada em {dataFmt(ficha.atualizado_em)}</div>{(podeEditar || podeEditarPropria(ficha)) && <button className="btn-primario" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar alterações'}</button>}</form>
 
           <div className="crm-ficha-contexto"><nav className="crm-abas"><button type="button" className={aba === 'conversa' ? 'ativa' : ''} onClick={() => setAba('conversa')}>Conversa</button><button type="button" className={aba === 'atividades' ? 'ativa' : ''} onClick={() => setAba('atividades')}>Atividades <span>{atividades.filter((a) => !a.concluida).length}</span></button></nav>
             {carregandoContexto ? <div className="crm-contexto-vazio">Carregando histórico…</div> : aba === 'conversa' ? <div className="crm-conversa">
               <div className="crm-mensagens">{!mensagens.length && <div className="crm-contexto-vazio"><strong>Nenhuma conversa ainda</strong><p>Envie a primeira mensagem por um canal conectado.</p></div>}{mensagens.map((m) => <article key={m.id} className={`crm-mensagem ${m.direcao}`}><p>{m.texto}</p><footer><span>{m.status}</span><time>{dataFmt(m.data)}</time></footer>{m.erro && <small>{m.erro}</small>}</article>)}</div>
-              <form className="crm-compositor" onSubmit={enviarMensagem}><textarea value={textoMensagem} onChange={(e) => setTextoMensagem(e.target.value)} placeholder={ficha.telefone ? 'Digite uma mensagem…' : 'Cadastre um telefone para conversar'} disabled={!ficha.telefone || !canais.length || !podeEditar} /><div><select value={canalId} onChange={(e) => setCanalId(e.target.value)} disabled={!canais.length || !podeEditar}><option value="">{canais.length ? 'Escolha o canal' : 'Nenhum canal conectado'}</option>{canais.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.numero ? ` · ${c.numero}` : ''}</option>)}</select>{podeEditar && <button className="btn-primario" disabled={enviando || !textoMensagem.trim() || !canalId}>{enviando ? 'Enviando…' : 'Enviar'}</button>}</div></form>
-            </div> : <div className="crm-atividades">{podeEditar && <form onSubmit={adicionarAtividade} className="crm-nova-atividade"><select value={novaAtividade.tipo} onChange={(e) => setNovaAtividade({ ...novaAtividade, tipo: e.target.value })}><option value="tarefa">Tarefa</option><option value="nota">Nota</option><option value="ligacao">Ligação</option><option value="reuniao">Reunião</option><option value="email">E-mail</option></select><input value={novaAtividade.titulo} onChange={(e) => setNovaAtividade({ ...novaAtividade, titulo: e.target.value })} placeholder="O que precisa ser feito?" /><input type="datetime-local" value={novaAtividade.vence_em} onChange={(e) => setNovaAtividade({ ...novaAtividade, vence_em: e.target.value })} /><button className="btn-primario">Adicionar</button></form>}<ul>{atividades.map((a) => <li key={a.id} className={a.concluida ? 'concluida' : ''}><button type="button" className="crm-check" onClick={() => void alternarAtividade(a)}>{a.concluida ? '✓' : ''}</button><div><span className="crm-tipo">{a.tipo}</span><strong>{a.titulo}</strong>{a.descricao && <p>{a.descricao}</p>}<small>{a.vence_em ? `Prazo ${dataFmt(a.vence_em)}` : `Registrado ${dataFmt(a.criado_em)}`}</small></div></li>)}</ul>{!atividades.length && <div className="crm-contexto-vazio">Nenhuma atividade registrada.</div>}</div>}
+              <form className="crm-compositor" onSubmit={enviarMensagem}><textarea value={textoMensagem} onChange={(e) => setTextoMensagem(e.target.value)} placeholder={ficha.telefone ? 'Digite uma mensagem…' : 'Cadastre um telefone para conversar'} disabled={!ficha.telefone || !canais.length || !(podeEditar || podeEditarPropria(ficha))} /><div><select value={canalId} onChange={(e) => setCanalId(e.target.value)} disabled={!canais.length || !(podeEditar || podeEditarPropria(ficha))}><option value="">{canais.length ? 'Escolha o canal' : 'Nenhum canal conectado'}</option>{canais.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.numero ? ` · ${c.numero}` : ''}</option>)}</select>{(podeEditar || podeEditarPropria(ficha)) && <button className="btn-primario" disabled={enviando || !textoMensagem.trim() || !canalId}>{enviando ? 'Enviando…' : 'Enviar'}</button>}</div></form>
+            </div> : <div className="crm-atividades">{(podeEditar || podeEditarPropria(ficha)) && <form onSubmit={adicionarAtividade} className="crm-nova-atividade"><select value={novaAtividade.tipo} onChange={(e) => setNovaAtividade({ ...novaAtividade, tipo: e.target.value })}><option value="tarefa">Tarefa</option><option value="nota">Nota</option><option value="ligacao">Ligação</option><option value="reuniao">Reunião</option><option value="email">E-mail</option></select><input value={novaAtividade.titulo} onChange={(e) => setNovaAtividade({ ...novaAtividade, titulo: e.target.value })} placeholder="O que precisa ser feito?" /><input type="datetime-local" value={novaAtividade.vence_em} onChange={(e) => setNovaAtividade({ ...novaAtividade, vence_em: e.target.value })} /><button className="btn-primario">Adicionar</button></form>}<ul>{atividades.map((a) => <li key={a.id} className={a.concluida ? 'concluida' : ''}><button type="button" className="crm-check" onClick={() => void alternarAtividade(a)}>{a.concluida ? '✓' : ''}</button><div><span className="crm-tipo">{a.tipo}</span><strong>{a.titulo}</strong>{a.descricao && <p>{a.descricao}</p>}<small>{a.vence_em ? `Prazo ${dataFmt(a.vence_em)}` : `Registrado ${dataFmt(a.criado_em)}`}</small></div></li>)}</ul>{!atividades.length && <div className="crm-contexto-vazio">Nenhuma atividade registrada.</div>}</div>}
           </div>
         </div>
       </section></div>}

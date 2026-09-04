@@ -7,6 +7,7 @@ import { envioPermitidoNoAmbiente } from '@/lib/ambienteEnvio';
 import { carregarCanais, sessaoWahaDoCanal } from '@/lib/whatsappCanais';
 import { getOrCreateSession, sendText as wahaSendText } from '@/lib/waha';
 import { registrarTentativaContato } from '@/lib/historicoContato';
+import { podeAcessarOportunidade } from '@/lib/crmControleAcesso';
 
 async function contexto(id: number) {
   const perfil = await perfilAtual();
@@ -15,6 +16,8 @@ async function contexto(id: number) {
   if (!(await perfilTemModulo(admin, perfil, 'crm'))) {
     return { erro: NextResponse.json({ erro: 'CRM não habilitado para esta conta.' }, { status: 403 }) };
   }
+  const acesso = await podeAcessarOportunidade(admin, perfil, id);
+  if (!acesso.ok) return { erro: NextResponse.json({ erro: acesso.erro }, { status: 403 }) };
   const { data: oportunidade } = await admin.from('oportunidades')
     .select('id, lead_id, telefone, empresa, campanha_id, estagio')
     .eq('id', id).eq('conta_id', perfil.conta_id).maybeSingle();

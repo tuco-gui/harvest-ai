@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { crmBackend } from '@/lib/twenty';
 import { perfilTemModulo } from '@/lib/autorizacao';
+import { isAdmin } from '@/lib/crmControleAcesso';
 import CrmPipeline from '@/componentes/CrmPipeline';
 import { carregarCanais } from '@/lib/whatsappCanais';
 
@@ -31,6 +32,10 @@ export default async function PaginaCrm() {
     nome: p.nome ?? p.email ?? p.id,
   }));
 
+  const opsFiltradas = isAdmin(perfil.papel)
+    ? ops
+    : ops.filter(o => o.owner_id === perfil.id);
+
   return (
     <div className="pagina pagina-larga crm-pagina">
       <header className="cabecalho-pagina">
@@ -41,13 +46,14 @@ export default async function PaginaCrm() {
         </p>
       </header>
       <CrmPipeline
-        oportunidades={ops}
+        oportunidades={opsFiltradas}
         owners={owners}
         campanhas={(campanhasData.data ?? []) as { id: number; nome: string }[]}
         canais={canais.filter((c) => c.ativo && c.status === 'conectado').map((c) => ({
           id: c.id, nome: c.nome, numero: c.numero, provider: c.provider,
         }))}
         papel={perfil.papel}
+        perfilId={perfil.id}
       />
     </div>
   );
