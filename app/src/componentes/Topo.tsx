@@ -15,7 +15,7 @@ type Props = {
   iniciais: string;
   avatarUrl: string | null;
   contaNome: string;
-  contas: Conta[];       // só o super admin recebe a lista cheia
+  contas: Conta[];       // workspaces do usuário (ou todas se super_admin)
   ehSuperAdmin: boolean;
   modulos: ModuloVisivel[]; // módulos habilitados para a conta (visibilidade)
 };
@@ -81,7 +81,8 @@ export default function Topo(p: Props) {
       body: JSON.stringify({ conta_id: id }),
     });
     setMenu(null);
-    router.push('/');
+    // Hard navigation para garantir descarte total do estado da conta anterior
+    window.location.assign('/');
   }
 
   async function sair() {
@@ -94,7 +95,7 @@ export default function Topo(p: Props) {
     <header className="topo" ref={caixa}>
       <Link href="/" className="marca">HARVEST<em>.</em>AI</Link>
 
-      {p.ehSuperAdmin ? (
+      {p.contas.length > 1 || p.ehSuperAdmin ? (
         <div className="menu-raiz">
           <button
             className="conta"
@@ -108,18 +109,20 @@ export default function Topo(p: Props) {
           </button>
           {menu === 'contas' && (
             <div className="menu">
-              <span className="menu-titulo">Trabalhar na conta</span>
+              <span className="menu-titulo">Trocar workspace</span>
               {p.contas.map((c) => (
                 <button key={c.id} className="menu-item" onClick={() => trocarConta(c.id)}>
                   {c.nome}
                 </button>
               ))}
-              {!p.contas.length && <span className="menu-vazio">Nenhuma conta cadastrada</span>}
+              {!p.contas.length && <span className="menu-vazio">Nenhuma conta acessível</span>}
               <div className="menu-risco" />
               <button className="menu-item" onClick={() => trocarConta(null)}>Sair da conta</button>
-              <Link href="/contas" className="menu-item" onClick={() => setMenu(null)}>
-                Gerenciar contas
-              </Link>
+              {p.ehSuperAdmin && (
+                <Link href="/contas" className="menu-item" onClick={() => setMenu(null)}>
+                  Gerenciar contas
+                </Link>
+              )}
             </div>
           )}
         </div>

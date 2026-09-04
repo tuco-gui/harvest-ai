@@ -91,9 +91,11 @@ export async function DELETE(req: Request) {
   if (!id) return NextResponse.json({ erro: 'Falta a conta.' }, { status: 400 });
 
   const admin = supabaseAdmin();
-  const { data: usuarios } = await admin.from('perfis').select('id').eq('conta_id', id);
-  for (const u of usuarios ?? []) {
-    await admin.auth.admin.deleteUser(u.id);
+  // Buscar membros da conta para remover memberships
+  const { data: membros } = await admin.from('conta_usuarios').select('user_id').eq('conta_id', id);
+  for (const m of membros ?? []) {
+    // Remover membership (não deletar Auth user — pode ter outras contas)
+    await admin.from('conta_usuarios').delete().eq('user_id', m.user_id).eq('conta_id', id);
   }
 
   const { error } = await admin.from('contas').delete().eq('id', id);

@@ -8,14 +8,14 @@ export default async function Pagina() {
   if (perfil.papel !== 'super_admin') redirect('/');
 
   const admin = supabaseAdmin();
-  const [{ data: contas }, { data: perfis }] = await Promise.all([
+  const [{ data: contas }, { data: memberships }] = await Promise.all([
     admin.from('contas').select('id, nome, slug, ativo, criado_em, modulos_habilitados').order('criado_em'),
-    admin.from('perfis').select('conta_id').not('conta_id', 'is', null),
+    admin.from('conta_usuarios').select('conta_id').eq('ativo', true),
   ]);
 
   const nUsuariosPorConta: Record<string, number> = {};
-  for (const p of perfis ?? []) {
-    if (p.conta_id) nUsuariosPorConta[p.conta_id] = (nUsuariosPorConta[p.conta_id] ?? 0) + 1;
+  for (const m of memberships ?? []) {
+    nUsuariosPorConta[m.conta_id] = (nUsuariosPorConta[m.conta_id] ?? 0) + 1;
   }
 
   return (

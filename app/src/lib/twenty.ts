@@ -426,7 +426,11 @@ export async function crmBackend(contaId: string): Promise<CrmBackend> {
     .eq('id', contaId)
     .maybeSingle();
   const modulos: string[] = data?.modulos_habilitados ?? [];
-  return modulos.includes('twenty_crm') ? new TwentyCrmBackend() : new SupabaseCrmBackend();
+  // TwentyCrmBackend só é usado se o módulo está habilitado E o backend está configurado
+  if (modulos.includes('twenty_crm') && process.env.TWENTY_API_URL && process.env.TWENTY_API_KEY) {
+    return new TwentyCrmBackend();
+  }
+  return new SupabaseCrmBackend();
 }
 
 /** Owner: seleção manual (P0). pickOwner fuzzy do VineCRM NÃO é usado. */

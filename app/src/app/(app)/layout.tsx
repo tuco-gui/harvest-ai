@@ -15,14 +15,34 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   const admin = supabaseAdmin();
   const ehSuper = perfil.papel === 'super_admin';
 
-  const { data: contas } = ehSuper
-    ? await admin.from('contas').select('id, nome').eq('ativo', true).order('nome')
-    : { data: [] as { id: string; nome: string }[] };
+  // Carregar workspaces do usuário (qualquer um com memberships)
+  const { data: memberships } = await admin
+    .from('conta_usuarios')
+    .select('conta_id, papel, contas(id, nome, ativo)')
+    .eq('user_id', perfil.id)
+    .eq('ativo', true);
 
-  let contaNome = ehSuper ? 'Nenhuma conta' : 'Figueira Marketing';
+  // Filtrar contas ativas e extrair dados
+  const contasDoUsuario = (memberships ?? [])
+    .filter((m: any) => m.contas?.ativo)
+    .map((m: any) => ({ id: m.conta_id, nome: m.contas.nome }));
+
+  // Super admin: se não tem memberships, mostrar todas as contas ativas
+  const contas = ehSuper && contasDoUsuario.length === 0
+    ? (await admin.from('contas').select('id, nome').eq('ativo', true).order('nome')).data ?? []
+    : contasDoUsuario;
+
+  // Se usuário tem mais de 1 workspace mas nenhum selecionado, precisa escolher
+  const temMultiplas = contas.length > 1 && !perfil.conta_id;
+
+  let contaNome = 'Selecione uma conta';
   if (perfil.conta_id) {
     const { data } = await admin.from('contas').select('nome').eq('id', perfil.conta_id).single();
     if (data?.nome) contaNome = data.nome;
+  } else if (contas.length === 1) {
+    contaNome = contas[0].nome;
+  } else if (ehSuper) {
+    contaNome = 'Nenhuma conta';
   }
 
   const iniciais = (perfil.nome ?? perfil.email ?? '?')
@@ -41,7 +61,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
         iniciais={iniciais}
         avatarUrl={perfil.avatar_url}
         contaNome={contaNome}
-        contas={contas ?? []}
+        contas={contas}
         ehSuperAdmin={ehSuper}
         modulos={[...modulos]}
       />

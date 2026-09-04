@@ -37,48 +37,103 @@ export function supabaseAdmin() {
 
 export type Perfil = {
   id: string;
-  conta_id: string | null;      // conta em que ele está trabalhando agora
-  conta_propria: string | null; // a conta a que ele pertence de fato
+  conta_id: string | null;      // conta em que ele está trabalhando agora (membership)
+  conta_propria: string | null; // primeira conta do usuário (fallback legado)
   nome: string | null;
   email: string | null;
-  papel: 'super_admin' | 'admin' | 'operador';
+  papel: 'super_admin' | 'admin' | 'operador'; // papel NA CONTA ATUAL (membership)
   avatar_url: string | null;
   telefone: string | null;
   senha_provisoria: boolean;
 };
 
-/** Cookie que guarda em qual conta o super admin está trabalhando. */
+/** Cookie que guarda em qual conta o usuário está trabalhando. */
 export const COOKIE_CONTA = 'harvest_conta';
 
-/** Quem está pedindo, e de qual conta. Base de toda decisão de acesso. */
+/**
+ * Quem está pedindo, e de qual conta. Base de toda decisão de acesso.
+ *
+ * Resolução (pós-migration 027 — multi-workspace):
+ * 1. Identidade global → perfis (id, nome, email, avatar, etc.)
+ * 2. Workspace ativa → cookie harvest_conta → conta_usuarios
+ * 3. Se super_admin sem cookie → null (precisa escolher)
+ * 4. Se usuário comum sem cookie → primeira membership ativa (auto-select)
+ */
 export async function perfilAtual(): Promise<Perfil | null> {
   const sb = await supabaseDoUsuario();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return null;
 
-  const { data } = await sb
+  // 1. Identidade global (perfis)
+  const { data: perfis } = await sb
     .from('perfis')
-    .select('id, conta_id, nome, email, papel, avatar_url, telefone, senha_provisoria')
+    .select('id, nome, email, avatar_url, telefone, senha_provisoria')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
-  if (!data) return null;
+  if (!perfis) return null;
 
-  const perfil: Perfil = { ...(data as any), conta_propria: (data as any).conta_id };
+  // 2. Buscar memberships ativas do usuário
+  const admin = supabaseAdmin();
+  const { data: memberships } = await admin
+    .from('conta_usuarios')
+    .select('conta_id, papel')
+    .eq('user_id', user.id)
+    .eq('ativo', true);
 
-  // O super admin não pertence a conta nenhuma, então escolhe uma para
-  // trabalhar. Vem de cookie, e é validada contra o banco — cookie forjado
-  // com um id inexistente simplesmente não assume conta nenhuma.
-  if (perfil.papel === 'super_admin') {
-    const escolhida = (await cookies()).get(COOKIE_CONTA)?.value;
+  const ehSuperAdmin = (memberships ?? []).some(m => m.papel === 'super_admin');
+
+  // 3. Resolver workspace ativa
+  const cookieJar = await cookies();
+  const escolhida = cookieJar.get(COOKIE_CONTA)?.value;
+
+  let contaIdAtiva: string | null = null;
+  let papelAtivo: 'super_admin' | 'admin' | 'operador' = 'operador';
+
+  if (ehSuperAdmin) {
+    // Super admin: usa cookie se fornecido, senão null (precisa escolher)
     if (escolhida) {
-      const { data: existe } = await supabaseAdmin()
+      const { data: existe } = await admin
         .from('contas').select('id').eq('id', escolhida).maybeSingle();
-      perfil.conta_id = existe ? escolhida : null;
-    } else {
-      perfil.conta_id = null;
+      if (existe) {
+        contaIdAtiva = escolhida;
+        papelAtivo = 'super_admin';
+      }
     }
+  } else if (escolhida) {
+    // Usuário comum com cookie: valida membership
+    const membro = (memberships ?? []).find(m => m.conta_id === escolhida);
+    if (membro) {
+      contaIdAtiva = membro.conta_id;
+      papelAtivo = membro.papel as 'admin' | 'operador';
+    }
+  } else if (memberships && memberships.length > 0) {
+    // Sem cookie: auto-select se só tem 1 membership
+    if (memberships.length === 1) {
+      contaIdAtiva = memberships[0].conta_id;
+      papelAtivo = memberships[0].papel as 'admin' | 'operador';
+      // Salvar cookie para próximas requests
+      cookieJar.set(COOKIE_CONTA, contaIdAtiva!, {
+        httpOnly: true, sameSite: 'lax', secure: true, path: '/', maxAge: 60 * 60 * 12,
+      });
+    }
+    // Se tem mais de 1 e nenhum cookie → contaIdAtiva = null (precisa escolher)
   }
 
-  return perfil;
+  // conta_propria = primeira membership (ou null se super_admin sem memberships)
+  const contaPropria = memberships && memberships.length > 0
+    ? memberships[0].conta_id
+    : null;
+
+  return {
+    id: perfis.id,
+    conta_id: contaIdAtiva,
+    conta_propria: contaPropria,
+    nome: perfis.nome,
+    email: perfis.email,
+    papel: papelAtivo,
+    avatar_url: perfis.avatar_url,
+    telefone: perfis.telefone,
+    senha_provisoria: perfis.senha_provisoria,
+  };
 }

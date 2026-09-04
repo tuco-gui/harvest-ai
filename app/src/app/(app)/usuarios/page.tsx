@@ -12,22 +12,38 @@ export default async function Pagina() {
       <div className="pagina">
         <h2 style={{ fontFamily: 'var(--display)', fontWeight: 800 }}>Usuários</h2>
         <p style={{ color: 'var(--ink-3)', fontSize: 13, maxWidth: 460 }}>
-          Usuários são por conta de cliente. Escolha uma em Contas e clique em "Trabalhar nesta conta".
+          Escolha uma workspace no seletor do topo para gerenciar usuários.
         </p>
       </div>
     );
   }
 
   const admin = supabaseAdmin();
-  const [{ data: usuarios }, { data: conta }, { data: smtp }] = await Promise.all([
-    admin.from('perfis').select('id, nome, email, papel').eq('conta_id', perfil.conta_id).order('criado_em'),
+
+  // Buscar membros da workspace via conta_usuarios + perfis
+  const { data: memberships } = await admin
+    .from('conta_usuarios')
+    .select('user_id, papel, ativo, criado_em, perfis(id, nome, email)')
+    .eq('conta_id', perfil.conta_id)
+    .order('criado_em');
+
+  const usuarios = (memberships ?? [])
+    .filter((m: any) => m.perfis && m.ativo)
+    .map((m: any) => ({
+      id: m.perfis.id,
+      nome: m.perfis.nome,
+      email: m.perfis.email,
+      papel: m.papel,
+    }));
+
+  const [{ data: conta }, { data: smtp }] = await Promise.all([
     admin.from('contas').select('nome').eq('id', perfil.conta_id).single(),
     admin.from('config_sistema').select('smtp_senha').eq('id', 1).maybeSingle(),
   ]);
 
   return (
     <Usuarios
-      usuarios={usuarios ?? []}
+      usuarios={usuarios}
       contaNome={conta?.nome ?? ''}
       meuId={perfil.id}
       temSmtp={!!smtp?.smtp_senha}

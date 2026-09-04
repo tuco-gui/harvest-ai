@@ -20,7 +20,8 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     { data: conversas },
   ] = await Promise.all([
     admin.from('contas').select('id, nome, slug, ativo, modulos_habilitados, ambiente, whatsapp_qa_whitelist').eq('id', id).single(),
-    admin.from('perfis').select('id, nome, email, papel, criado_em').eq('conta_id', id).order('criado_em'),
+    admin.from('conta_usuarios').select('user_id, papel, criado_em, perfis(id, nome, email)')
+      .eq('conta_id', id).eq('ativo', true).order('criado_em'),
     admin.from('conta_credenciais').select('*').eq('conta_id', id).maybeSingle(),
     admin.from('prospecta_campanhas').select('id, nome, origem, criado_em, encontradas, com_whatsapp')
       .eq('conta_id', id).order('criado_em', { ascending: false }),
@@ -44,6 +45,17 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     );
   }
 
+  // Mapear memberships para formato de exibição
+  const usuariosFormatados = (usuarios ?? [])
+    .filter((m: any) => m.perfis)
+    .map((m: any) => ({
+      id: m.perfis.id,
+      nome: m.perfis.nome,
+      email: m.perfis.email,
+      papel: m.papel,
+      criado_em: m.criado_em,
+    }));
+
   const erros = [
     ...(mensagensErro ?? []).map((m: any) => ({
       tipo: 'Disparo', empresa: m.prospecta_leads?.empresa ?? 'Lead removido',
@@ -59,7 +71,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
   return (
     <ContaDetalhe
       conta={conta}
-      usuarios={usuarios ?? []}
+      usuarios={usuariosFormatados}
       integracoes={{
         serpapi: !!cred?.serpapi_key,
         whatsapp: !!(cred?.evolution_url && cred?.evolution_instancia && cred?.evolution_key),
