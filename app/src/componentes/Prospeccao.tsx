@@ -706,6 +706,10 @@ export default function Prospeccao({
                   onClick={() => setPainelExtra((p) => (p === 'manual' ? null : 'manual'))}>
             Adicionar manualmente
           </button>
+          <a href="/api/leads/exportar" download
+             style={{ height: 38, display: 'inline-flex', alignItems: 'center', padding: '0 13px', border: '1px solid var(--rule)', background: 'var(--surface)', borderRadius: 2, color: 'var(--ink-2)', textDecoration: 'none', whiteSpace: 'nowrap', fontWeight: 500, fontSize: 13 }}>
+            Exportar CSV
+          </a>
         </div>
 
         {painelExtra === 'planilha' && (
