@@ -248,6 +248,17 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
   return (
     <div className="crm-shell">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        {funis.length > 1 && funilId && (
+          <span style={{ fontFamily: 'var(--display)', fontWeight: 800, fontSize: 15, letterSpacing: '-.02em', color: 'var(--ink)' }}>
+            {funis.find((f) => f.id === funilId)?.nome ?? ''}
+          </span>
+        )}
+        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: 'var(--trilho)', color: 'var(--ink-3)', fontWeight: 600 }}>
+          {visiveis.length} lead{visiveis.length !== 1 ? 's' : ''} ativo{visiveis.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+
       <section className="crm-resumo" aria-label="Resumo do pipeline">
         <div><span>Oportunidades abertas</span><strong>{metricas.abertas}</strong></div>
         <div><span>Valor em aberto</span><strong>{valorFmt(metricas.valorAberto)}</strong></div>
@@ -257,7 +268,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       </section>
 
       <div className="crm-barra">
-        {funis.length > 1 && (
+        {funis.length > 0 && (
           <select value={funilId ?? ''} onChange={(e) => setFunilId(e.target.value ? Number(e.target.value) : null)}
             style={{ height: 40, padding: '0 10px', border: '1px solid var(--rule)', background: 'var(--surface)', borderRadius: 2, color: 'var(--ink-2)', fontWeight: 600 }}>
             {funis.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
@@ -309,18 +320,21 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             </tr>
           </thead>
           <tbody>
-            {visiveis.map((op) => (
+            {visiveis.map((op) => {
+              const estCor = estagios.find((e) => e.id === normalizar(op.estagio))?.cor || '#8b8b8b';
+              return (
               <tr key={op.id} onClick={() => void abrirFicha(op)} style={{ cursor: 'pointer' }}>
                 <td><strong>{op.empresa || 'Sem nome'}</strong></td>
                 <td>{op.contato || '—'}</td>
-                <td><span className="crm-estagio-ponto" style={{ background: estagios.find((e) => e.id === normalizar(op.estagio))?.cor || undefined }} />{op.estagio}</td>
+                <td><span className="crm-estagio-badge" style={{ background: `${estCor}18`, color: estCor, border: `1px solid ${estCor}33` }}>{op.estagio}</span></td>
                 <td>{valorFmt(op.valor)}</td>
                 <td>{op.probabilidade ?? 0}%</td>
                 <td>{nomeOwner(op.owner_id)}</td>
                 <td>{nomeCampanha(op.campanha_id) || '—'}</td>
                 <td>{dataFmt(op.atualizado_em)}</td>
               </tr>
-            ))}
+              );
+            })}
             {!visiveis.length && <tr><td colSpan={8} className="crm-coluna-vazia">Nenhuma oportunidade</td></tr>}
           </tbody>
         </table>
