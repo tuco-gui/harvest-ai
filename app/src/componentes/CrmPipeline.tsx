@@ -52,7 +52,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [campanhaFiltro, setCampanhaFiltro] = useState('');
   const [mostrarEncerrados, setMostrarEncerrados] = useState(false);
   const [funilId, setFunilId] = useState<number | null>(funilIdInicial);
-  const [estagios, setEstagios] = useState(estagiosFunil);
+  const [estagiosDb, setEstagiosDb] = useState(estagiosFunil);
   const [carregandoFunil, setCarregandoFunil] = useState(false);
   const [aba, setAba] = useState<'conversa' | 'atividades'>('conversa');
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -65,11 +65,11 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
   // Carregar estágios quando o funil muda
   useEffect(() => {
-    if (!funilId || funilId === funilIdInicial) { setEstagios(estagiosFunil); return; }
+    if (!funilId || funilId === funilIdInicial) { setEstagiosDb(estagiosFunil); return; }
     setCarregandoFunil(true);
     fetch(`/api/funis/${funilId}/estagios`)
       .then((r) => r.json())
-      .then((d) => { if (d.estagios) setEstagios(d.estagios); })
+      .then((d) => { if (d.estagios) setEstagiosDb(d.estagios); })
       .catch(() => {})
       .finally(() => setCarregandoFunil(false));
   }, [funilId, funilIdInicial, estagiosFunil]);
@@ -101,14 +101,15 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   }, [ficha?.id, aba]);
 
   // Usar estágios do funil se disponíveis, senão os hardcoded
-  const estagiosPipeline = estagios.length
-    ? estagios.filter((e) => e.grupo === 'pipeline').map((e) => ({
+  type EstagioKanban = { id: string; nome: string; ordem: number; grupo: 'pipeline' | 'encerrado'; probabilidade: number; cor?: string | null };
+  const estagiosPipeline: EstagioKanban[] = estagiosDb.length
+    ? estagiosDb.filter((e) => e.grupo === 'pipeline').map((e) => ({
         id: e.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_'),
         nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'pipeline', probabilidade: e.probabilidade, cor: e.cor,
       }))
     : ESTAGIOS_PIPELINE;
-  const estagiosEncerrados = estagios.length
-    ? estagios.filter((e) => e.grupo === 'encerrado').map((e) => ({
+  const estagiosEncerrados: EstagioKanban[] = estagiosDb.length
+    ? estagiosDb.filter((e) => e.grupo === 'encerrado').map((e) => ({
         id: e.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_'),
         nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'encerrado', probabilidade: e.probabilidade, cor: e.cor,
       }))
