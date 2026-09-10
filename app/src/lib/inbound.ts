@@ -111,42 +111,47 @@ export async function processarEventoInbound(
   }
 
   // --- Fase 3C: refletir a classificação no funil ---
+  // historico_contato SÓ é criado quando o telefone corresponde a um lead
+  // conhecido. Mensagens de números desconhecidos ficam em inbound_eventos
+  // mas não poluem o historico_contato (que representa contatos de prospecção).
   const agora = new Date().toISOString();
 
   if (classificacao === 'optout') {
-    // 1) Opt-out: supressão + histórico + mover oportunidade para optout.
+    // 1) Opt-out: supressão sempre (mesmo sem lead) + histórico só se lead known.
     await suprimirTelefone(admin, contaId, evento.telefone, 'opt_out');
-    await admin.from('historico_contato').insert({
-      conta_id: contaId,
-      lead_id: leadId,
-      campanha_id: campanhaId,
-      telefone: evento.telefone,
-      provider: evento.provider,
-      canal: 'whatsapp',
-      status: 'optout',
-      origem: 'resposta',
-      motivo_bloqueio: 'Opt-out solicitado pelo contato via mensagem inbound.',
-    });
+    if (leadId) {
+      await admin.from('historico_contato').insert({
+        conta_id: contaId,
+        lead_id: leadId,
+        campanha_id: campanhaId,
+        telefone: evento.telefone,
+        provider: evento.provider,
+        canal: 'whatsapp',
+        status: 'optout',
+        origem: 'resposta',
+        motivo_bloqueio: 'Opt-out solicitado pelo contato via mensagem inbound.',
+      });
+    }
     // Mover oportunidade aberta para optout (encerrado).
     await moverOportunidadeInbound(admin, contaId, leadId, evento.telefone, 'optout', agora);
   } else {
-    // 2) Resposta comum: marcar lead + histórico + mover oportunidade para respondeu.
+    // 2) Resposta comum: marcar lead + histórico (só se lead known) + mover oportunidade.
     if (leadId) {
       await admin.from('prospecta_leads')
         .update({ respondeu_em: agora, status: 'respondeu', atualizado_em: agora })
         .eq('id', leadId)
         .is('respondeu_em', null);
+      await admin.from('historico_contato').insert({
+        conta_id: contaId,
+        lead_id: leadId,
+        campanha_id: campanhaId,
+        telefone: evento.telefone,
+        provider: evento.provider,
+        canal: 'whatsapp',
+        status: 'recebido',
+        origem: 'resposta',
+      });
     }
-    await admin.from('historico_contato').insert({
-      conta_id: contaId,
-      lead_id: leadId,
-      campanha_id: campanhaId,
-      telefone: evento.telefone,
-      provider: evento.provider,
-      canal: 'whatsapp',
-      status: 'recebido',
-      origem: 'resposta',
-    });
     // Mover oportunidade de contatado→respondeu (só avança, nunca retrocede).
     await moverOportunidadeInbound(admin, contaId, leadId, evento.telefone, 'respondeu', agora);
   }
