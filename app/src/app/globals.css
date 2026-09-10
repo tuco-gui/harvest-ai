@@ -548,7 +548,7 @@ a:hover{color:var(--ink)}
 .crm-resumo div{padding:15px 17px;border-right:1px solid var(--rule);min-width:0}.crm-resumo div:last-child{border:0}
 .crm-resumo span{display:block;color:var(--ink-3);font-size:11px;text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .crm-resumo strong{display:block;margin-top:5px;font-family:var(--display);font-size:20px;letter-spacing:-.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.crm-barra{display:grid;grid-template-columns:minmax(260px,1fr) 190px 200px auto auto;gap:8px;align-items:center;margin-bottom:14px}
+.crm-barra{display:grid;grid-template-columns:minmax(260px,1fr) 190px 200px auto auto auto;gap:8px;align-items:center;margin-bottom:14px}
 .crm-barra>select,.crm-barra>button,.crm-busca{height:40px;border:1px solid var(--rule);background:var(--surface);border-radius:2px;color:var(--ink-2)}
 .crm-barra>select{padding:0 10px}.crm-barra>button{padding:0 13px;white-space:nowrap}.crm-barra>button:hover{border-color:var(--rule-2);color:var(--ink)}
 .crm-busca{display:flex;align-items:center;gap:9px;padding:0 11px}.crm-busca span{font-size:19px;color:var(--ink-3)}
@@ -557,6 +557,17 @@ a:hover{color:var(--ink)}
 .crm-aviso button{font-size:20px;color:var(--ink-3)}
 .crm-kanban{display:grid;grid-template-columns:repeat(7,minmax(210px,1fr));gap:10px;overflow-x:auto;padding:1px 1px 18px;align-items:stretch}
 .crm-kanban-encerrados{grid-template-columns:repeat(4,minmax(240px,1fr))}
+.crm-view-toggle{display:flex;gap:0}
+.crm-view-toggle button{height:40px;width:38px;border:1px solid var(--rule);background:var(--surface);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;padding:0}
+.crm-view-toggle button:first-child{border-radius:2px 0 0 2px}
+.crm-view-toggle button:last-child{border-radius:0 2px 2px 0;border-left:0}
+.crm-view-toggle button.ativa{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.crm-lista{overflow-x:auto}
+.crm-lista table{width:100%;border-collapse:collapse;font-size:13px}
+.crm-lista th{text-align:left;padding:10px 12px;border-bottom:2px solid var(--rule);color:var(--ink-3);font-weight:600;white-space:nowrap}
+.crm-lista td{padding:9px 12px;border-bottom:1px solid var(--rule);color:var(--ink-2);white-space:nowrap}
+.crm-lista tr:hover td{background:var(--sunken)}
+.crm-lista .crm-estagio-ponto{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .crm-coluna{background:var(--sunken);border:1px solid var(--rule);border-radius:3px;display:flex;flex-direction:column;min-height:450px;transition:border-color .15s,background .15s}
 .crm-coluna.coluna-alvo{border-color:var(--red);background:color-mix(in srgb,var(--red) 3%,var(--sunken))}
 .crm-coluna-cabecalho{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:12px;border-bottom:1px solid var(--rule)}

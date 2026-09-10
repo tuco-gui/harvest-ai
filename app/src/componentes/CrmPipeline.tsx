@@ -51,6 +51,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [ownerFiltro, setOwnerFiltro] = useState('');
   const [campanhaFiltro, setCampanhaFiltro] = useState('');
   const [mostrarEncerrados, setMostrarEncerrados] = useState(false);
+  const [visualizacao, setVisualizacao] = useState<'kanban' | 'lista'>('kanban');
   const [funilId, setFunilId] = useState<number | null>(funilIdInicial);
   const [estagiosDb, setEstagiosDb] = useState(estagiosFunil);
   const [carregandoFunil, setCarregandoFunil] = useState(false);
@@ -265,12 +266,17 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         <div className="crm-busca"><span>⌕</span><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar empresa, contato, telefone ou etiqueta" /></div>
         <select value={ownerFiltro} onChange={(e) => setOwnerFiltro(e.target.value)}><option value="">Todos os responsáveis</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
         <select value={campanhaFiltro} onChange={(e) => setCampanhaFiltro(e.target.value)}><option value="">Todas as campanhas</option>{campanhas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
+        <div className="crm-view-toggle">
+          <button type="button" className={visualizacao === 'kanban' ? 'ativa' : ''} onClick={() => setVisualizacao('kanban')} title="Kanban">▦</button>
+          <button type="button" className={visualizacao === 'lista' ? 'ativa' : ''} onClick={() => setVisualizacao('lista')} title="Lista">☰</button>
+        </div>
         <button className="crm-alternar" type="button" onClick={() => setMostrarEncerrados((v) => !v)}>{mostrarEncerrados ? 'Ver pipeline' : 'Ver encerrados'}</button>
         {podeEditar && <button className="btn-primario crm-nova" type="button" onClick={() => { setNovaAberta(true); setErro(null); }}>+ Nova oportunidade</button>}
       </div>
 
       {erro && <div className="crm-aviso" role="alert">{erro}<button type="button" onClick={() => setErro(null)}>×</button></div>}
 
+      {visualizacao === 'kanban' ? (
       <div className={`crm-kanban ${mostrarEncerrados ? 'crm-kanban-encerrados' : ''}`}>
         {estagios.map((est) => {
           const itens = agrupar(est.id);
@@ -294,6 +300,32 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           </section>;
         })}
       </div>
+      ) : (
+      <div className="crm-lista">
+        <table>
+          <thead>
+            <tr>
+              <th>Empresa</th><th>Contato</th><th>Etapa</th><th>Valor</th><th>Prob.</th><th>Responsável</th><th>Campanha</th><th>Atualizada</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visiveis.map((op) => (
+              <tr key={op.id} onClick={() => void abrirFicha(op)} style={{ cursor: 'pointer' }}>
+                <td><strong>{op.empresa || 'Sem nome'}</strong></td>
+                <td>{op.contato || '—'}</td>
+                <td><span className="crm-estagio-ponto" style={{ background: estagios.find((e) => e.id === normalizar(op.estagio))?.cor || undefined }} />{op.estagio}</td>
+                <td>{valorFmt(op.valor)}</td>
+                <td>{op.probabilidade ?? 0}%</td>
+                <td>{nomeOwner(op.owner_id)}</td>
+                <td>{nomeCampanha(op.campanha_id) || '—'}</td>
+                <td>{dataFmt(op.atualizado_em)}</td>
+              </tr>
+            ))}
+            {!visiveis.length && <tr><td colSpan={8} className="crm-coluna-vazia">Nenhuma oportunidade</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      )}
 
       {novaAberta && <div className="crm-overlay" onMouseDown={() => setNovaAberta(false)}><section className="crm-modal-nova" onMouseDown={(e) => e.stopPropagation()}>
         <header className="drawer-cabecalho"><div><span className="label">CRM</span><h2>Nova oportunidade</h2></div><button type="button" onClick={() => setNovaAberta(false)}>×</button></header>
