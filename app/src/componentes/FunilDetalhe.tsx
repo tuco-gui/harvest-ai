@@ -252,7 +252,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais }: { fu
       <section style={{ marginBottom: 28 }}>
         <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 14, marginBottom: 8, color: 'var(--ink-2)' }}>Pipeline</h3>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--surface)' }}>
-          {pipeline.map((e, i) => renderEstagio(e, i, estagios.length))}
+          {pipeline.map((e) => renderEstagio(e, estagios.findIndex((x) => x.id === e.id), estagios.length))}
           {!pipeline.length && <li style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Nenhum estágio no pipeline.</li>}
         </ul>
       </section>
@@ -260,7 +260,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais }: { fu
       <section style={{ marginBottom: 28 }}>
         <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 14, marginBottom: 8, color: 'var(--ink-2)' }}>Encerrados</h3>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--surface)' }}>
-          {encerrados.map((e, i) => renderEstagio(e, i, estagios.length))}
+          {encerrados.map((e) => renderEstagio(e, estagios.findIndex((x) => x.id === e.id), estagios.length))}
           {!encerrados.length && <li style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Nenhum estágio de encerramento.</li>}
         </ul>
       </section>

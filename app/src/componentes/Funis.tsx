@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 
 type Funil = {
   id: number; nome: string; ativo: boolean; criado_em: string;
-  pipeline: number; encerrados: number;
+  total_estagios: number;
 };
 
 export default function Funis({ funis: funisIniciais }: { funis: Funil[] }) {
@@ -76,7 +76,7 @@ export default function Funis({ funis: funisIniciais }: { funis: Funil[] }) {
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{f.nome}</div>
               <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                {f.pipeline} estágio(s) no pipeline · {f.encerrados} encerrado(s)
+                {f.total_estagios} estágio(s)
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
