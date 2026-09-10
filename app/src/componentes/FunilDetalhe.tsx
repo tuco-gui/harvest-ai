@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 type Funil = { id: number; nome: string; ativo: boolean; criado_em: string };
@@ -18,278 +18,370 @@ const CORES_PADRAO = [
 export default function FunilDetalhe({ funil, estagios: estagiosIniciais }: { funil: Funil; estagios: Estagio[] }) {
   const router = useRouter();
   const [estagios, setEstagios] = useState(estagiosIniciais);
-  const [novoNome, setNovoNome] = useState('');
-  const [novoGrupo, setNovoGrupo] = useState<'pipeline' | 'encerrado'>('pipeline');
-  const [novoCor, setNovoCor] = useState('#8b8b8b');
-  const [editando, setEditando] = useState<number | null>(null);
-  const [formEdit, setFormEdit] = useState({ nome: '', probabilidade: 0, cor: '#8b8b8b' });
   const [salvando, setSalvando] = useState(false);
-  const [renomeando, setRenomeando] = useState(false);
-  const [nomeFunil, setNomeFunil] = useState(funil.nome);
+  const [sujo, setSujo] = useState(false);
+
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const dragNode = useRef<number | null>(null);
 
   const pipeline = estagios.filter((e) => e.grupo === 'pipeline').sort((a, b) => a.ordem - b.ordem);
   const encerrados = estagios.filter((e) => e.grupo === 'encerrado').sort((a, b) => a.ordem - b.ordem);
 
-  async function salvarNomeFunil() {
-    if (!nomeFunil.trim() || nomeFunil === funil.nome || salvando) { setRenomeando(false); return; }
-    setSalvando(true);
-    try {
-      const r = await fetch(`/api/funis/${funil.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nomeFunil.trim() }),
-      });
-      if (r.ok) { setRenomeando(false); router.refresh(); }
-      else { alert('Não consegui renomear.'); setNomeFunil(funil.nome); }
-    } catch { alert('Sem conexão.'); setNomeFunil(funil.nome); }
-    finally { setSalvando(false); }
+  function marcarSujo() { setSujo(true); }
+
+  function atualizarLocal(updater: (lista: Estagio[]) => Estagio[]) {
+    setEstagios((prev) => updater(prev));
+    marcarSujo();
   }
 
-  async function adicionarEstagio() {
-    if (!novoNome.trim() || salvando) return;
-    setSalvando(true);
-    try {
-      const r = await fetch(`/api/funis/${funil.id}/estagios`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nome: novoNome.trim(),
-          grupo: novoGrupo,
-          probabilidade: novoGrupo === 'encerrado' ? 0 : undefined,
-          cor: novoCor,
-        }),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok && d.estagio) {
-        setEstagios((atual) => [...atual, d.estagio].sort((a, b) => a.ordem - b.ordem));
-        setNovoNome('');
-        setNovoCor('#8b8b8b');
-      } else {
-        alert(d.erro ?? 'Não consegui adicionar o estágio.');
-      }
-    } catch {
-      alert('Sem conexão com o servidor.');
-    } finally {
-      setSalvando(false);
-    }
+  function atualizarCampo(id: number, campo: string, valor: string | number) {
+    atualizarLocal((lista) => lista.map((e) => e.id === id ? { ...e, [campo]: valor } : e));
   }
 
-  async function salvarEdicao(estagioId: number) {
-    if (salvando) return;
-    setSalvando(true);
-    try {
-      const r = await fetch(`/api/funis/${funil.id}/estagios/${estagioId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formEdit),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok) {
-        setEstagios((atual) => atual.map((e) =>
-          e.id === estagioId ? { ...e, nome: formEdit.nome, probabilidade: formEdit.probabilidade, cor: formEdit.cor } : e,
-        ));
-        setEditando(null);
-      } else {
-        alert(d.erro ?? 'Não consegui salvar.');
-      }
-    } catch {
-      alert('Sem conexão com o servidor.');
-    } finally {
-      setSalvando(false);
-    }
+  function removerEstagioLocal(id: number) {
+    if (!confirm('Remover este estágio?')) return;
+    atualizarLocal((lista) => lista.filter((e) => e.id !== id));
   }
 
-  async function removerEstagio(estagioId: number) {
-    if (!confirm('Remover este estágio? Oportunidades neste estágio voltarão para o primeiro estágio do pipeline.') || salvando) return;
-    setSalvando(true);
-    try {
-      const r = await fetch(`/api/funis/${funil.id}/estagios/${estagioId}`, { method: 'DELETE' });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok) {
-        setEstagios((atual) => atual.filter((e) => e.id !== estagioId));
-      } else {
-        alert(d.erro ?? 'Não consegui remover.');
-      }
-    } catch {
-      alert('Sem conexão com o servidor.');
-    } finally {
-      setSalvando(false);
-    }
+  function adicionarEstagioLocal(grupo: 'pipeline' | 'encerrado') {
+    const doGrupo = estagios.filter((e) => e.grupo === grupo);
+    const maxOrdem = doGrupo.length > 0 ? Math.max(...doGrupo.map((e) => e.ordem)) : 0;
+    const novo: Estagio = {
+      id: Date.now() * -1,
+      funil_id: funil.id,
+      nome: 'Novo estágio',
+      ordem: maxOrdem + 1,
+      grupo,
+      probabilidade: grupo === 'pipeline' ? 10 : 0,
+      cor: '#8b8b8b',
+    };
+    atualizarLocal((lista) => [...lista, novo]);
   }
 
-  async function moverEstagio(estagioId: number, direcao: -1 | 1) {
-    const idx = estagios.findIndex((e) => e.id === estagioId);
-    if (idx < 0) return;
-    const vizinhoIdx = idx + direcao;
-    if (vizinhoIdx < 0 || vizinhoIdx >= estagios.length) return;
-    if (estagios[idx].grupo !== estagios[vizinhoIdx].grupo) return;
+  function duplicarEstagio(e: Estagio) {
+    const doGrupo = estagios.filter((x) => x.grupo === e.grupo);
+    const maxOrdem = doGrupo.length > 0 ? Math.max(...doGrupo.map((x) => x.ordem)) : 0;
+    const copia: Estagio = {
+      ...e,
+      id: Date.now() * -1,
+      nome: `${e.nome} (cópia)`,
+      ordem: maxOrdem + 1,
+    };
+    atualizarLocal((lista) => [...lista, copia]);
+  }
 
-    const novaOrdem = estagios[vizinhoIdx].ordem;
-    const novaLista = [...estagios];
-    novaLista[idx] = { ...novaLista[idx], ordem: novaOrdem };
-    novaLista[vizinhoIdx] = { ...novaLista[vizinhoIdx], ordem: estagios[idx].ordem };
-    setEstagios(novaLista);
+  // --- Drag & Drop ---
+  function onDragStart(e: React.DragEvent, idx: number) {
+    dragNode.current = idx;
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+  }
 
-    await fetch(`/api/funis/${funil.id}/estagios/${estagioId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ordem: novaOrdem }),
+  function onDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setOverIdx(idx);
+  }
+
+  function onDrop(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    const from = dragNode.current;
+    if (from === null || from === idx) { setDragIdx(null); setOverIdx(null); return; }
+    const grupo = estagios[from].grupo;
+    const mesmaLista = estagios.filter((x) => x.grupo === grupo).sort((a, b) => a.ordem - b.ordem);
+    const fromLocal = mesmaLista.findIndex((x) => x.id === estagios[from].id);
+    const toLocal = mesmaLista.findIndex((x) => x.id === estagios[idx].id);
+    if (fromLocal < 0 || toLocal < 0 || fromLocal === toLocal) { setDragIdx(null); setOverIdx(null); return; }
+
+    const nova = [...mesmaLista];
+    const [movido] = nova.splice(fromLocal, 1);
+    nova.splice(toLocal, 0, movido);
+
+    const reordenado = nova.map((e, i) => ({ ...e, ordem: i + 1 }));
+    const idsNovos = new Set(reordenado.map((e) => e.id));
+
+    atualizarLocal((lista) => {
+      const resto = lista.filter((e) => !idsNovos.has(e.id));
+      return [...resto, ...reordenado];
     });
+
+    setDragIdx(null);
+    setOverIdx(null);
   }
 
-  function renderEstagio(e: Estagio, idx: number, total: number) {
-    const emEdicao = editando === e.id;
-    const cor = e.cor || '#8b8b8b';
-    return (
-      <li key={e.id} style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-        borderBottom: '1px solid var(--rule)', background: emEdicao ? 'var(--sel)' : 'transparent',
-        borderRadius: 3, transition: 'background .12s',
-      }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 40, color: 'var(--ink-3)', fontSize: 12 }}>
-          <span style={{ width: 10, height: 10, borderRadius: '50%', background: cor, flex: 'none' }} />
-          {e.ordem}
-        </span>
+  function onDragEnd() {
+    setDragIdx(null);
+    setOverIdx(null);
+    dragNode.current = null;
+  }
 
-        {emEdicao ? (
-          <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <input value={formEdit.nome} onChange={(ev) => setFormEdit((f) => ({ ...f, nome: ev.target.value }))}
-              onKeyDown={(ev) => ev.key === 'Enter' && salvarEdicao(e.id)}
-              style={{ height: 32, padding: '0 8px', fontSize: 13, border: '1px solid var(--accent)', borderRadius: 2, flex: '1 1 160px' }}
-              autoFocus placeholder="Nome do estágio"
-            />
-            <input type="number" min={0} max={100} value={formEdit.probabilidade}
-              onChange={(ev) => setFormEdit((f) => ({ ...f, probabilidade: Number(ev.target.value) }))}
-              style={{ height: 32, width: 70, padding: '0 6px', fontSize: 13, border: '1px solid var(--rule)', borderRadius: 2 }}
-              placeholder="%"
-            />
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              {CORES_PADRAO.map((c) => (
-                <button key={c} type="button" onClick={() => setFormEdit((f) => ({ ...f, cor: c }))}
-                  style={{ width: 18, height: 18, borderRadius: '50%', background: c, border: formEdit.cor === c ? '2px solid var(--ink)' : '2px solid var(--rule)', cursor: 'pointer', padding: 0 }}
-                  aria-label={`Cor ${c}`}
-                />
-              ))}
-              <input type="color" value={formEdit.cor}
-                onChange={(ev) => setFormEdit((f) => ({ ...f, cor: ev.target.value }))}
-                style={{ width: 24, height: 24, border: 'none', padding: 0, cursor: 'pointer', background: 'none' }}
-                title="Cor personalizada"
-              />
-            </div>
-            <span className="selo" data-zap-selo={e.grupo === 'pipeline' ? 'sim' : 'nao'}>
-              {e.grupo === 'pipeline' ? 'Pipeline' : 'Encerrado'}
-            </span>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button type="button" className="btn-primario" onClick={() => salvarEdicao(e.id)} disabled={salvando}
-                style={{ height: 30, padding: '0 12px', fontSize: 12 }}>
-                {salvando ? '…' : 'Salvar'}
-              </button>
-              <button type="button" onClick={() => setEditando(null)}
-                style={{ height: 30, padding: '0 10px', fontSize: 12, color: 'var(--ink-3)', border: '1px solid var(--rule)', borderRadius: 2 }}>
-                Cancelar
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <span style={{ flex: 1, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
-              onClick={() => { setEditando(e.id); setFormEdit({ nome: e.nome, probabilidade: e.probabilidade, cor }); }}>
-              {e.nome}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--ink-3)', minWidth: 40, textAlign: 'right' }}>{e.probabilidade}%</span>
-            <span className="selo" data-zap-selo={e.grupo === 'pipeline' ? 'sim' : 'nao'}>
-              {e.grupo === 'pipeline' ? 'Pipeline' : 'Encerrado'}
-            </span>
-            <div style={{ display: 'flex', gap: 2 }}>
-              <button type="button" onClick={() => moverEstagio(e.id, -1)} disabled={idx === 0 || estagios[idx - 1]?.grupo !== e.grupo}
-                style={{ width: 26, height: 26, borderRadius: 2, fontSize: 13, display: 'grid', placeItems: 'center', color: 'var(--ink-3)' }}
-                aria-label="Mover para cima">↑</button>
-              <button type="button" onClick={() => moverEstagio(e.id, 1)} disabled={idx >= total - 1 || estagios[idx + 1]?.grupo !== e.grupo}
-                style={{ width: 26, height: 26, borderRadius: 2, fontSize: 13, display: 'grid', placeItems: 'center', color: 'var(--ink-3)' }}
-                aria-label="Mover para baixo">↓</button>
-              <button type="button" onClick={() => removerEstagio(e.id)}
-                style={{ width: 26, height: 26, borderRadius: 2, fontSize: 13, display: 'grid', placeItems: 'center', color: 'var(--red)' }}
-                aria-label="Remover">✕</button>
-            </div>
-          </>
-        )}
-      </li>
-    );
+  // --- Persistir ---
+  async function salvarTudo() {
+    setSalvando(true);
+    try {
+      const promises: Promise<Response>[] = [];
+      for (const e of estagios) {
+        if (e.id > 0) {
+          promises.push(
+            fetch(`/api/funis/${funil.id}/estagios/${e.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nome: e.nome, cor: e.cor, ordem: e.ordem, probabilidade: e.probabilidade, grupo: e.grupo }),
+            })
+          );
+        } else {
+          promises.push(
+            fetch(`/api/funis/${funil.id}/estagios`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nome: e.nome, cor: e.cor, probabilidade: e.probabilidade, grupo: e.grupo }),
+            })
+          );
+        }
+      }
+
+      const deletados = estagiosIniciais.filter((orig) => !estagios.some((e) => e.id === orig.id));
+      for (const d of deletados) {
+        promises.push(
+          fetch(`/api/funis/${funil.id}/estagios/${d.id}`, { method: 'DELETE' })
+        );
+      }
+
+      const results = await Promise.all(promises);
+      const ok = results.every((r) => r.ok);
+      if (ok) {
+        setSujo(false);
+        router.refresh();
+      } else {
+        alert('Alguns estágios não foram salvos.');
+      }
+    } catch {
+      alert('Sem conexão.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  function cancelar() {
+    setEstagios(estagiosIniciais);
+    setSujo(false);
   }
 
   return (
-    <div className="pagina pagina-larga">
+    <div className="pagina" style={{ maxWidth: 'none', padding: '24px 28px 40px' }}>
       <p className="ajuda"><Link href="/funis">← Funis</Link></p>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-        {renomeando ? (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input value={nomeFunil} onChange={(e) => setNomeFunil(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && salvarNomeFunil()}
-              style={{ height: 36, padding: '0 10px', fontSize: 18, fontFamily: 'var(--display)', fontWeight: 800, border: '1px solid var(--accent)', borderRadius: 2 }}
-              autoFocus
-            />
-            <button className="btn-primario" onClick={salvarNomeFunil} disabled={salvando} style={{ height: 36, padding: '0 14px', fontSize: 13 }}>
-              Salvar
-            </button>
-            <button onClick={() => { setRenomeando(false); setNomeFunil(funil.nome); }}
-              style={{ height: 36, padding: '0 10px', fontSize: 13, color: 'var(--ink-3)', border: '1px solid var(--rule)', borderRadius: 2 }}>
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <h2 style={{ fontFamily: 'var(--display)', fontWeight: 800, fontSize: 22, margin: 0, cursor: 'pointer' }}
-            onClick={() => setRenomeando(true)} title="Clique para renomear">
-            {funil.nome} <span style={{ fontSize: 14, color: 'var(--ink-3)', fontWeight: 400 }}>✎</span>
-          </h2>
-        )}
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <h2 style={{ fontFamily: 'var(--display)', fontWeight: 800, fontSize: 22, margin: 0 }}>
+          {funil.nome}
+        </h2>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {sujo && (
+            <span style={{ fontSize: 12, color: 'var(--red)', fontWeight: 600 }}>Alterações não salvas</span>
+          )}
+          <button onClick={cancelar} disabled={!sujo || salvando}
+            style={{ height: 36, padding: '0 14px', fontSize: 13, color: 'var(--ink-3)', border: '1px solid var(--rule)', borderRadius: 2, background: 'var(--surface)', cursor: sujo ? 'pointer' : 'default', opacity: sujo ? 1 : 0.4 }}>
+            Cancelar
+          </button>
+          <button onClick={salvarTudo} disabled={!sujo || salvando}
+            className="btn-primario" style={{ height: 36, padding: '0 18px', fontSize: 13 }}>
+            {salvando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
       </div>
 
-      <p className="resumo-secao" style={{ marginBottom: 20 }}>
+      <p style={{ margin: '-16px 0 20px', color: 'var(--ink-3)', fontSize: 13 }}>
         {funil.ativo ? 'Ativo' : 'Inativo'} · {pipeline.length} estágio(s) no pipeline · {encerrados.length} encerrado(s)
       </p>
 
-      <section style={{ marginBottom: 28 }}>
-        <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 14, marginBottom: 8, color: 'var(--ink-2)' }}>Pipeline</h3>
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--surface)' }}>
-          {pipeline.map((e) => renderEstagio(e, estagios.findIndex((x) => x.id === e.id), estagios.length))}
-          {!pipeline.length && <li style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Nenhum estágio no pipeline.</li>}
-        </ul>
+      {/* Pipeline stages — horizontal */}
+      <section style={{ marginBottom: 32 }}>
+        <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          Pipeline
+        </h3>
+        <div style={{ display: 'flex', gap: 0, overflowX: 'auto', paddingBottom: 4 }}>
+          {pipeline.map((e, i) => (
+            <div
+              key={e.id}
+              draggable
+              onDragStart={(ev) => onDragStart(ev, i)}
+              onDragOver={(ev) => onDragOver(ev, i)}
+              onDrop={(ev) => onDrop(ev, i)}
+              onDragEnd={onDragEnd}
+              style={{
+                flex: '0 0 220px',
+                border: '1px solid var(--rule)',
+                borderRight: 'none',
+                borderTop: `3px solid ${e.cor || '#8b8b8b'}`,
+                background: dragIdx === i ? 'var(--sel)' : overIdx === i ? 'rgba(0,0,0,.03)' : 'var(--surface)',
+                opacity: dragIdx === i ? 0.5 : 1,
+                transition: 'background .1s, opacity .1s',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              {/* Drag handle + stage name */}
+              <div style={{ padding: '10px 12px 8px', cursor: 'grab', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+                  <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+                </svg>
+                <input
+                  value={e.nome}
+                  onChange={(ev) => atualizarCampo(e.id, 'nome', ev.target.value)}
+                  style={{
+                    border: 'none', background: 'none', fontSize: 13, fontWeight: 700,
+                    fontFamily: 'var(--display)', width: '100%', outline: 'none', padding: 0,
+                  }}
+                />
+              </div>
+
+              {/* Color */}
+              <div style={{ padding: '0 12px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 4, background: e.cor || '#8b8b8b', border: '1px solid var(--rule)', cursor: 'pointer' }} />
+                  <input
+                    type="color"
+                    value={e.cor || '#8b8b8b'}
+                    onChange={(ev) => atualizarCampo(e.id, 'cor', ev.target.value)}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: 20, height: 20 }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 3 }}>
+                  {CORES_PADRAO.slice(0, 6).map((c) => (
+                    <button key={c} type="button" onClick={() => atualizarCampo(e.id, 'cor', c)}
+                      style={{
+                        width: 14, height: 14, borderRadius: '50%', background: c, padding: 0, border: 'none',
+                        outline: e.cor === c ? '2px solid var(--ink)' : 'none', outlineOffset: 1, cursor: 'pointer',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Probability */}
+              <div style={{ padding: '0 12px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Prob.</span>
+                <input type="number" min={0} max={100} value={e.probabilidade}
+                  onChange={(ev) => atualizarCampo(e.id, 'probabilidade', Number(ev.target.value))}
+                  style={{ width: 48, height: 26, padding: '0 6px', fontSize: 12, border: '1px solid var(--rule)', borderRadius: 2, textAlign: 'right' }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>%</span>
+              </div>
+
+              {/* Automations area (placeholder) */}
+              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--rule)', flex: 1, minHeight: 80 }}>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>Automações</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', fontStyle: 'italic' }}>Nenhuma automação</div>
+              </div>
+
+              {/* Actions */}
+              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--rule)', display: 'flex', gap: 6 }}>
+                <button type="button" onClick={() => duplicarEstagio(e)}
+                  style={{ fontSize: 11, color: 'var(--ink-3)', padding: '4px 8px', border: '1px solid var(--rule)', borderRadius: 2, background: 'var(--surface)' }}>
+                  Duplicar
+                </button>
+                <button type="button" onClick={() => removerEstagioLocal(e.id)}
+                  style={{ fontSize: 11, color: 'var(--red)', padding: '4px 8px', border: '1px solid var(--rule)', borderRadius: 2, background: 'var(--surface)' }}>
+                  Excluir
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Add pipeline stage */}
+          <div
+            style={{
+              flex: '0 0 220px',
+              border: '1px dashed var(--rule)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              minHeight: 200, cursor: 'pointer', borderRadius: 3,
+            }}
+            onClick={() => adicionarEstagioLocal('pipeline')}
+          >
+            <div style={{ textAlign: 'center', color: 'var(--ink-3)' }}>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>+</div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Adicionar etapa</div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section style={{ marginBottom: 28 }}>
-        <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 14, marginBottom: 8, color: 'var(--ink-2)' }}>Encerrados</h3>
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--surface)' }}>
-          {encerrados.map((e) => renderEstagio(e, estagios.findIndex((x) => x.id === e.id), estagios.length))}
-          {!encerrados.length && <li style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>Nenhum estágio de encerramento.</li>}
-        </ul>
-      </section>
+      {/* Encerrados stages — horizontal */}
+      <section style={{ marginBottom: 32 }}>
+        <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          Encerrados
+        </h3>
+        <div style={{ display: 'flex', gap: 0, overflowX: 'auto', paddingBottom: 4 }}>
+          {encerrados.map((e, i) => (
+            <div
+              key={e.id}
+              draggable
+              onDragStart={(ev) => onDragStart(ev, pipeline.length + i)}
+              onDragOver={(ev) => onDragOver(ev, pipeline.length + i)}
+              onDrop={(ev) => onDrop(ev, pipeline.length + i)}
+              onDragEnd={onDragEnd}
+              style={{
+                flex: '0 0 220px',
+                border: '1px solid var(--rule)',
+                borderRight: 'none',
+                borderTop: `3px solid ${e.cor || '#8b8b8b'}`,
+                background: dragIdx === pipeline.length + i ? 'var(--sel)' : 'var(--surface)',
+                opacity: dragIdx === pipeline.length + i ? 0.5 : 1,
+                display: 'flex', flexDirection: 'column',
+              }}
+            >
+              <div style={{ padding: '10px 12px 8px', cursor: 'grab', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+                  <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+                </svg>
+                <input value={e.nome} onChange={(ev) => atualizarCampo(e.id, 'nome', ev.target.value)}
+                  style={{ border: 'none', background: 'none', fontSize: 13, fontWeight: 700, fontFamily: 'var(--display)', width: '100%', outline: 'none', padding: 0 }} />
+              </div>
+              <div style={{ padding: '0 12px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 4, background: e.cor || '#8b8b8b', border: '1px solid var(--rule)', cursor: 'pointer' }} />
+                  <input type="color" value={e.cor || '#8b8b8b'}
+                    onChange={(ev) => atualizarCampo(e.id, 'cor', ev.target.value)}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: 20, height: 20 }} />
+                </div>
+                <div style={{ display: 'flex', gap: 3 }}>
+                  {CORES_PADRAO.slice(0, 6).map((c) => (
+                    <button key={c} type="button" onClick={() => atualizarCampo(e.id, 'cor', c)}
+                      style={{ width: 14, height: 14, borderRadius: '50%', background: c, padding: 0, border: 'none', outline: e.cor === c ? '2px solid var(--ink)' : 'none', outlineOffset: 1, cursor: 'pointer' }} />
+                  ))}
+                </div>
+              </div>
+              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--rule)', flex: 1, minHeight: 60 }}>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>Automações</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', fontStyle: 'italic' }}>Nenhuma automação</div>
+              </div>
+              <div style={{ padding: '8px 12px', borderTop: '1px solid var(--rule)', display: 'flex', gap: 6 }}>
+                <button type="button" onClick={() => duplicarEstagio(e)}
+                  style={{ fontSize: 11, color: 'var(--ink-3)', padding: '4px 8px', border: '1px solid var(--rule)', borderRadius: 2, background: 'var(--surface)' }}>
+                  Duplicar
+                </button>
+                <button type="button" onClick={() => removerEstagioLocal(e.id)}
+                  style={{ fontSize: 11, color: 'var(--red)', padding: '4px 8px', border: '1px solid var(--rule)', borderRadius: 2, background: 'var(--surface)' }}>
+                  Excluir
+                </button>
+              </div>
+            </div>
+          ))}
 
-      <div style={{
-        display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
-        padding: 14, border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--sunken)',
-      }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: novoCor, flex: 'none' }} />
-        <input type="color" value={novoCor} onChange={(e) => setNovoCor(e.target.value)}
-          style={{ width: 24, height: 24, border: 'none', padding: 0, cursor: 'pointer', background: 'none' }}
-        />
-        <input
-          value={novoNome}
-          onChange={(e) => setNovoNome(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && adicionarEstagio()}
-          placeholder="Nome do novo estágio…"
-          style={{ height: 36, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14, flex: 1, minWidth: 160 }}
-        />
-        <select value={novoGrupo} onChange={(e) => setNovoGrupo(e.target.value as 'pipeline' | 'encerrado')}
-          style={{ height: 36, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
-          <option value="pipeline">Pipeline</option>
-          <option value="encerrado">Encerrado</option>
-        </select>
-        <button type="button" disabled={!novoNome.trim() || salvando} onClick={adicionarEstagio}
-          className="btn-primario" style={{ height: 36, padding: '0 16px', fontSize: 13 }}>
-          {salvando ? '…' : 'Adicionar'}
-        </button>
-      </div>
+          <div style={{ flex: '0 0 220px', border: '1px dashed var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160, cursor: 'pointer', borderRadius: 3 }}
+            onClick={() => adicionarEstagioLocal('encerrado')}>
+            <div style={{ textAlign: 'center', color: 'var(--ink-3)' }}>
+              <div style={{ fontSize: 22, marginBottom: 4 }}>+</div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Adicionar encerramento</div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
