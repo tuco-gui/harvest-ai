@@ -40,5 +40,5 @@ jobs:
           build-args: |
             NEXT_PUBLIC_SUPABASE_URL=${{ vars.SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }}
-          cache-from: type=gha,scope=lucide-v1
-          cache-to: type=gha,mode=max,scope=lucide-v1
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
