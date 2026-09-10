@@ -75,8 +75,8 @@ a{color:inherit}
 .app-shell{display:flex;min-height:100vh}
 .lateral{
   width:220px;min-height:100vh;background:var(--sunken);border-right:1px solid var(--rule);
-  display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:400;
-  transition:width .2s ease;
+  display:flex;flex-direction:column;position:sticky;top:0;z-index:400;
+  transition:width .2s ease;flex-shrink:0;
 }
 .lateral.recolhida{width:60px}
 .lateral-topo{padding:16px 14px 12px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:10px}
@@ -166,7 +166,7 @@ a{color:inherit}
 .menu-raiz{position:relative}
 
 /* ----------------------------------------------------------------- corpo */
-.app-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.app-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow-x:hidden}
 .palco{display:grid;grid-template-columns:1fr var(--rail);min-height:calc(100vh - 44px)}
 .obra{padding:var(--pad);min-width:0}
 .pagina{padding:var(--pad);max-width:820px}

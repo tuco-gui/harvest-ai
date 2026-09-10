@@ -4,6 +4,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { supabaseNoNavegador } from '@/lib/supabase/browser';
+import {
+  Search, Send, Briefcase, Workflow, Settings, Users,
+  Headphones, Activity, Building, UserCog, Wrench,
+  ChevronDown, ChevronLeft, ChevronRight, Sun, Moon,
+} from 'lucide-react';
 
 type Conta = { id: string; nome: string };
 export type ModuloVisivel = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento' | 'crm';
@@ -27,18 +32,18 @@ const NOME_PAPEL: Record<string, string> = {
   operador: 'Operador',
 };
 
-const ICONES: Record<string, string> = {
-  '/': '🔍',
-  '/campanhas': '📤',
-  '/crm': '💼',
-  '/funis': '🔀',
-  '/configuracoes': '⚙️',
-  '/usuarios': '👥',
-  '/chamados': '🎫',
-  '/status': '🩺',
-  '/contas': '🏢',
-  '/equipe': '🧑‍🤝‍🧑',
-  '/sistema': '🔧',
+const ICONES: Record<string, React.ReactNode> = {
+  '/': <Search size={18} strokeWidth={1.8} />,
+  '/campanhas': <Send size={18} strokeWidth={1.8} />,
+  '/crm': <Briefcase size={18} strokeWidth={1.8} />,
+  '/funis': <Workflow size={18} strokeWidth={1.8} />,
+  '/configuracoes': <Settings size={18} strokeWidth={1.8} />,
+  '/usuarios': <Users size={18} strokeWidth={1.8} />,
+  '/chamados': <Headphones size={18} strokeWidth={1.8} />,
+  '/status': <Activity size={18} strokeWidth={1.8} />,
+  '/contas': <Building size={18} strokeWidth={1.8} />,
+  '/equipe': <UserCog size={18} strokeWidth={1.8} />,
+  '/sistema': <Wrench size={18} strokeWidth={1.8} />,
 };
 
 export default function Topo(p: Props) {
@@ -47,6 +52,7 @@ export default function Topo(p: Props) {
   const [menu, setMenu] = useState<null | 'perfil' | 'contas'>(null);
   const [recolhida, setRecolhida] = useState(false);
   const caixa = useRef<HTMLElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -59,6 +65,7 @@ export default function Topo(p: Props) {
     try { localStorage.setItem('harvest_sidebar', recolhida ? 'recolhida' : 'expandida'); } catch {}
   }, [recolhida]);
 
+  // Fechar dropdown ao clicar fora
   useEffect(() => {
     function fora(e: MouseEvent) {
       if (caixa.current && !caixa.current.contains(e.target as Node)) setMenu(null);
@@ -71,6 +78,16 @@ export default function Topo(p: Props) {
       document.removeEventListener('keydown', esc);
     };
   }, []);
+
+  // Fechar dropdown ao recolher sidebar
+  useEffect(() => {
+    if (recolhida) setMenu(null);
+  }, [recolhida]);
+
+  // Fechar dropdown ao mudar de rota
+  useEffect(() => {
+    setMenu(null);
+  }, [caminho]);
 
   useEffect(() => {
     const raiz = document.documentElement;
@@ -111,7 +128,7 @@ export default function Topo(p: Props) {
     const ativo = href === '/' ? caminho === '/' : caminho.startsWith(href);
     return (
       <Link key={href} href={href} className="lateral-link" aria-current={ativo ? 'page' : undefined}>
-        <span className="nav-icone">{ICONES[href] ?? '📄'}</span>
+        <span className="nav-icone">{ICONES[href]}</span>
         <span>{label}</span>
       </Link>
     );
@@ -129,17 +146,17 @@ export default function Topo(p: Props) {
           </Link>
           <button className="lateral-toggle" onClick={() => setRecolhida(!recolhida)}
             aria-label={recolhida ? 'Expandir menu' : 'Recolher menu'}>
-            {recolhida ? '»' : '«'}
+            {recolhida ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
         </div>
 
         {(p.contas.length > 1 || p.ehSuperAdmin) && (
-          <div className="lateral-workspace" style={{ position: 'relative' }}>
+          <div className="lateral-workspace" style={{ position: 'relative' }} ref={dropdownRef}>
             <button className="lateral-workspace-btn"
               onClick={() => setMenu(menu === 'contas' ? null : 'contas')}
               aria-expanded={menu === 'contas'}>
               <span className="ws-nome">{p.contaNome}</span>
-              <span style={{ fontSize: 10 }}>▼</span>
+              <ChevronDown size={12} style={{ flexShrink: 0 }} />
             </button>
             {menu === 'contas' && (
               <div className="menu" style={{ top: '100%', left: 6, right: 6, minWidth: 180 }}>
@@ -197,16 +214,19 @@ export default function Topo(p: Props) {
                 p.iniciais
               )}
             </span>
-            <span>{p.nome || p.email}</span>
+            <span className="lateral-usuario-nome">{p.nome || p.email}</span>
             {menu === 'perfil' && (
-              <div className="menu menu-dir" style={{ bottom: '100%', left: 6, right: 6, marginBottom: 6, minWidth: 180 }}>
-                <span className="menu-titulo">{p.nome || p.email}</span>
-                <span className="menu-vazio">{p.email}</span>
-                <span className="menu-vazio">{NOME_PAPEL[p.papel] ?? p.papel}</span>
+              <div className="menu" style={{ bottom: '100%', left: 6, right: 6, marginBottom: 6 }}>
+                <div className="menu-cabecalho">
+                  <strong>{p.nome}</strong>
+                  <small>{p.email}</small>
+                  <small>{NOME_PAPEL[p.papel] ?? p.papel}</small>
+                </div>
                 <div className="menu-risco" />
-                <Link href="/perfil" className="menu-item" onClick={() => setMenu(null)}>
-                  Editar perfil
-                </Link>
+                <button className="menu-item" onClick={trocarTema}>
+                  <span className="tema-mini">{matchMedia('(prefers-color-scheme:dark)').matches ? <Sun size={14} /> : <Moon size={14} />}</span>
+                  Alternar tema
+                </button>
                 <button className="menu-item" onClick={sair}>Sair</button>
               </div>
             )}
@@ -216,36 +236,23 @@ export default function Topo(p: Props) {
 
       <div className="app-main">
         <div className="topo-barra">
-          <button className="tema" onClick={trocarTema} aria-label="Alternar entre Dia e Noite">
-            <svg className="lua" width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <path d="M12.5 8.6A5.4 5.4 0 016.4 2.5a5.5 5.5 0 106.1 6.1z" stroke="currentColor" strokeWidth="1.3" />
-            </svg>
-            <svg className="sol" width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <circle cx="7.5" cy="7.5" r="3" stroke="currentColor" strokeWidth="1.3" />
-              <path d="M7.5 .8v2M7.5 12.2v2M14.2 7.5h-2M2.8 7.5h-2M12.2 2.8l-1.4 1.4M4.2 10.8l-1.4 1.4M12.2 12.2l-1.4-1.4M4.2 4.2L2.8 2.8"
-                stroke="currentColor" strokeWidth="1.3" />
-            </svg>
+          <button className="tema" onClick={trocarTema} aria-label="Alternar tema">
+            <span className="sol"><Sun size={16} /></span>
+            <span className="lua"><Moon size={16} /></span>
           </button>
           <div className="menu-raiz">
             <button className="eu" onClick={() => setMenu(menu === 'perfil' ? null : 'perfil')}
-              aria-expanded={menu === 'perfil'} aria-label="Sua conta">
-              {p.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.avatarUrl} alt="" width={28} height={28}
-                  style={{ borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
-              ) : (
-                p.iniciais
-              )}
+              aria-expanded={menu === 'perfil'}>
+              {p.iniciais}
             </button>
             {menu === 'perfil' && (
-              <div className="menu menu-dir">
-                <span className="menu-titulo">{p.nome || p.email}</span>
-                <span className="menu-vazio">{p.email}</span>
-                <span className="menu-vazio">{NOME_PAPEL[p.papel] ?? p.papel}</span>
+              <div className="menu" style={{ top: '100%', right: 0, marginTop: 6, minWidth: 200 }}>
+                <div className="menu-cabecalho">
+                  <strong>{p.nome}</strong>
+                  <small>{p.email}</small>
+                  <small>{NOME_PAPEL[p.papel] ?? p.papel}</small>
+                </div>
                 <div className="menu-risco" />
-                <Link href="/perfil" className="menu-item" onClick={() => setMenu(null)}>
-                  Editar perfil
-                </Link>
                 <button className="menu-item" onClick={sair}>Sair</button>
               </div>
             )}
