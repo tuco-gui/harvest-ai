@@ -9,6 +9,7 @@ RUN npm ci --omit=dev --ignore-scripts && cp -R node_modules /prod_modules && np
 
 FROM node:22-alpine AS build
 WORKDIR /app
+ARG CACHE_BUST=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # As NEXT_PUBLIC_* entram no bundle do navegador, então precisam existir no build.
