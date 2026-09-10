@@ -28,6 +28,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (typeof b.probabilidade === 'number') {
     dados.probabilidade = Math.min(100, Math.max(0, b.probabilidade));
   }
+  if (typeof b.cor === 'string' && b.cor.match(/^#[0-9a-fA-F]{6}$/)) dados.cor = b.cor;
 
   if (!Object.keys(dados).length) return NextResponse.json({ ok: true });
 

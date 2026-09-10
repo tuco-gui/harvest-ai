@@ -15,9 +15,10 @@ type Props = {
   iniciais: string;
   avatarUrl: string | null;
   contaNome: string;
-  contas: Conta[];       // workspaces do usuário (ou todas se super_admin)
+  contas: Conta[];
   ehSuperAdmin: boolean;
-  modulos: ModuloVisivel[]; // módulos habilitados para a conta (visibilidade)
+  modulos: ModuloVisivel[];
+  children: React.ReactNode;
 };
 
 const NOME_PAPEL: Record<string, string> = {
@@ -26,13 +27,38 @@ const NOME_PAPEL: Record<string, string> = {
   operador: 'Operador',
 };
 
+const ICONES: Record<string, string> = {
+  '/': '🔍',
+  '/campanhas': '📤',
+  '/crm': '💼',
+  '/funis': '🔀',
+  '/configuracoes': '⚙️',
+  '/usuarios': '👥',
+  '/chamados': '🎫',
+  '/status': '🩺',
+  '/contas': '🏢',
+  '/equipe': '🧑‍🤝‍🧑',
+  '/sistema': '🔧',
+};
+
 export default function Topo(p: Props) {
   const caminho = usePathname();
   const router = useRouter();
   const [menu, setMenu] = useState<null | 'perfil' | 'contas'>(null);
+  const [recolhida, setRecolhida] = useState(false);
   const caixa = useRef<HTMLElement>(null);
 
-  // fecha ao clicar fora ou apertar Esc — senão o menu fica preso na tela
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem('harvest_sidebar');
+      if (salvo === 'recolhida') setRecolhida(true);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem('harvest_sidebar', recolhida ? 'recolhida' : 'expandida'); } catch {}
+  }, [recolhida]);
+
   useEffect(() => {
     function fora(e: MouseEvent) {
       if (caixa.current && !caixa.current.contains(e.target as Node)) setMenu(null);
@@ -46,22 +72,13 @@ export default function Topo(p: Props) {
     };
   }, []);
 
-  // BUG CONFIRMADO (QA 2026-08-14): em algumas rotas (ex.: /chamados), o
-  // script inline no <head> que aplica o tema salvo antes da pintura (ver
-  // app/layout.tsx) não estava efetivando data-tema a tempo — a página
-  // abria no tema padrão (escuro) mesmo com 'harvest_tema' salvo como
-  // 'claro' no localStorage. Rede de segurança: assim que o Topo (presente
-  // em toda página autenticada) monta, reaplica o tema salvo se por algum
-  // motivo ainda não foi aplicado. Só escreve se `dataset.tema` ainda
-  // estiver vazio — nunca sobrescreve um tema já certo, então não introduz
-  // flash nem some com a escolha do usuário.
   useEffect(() => {
     const raiz = document.documentElement;
     if (!raiz.dataset.tema) {
       try {
         const salvo = localStorage.getItem('harvest_tema');
         if (salvo) raiz.dataset.tema = salvo;
-      } catch { /* localStorage indisponível — mantém o padrão */ }
+      } catch {}
     }
   }, []);
 
@@ -81,7 +98,6 @@ export default function Topo(p: Props) {
       body: JSON.stringify({ conta_id: id }),
     });
     setMenu(null);
-    // Hard navigation para garantir descarte total do estado da conta anterior
     window.location.assign('/');
   }
 
@@ -91,135 +107,152 @@ export default function Topo(p: Props) {
     router.refresh();
   }
 
+  function link(href: string, label: string) {
+    const ativo = href === '/' ? caminho === '/' : caminho.startsWith(href);
+    return (
+      <Link key={href} href={href} className="lateral-link" aria-current={ativo ? 'page' : undefined}>
+        <span className="nav-icone">{ICONES[href] ?? '📄'}</span>
+        <span>{label}</span>
+      </Link>
+    );
+  }
+
+  const temCrm = p.modulos.includes('crm');
+  const temUsuarios = p.modulos.includes('usuarios') && p.papel !== 'operador';
+
   return (
-    <header className="topo" ref={caixa}>
-      <Link href="/" className="marca">HARVEST<em>.</em>AI</Link>
-
-      {p.contas.length > 1 || p.ehSuperAdmin ? (
-        <div className="menu-raiz">
-          <button
-            className="conta"
-            onClick={() => setMenu(menu === 'contas' ? null : 'contas')}
-            aria-expanded={menu === 'contas'}
-          >
-            {p.contaNome}
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.4" />
-            </svg>
-          </button>
-          {menu === 'contas' && (
-            <div className="menu">
-              <span className="menu-titulo">Trocar workspace</span>
-              {p.contas.map((c) => (
-                <button key={c.id} className="menu-item" onClick={() => trocarConta(c.id)}>
-                  {c.nome}
-                </button>
-              ))}
-              {!p.contas.length && <span className="menu-vazio">Nenhuma conta acessível</span>}
-              <div className="menu-risco" />
-              <button className="menu-item" onClick={() => trocarConta(null)}>Sair da conta</button>
-              {p.ehSuperAdmin && (
-                <Link href="/contas" className="menu-item" onClick={() => setMenu(null)}>
-                  Gerenciar contas
-                </Link>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <span className="conta">{p.contaNome}</span>
-      )}
-
-      <nav className="nav">
-        <Link href="/" aria-current={caminho === '/' ? 'page' : undefined}>Prospecção</Link>
-        <Link href="/campanhas" aria-current={caminho.startsWith('/campanhas') ? 'page' : undefined}>
-          Campanhas
-        </Link>
-        {p.modulos.includes('crm') && (
-          <>
-            <Link href="/crm" aria-current={caminho.startsWith('/crm') ? 'page' : undefined}>
-              CRM
-            </Link>
-            {p.papel !== 'operador' && (
-              <Link href="/funis" aria-current={caminho.startsWith('/funis') ? 'page' : undefined}>
-                Funis
-              </Link>
-            )}
-          </>
-        )}
-        <Link href="/configuracoes" aria-current={caminho.startsWith('/configuracoes') ? 'page' : undefined}>
-          Configurações
-        </Link>
-        {p.papel !== 'operador' && p.modulos.includes('usuarios') && (
-          <Link href="/usuarios" aria-current={caminho.startsWith('/usuarios') ? 'page' : undefined}>
-            Usuários
+    <div className="app-shell" ref={caixa as any}>
+      <aside className={`lateral${recolhida ? ' recolhida' : ''}`}>
+        <div className="lateral-topo">
+          <Link href="/" className="lateral-brand">
+            <span>HARVEST<em>.</em>AI</span>
           </Link>
-        )}
-        <Link href="/chamados" aria-current={caminho.startsWith('/chamados') ? 'page' : undefined}>
-          Chamados
-        </Link>
-        <Link href="/status" aria-current={caminho.startsWith('/status') ? 'page' : undefined}>
-          Saúde
-        </Link>
-        {p.ehSuperAdmin && (
-          <>
-            <Link href="/contas" aria-current={caminho.startsWith('/contas') ? 'page' : undefined}>
-              Contas
-            </Link>
-            <Link href="/equipe" aria-current={caminho.startsWith('/equipe') ? 'page' : undefined}>
-              Equipe
-            </Link>
-            <Link href="/sistema" aria-current={caminho.startsWith('/sistema') ? 'page' : undefined}>
-              Sistema
-            </Link>
-          </>
-        )}
-      </nav>
+          <button className="lateral-toggle" onClick={() => setRecolhida(!recolhida)}
+            aria-label={recolhida ? 'Expandir menu' : 'Recolher menu'}>
+            {recolhida ? '»' : '«'}
+          </button>
+        </div>
 
-      {/* Rótulo Dia/Noite (Entrega 15): "tema claro/escuro" soava técnico
-          para o cliente. Dia/Noite comunica a mesma escolha de forma direta,
-          sem infantilizar — o ícone (lua/sol) já dá o contexto visual. */}
-      <button className="tema" onClick={trocarTema} aria-label="Alternar entre Dia e Noite">
-        <svg className="lua" width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <path d="M12.5 8.6A5.4 5.4 0 016.4 2.5a5.5 5.5 0 106.1 6.1z" stroke="currentColor" strokeWidth="1.3" />
-        </svg>
-        <svg className="sol" width="15" height="15" viewBox="0 0 15 15" fill="none">
-          <circle cx="7.5" cy="7.5" r="3" stroke="currentColor" strokeWidth="1.3" />
-          <path d="M7.5 .8v2M7.5 12.2v2M14.2 7.5h-2M2.8 7.5h-2M12.2 2.8l-1.4 1.4M4.2 10.8l-1.4 1.4M12.2 12.2l-1.4-1.4M4.2 4.2L2.8 2.8"
-                stroke="currentColor" strokeWidth="1.3" />
-        </svg>
-      </button>
-
-      {/* Antes o clique aqui deslogava direto. Um menu evita que um toque
-          errado derrube a sessão no meio do trabalho. */}
-      <div className="menu-raiz">
-        <button
-          className="eu"
-          onClick={() => setMenu(menu === 'perfil' ? null : 'perfil')}
-          aria-expanded={menu === 'perfil'}
-          aria-label="Sua conta"
-        >
-          {p.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.avatarUrl} alt="" width={28} height={28}
-                 style={{ borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
-          ) : (
-            p.iniciais
-          )}
-        </button>
-        {menu === 'perfil' && (
-          <div className="menu menu-dir">
-            <span className="menu-titulo">{p.nome || p.email}</span>
-            <span className="menu-vazio">{p.email}</span>
-            <span className="menu-vazio">{NOME_PAPEL[p.papel] ?? p.papel}</span>
-            <div className="menu-risco" />
-            <Link href="/perfil" className="menu-item" onClick={() => setMenu(null)}>
-              Editar perfil
-            </Link>
-            <button className="menu-item" onClick={sair}>Sair</button>
+        {(p.contas.length > 1 || p.ehSuperAdmin) && (
+          <div className="lateral-workspace" style={{ position: 'relative' }}>
+            <button className="lateral-workspace-btn"
+              onClick={() => setMenu(menu === 'contas' ? null : 'contas')}
+              aria-expanded={menu === 'contas'}>
+              <span className="ws-nome">{p.contaNome}</span>
+              <span style={{ fontSize: 10 }}>▼</span>
+            </button>
+            {menu === 'contas' && (
+              <div className="menu" style={{ top: '100%', left: 6, right: 6, minWidth: 180 }}>
+                <span className="menu-titulo">Trocar workspace</span>
+                {p.contas.map((c) => (
+                  <button key={c.id} className="menu-item" onClick={() => trocarConta(c.id)}>
+                    {c.nome}
+                  </button>
+                ))}
+                <div className="menu-risco" />
+                <button className="menu-item" onClick={() => trocarConta(null)}>Sair da conta</button>
+                {p.ehSuperAdmin && (
+                  <Link href="/contas" className="menu-item" onClick={() => setMenu(null)}>
+                    Gerenciar contas
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
         )}
+
+        <nav className="lateral-nav">
+          <div className="lateral-grupo">
+            {link('/', 'Prospecção')}
+            {link('/campanhas', 'Campanhas')}
+            {temCrm && link('/crm', 'CRM')}
+            {temCrm && p.papel !== 'operador' && link('/funis', 'Funis')}
+          </div>
+          <div className="lateral-grupo">
+            <div className="lateral-grupo-titulo">Sistema</div>
+            {link('/configuracoes', 'Configurações')}
+            {temUsuarios && link('/usuarios', 'Usuários')}
+            {link('/chamados', 'Chamados')}
+            {link('/status', 'Saúde')}
+          </div>
+          {p.ehSuperAdmin && (
+            <div className="lateral-grupo">
+              <div className="lateral-grupo-titulo">Admin</div>
+              {link('/contas', 'Contas')}
+              {link('/equipe', 'Equipe')}
+              {link('/sistema', 'Sistema')}
+            </div>
+          )}
+        </nav>
+
+        <div className="lateral-rodape">
+          <div className="lateral-usuario" style={{ position: 'relative' }}
+            onClick={() => setMenu(menu === 'perfil' ? null : 'perfil')}>
+            <span className="lateral-usuario-avatar">
+              {p.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.avatarUrl} alt="" width={26} height={26}
+                  style={{ borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+              ) : (
+                p.iniciais
+              )}
+            </span>
+            <span>{p.nome || p.email}</span>
+            {menu === 'perfil' && (
+              <div className="menu menu-dir" style={{ bottom: '100%', left: 6, right: 6, marginBottom: 6, minWidth: 180 }}>
+                <span className="menu-titulo">{p.nome || p.email}</span>
+                <span className="menu-vazio">{p.email}</span>
+                <span className="menu-vazio">{NOME_PAPEL[p.papel] ?? p.papel}</span>
+                <div className="menu-risco" />
+                <Link href="/perfil" className="menu-item" onClick={() => setMenu(null)}>
+                  Editar perfil
+                </Link>
+                <button className="menu-item" onClick={sair}>Sair</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      <div className="app-main">
+        <div className="topo-barra">
+          <button className="tema" onClick={trocarTema} aria-label="Alternar entre Dia e Noite">
+            <svg className="lua" width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M12.5 8.6A5.4 5.4 0 016.4 2.5a5.5 5.5 0 106.1 6.1z" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+            <svg className="sol" width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <circle cx="7.5" cy="7.5" r="3" stroke="currentColor" strokeWidth="1.3" />
+              <path d="M7.5 .8v2M7.5 12.2v2M14.2 7.5h-2M2.8 7.5h-2M12.2 2.8l-1.4 1.4M4.2 10.8l-1.4 1.4M12.2 12.2l-1.4-1.4M4.2 4.2L2.8 2.8"
+                stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+          </button>
+          <div className="menu-raiz">
+            <button className="eu" onClick={() => setMenu(menu === 'perfil' ? null : 'perfil')}
+              aria-expanded={menu === 'perfil'} aria-label="Sua conta">
+              {p.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.avatarUrl} alt="" width={28} height={28}
+                  style={{ borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
+              ) : (
+                p.iniciais
+              )}
+            </button>
+            {menu === 'perfil' && (
+              <div className="menu menu-dir">
+                <span className="menu-titulo">{p.nome || p.email}</span>
+                <span className="menu-vazio">{p.email}</span>
+                <span className="menu-vazio">{NOME_PAPEL[p.papel] ?? p.papel}</span>
+                <div className="menu-risco" />
+                <Link href="/perfil" className="menu-item" onClick={() => setMenu(null)}>
+                  Editar perfil
+                </Link>
+                <button className="menu-item" onClick={sair}>Sair</button>
+              </div>
+            )}
+          </div>
+        </div>
+        {p.children}
       </div>
-    </header>
+    </div>
   );
 }

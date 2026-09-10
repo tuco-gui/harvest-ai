@@ -66,6 +66,7 @@ export async function POST(req: Request, { params }: Ctx) {
       ordem: Number(b.ordem) || proximaOrdem,
       grupo: b.grupo === 'encerrado' ? 'encerrado' : 'pipeline',
       probabilidade: Number(b.probabilidade) || 0,
+      cor: b.cor || '#8b8b8b',
     })
     .select('*').single();
 

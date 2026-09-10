@@ -54,19 +54,18 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   const modulos = modulosDaConta(modulosHabilitados, perfil.papel);
 
   return (
-    <>
-      <Topo
-        nome={perfil.nome ?? ''}
-        email={perfil.email ?? ''}
-        papel={perfil.papel}
-        iniciais={iniciais}
-        avatarUrl={perfil.avatar_url}
-        contaNome={contaNome}
-        contas={contas}
-        ehSuperAdmin={ehSuper}
-        modulos={[...modulos]}
-      />
+    <Topo
+      nome={perfil.nome ?? ''}
+      email={perfil.email ?? ''}
+      papel={perfil.papel}
+      iniciais={iniciais}
+      avatarUrl={perfil.avatar_url}
+      contaNome={contaNome}
+      contas={contas}
+      ehSuperAdmin={ehSuper}
+      modulos={[...modulos]}
+    >
       {children}
-    </>
+    </Topo>
   );
 }

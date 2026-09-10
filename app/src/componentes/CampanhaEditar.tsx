@@ -49,6 +49,23 @@ export default function CampanhaEditar({
 
   const [funilId, setFunilId] = useState<number | null>(campanha.funil_id ?? (funis.length > 0 ? funis[0].id : null));
   const [estagioInicial, setEstagioInicial] = useState(campanha.estagio_inicial ?? 'Contatado');
+  const [estagios, setEstagios] = useState(estagiosDoFunil);
+  const [carregandoEstagios, setCarregandoEstagios] = useState(false);
+
+  // Recarregar estágios quando o funil muda
+  useEffect(() => {
+    if (!funilId) { setEstagios([]); return; }
+    setCarregandoEstagios(true);
+    fetch(`/api/funis/${funilId}/estagios`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.estagios) {
+          setEstagios(d.estagios.filter((e: any) => e.grupo === 'pipeline'));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCarregandoEstagios(false));
+  }, [funilId]);
 
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -181,9 +198,15 @@ export default function CampanhaEditar({
               </select>
               <select value={estagioInicial} onChange={(e) => setEstagioInicial(e.target.value)}
                 style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}>
-                {estagiosDoFunil.map((e) => (
-                  <option key={e.id} value={e.nome}>{e.nome} ({e.probabilidade}%)</option>
-                ))}
+                {carregandoEstagios ? (
+                  <option>Carregando…</option>
+                ) : estagios.length > 0 ? (
+                  estagios.map((e) => (
+                    <option key={e.id} value={e.nome}>{e.nome} ({e.probabilidade}%)</option>
+                  ))
+                ) : (
+                  <option value="">Nenhum estágio disponível</option>
+                )}
               </select>
             </>
           ) : (

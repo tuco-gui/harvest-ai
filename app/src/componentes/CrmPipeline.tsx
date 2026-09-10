@@ -25,14 +25,16 @@ const NOVA_OPORTUNIDADE = {
   proxima_acao: '', previsao_fechamento: '', observacoes: '', tags: '',
 };
 
-export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel, perfilId, estagiosFunil = [] }: {
+export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel, perfilId, estagiosFunil = [], funis = [], funilIdInicial = null }: {
   oportunidades: Oportunidade[];
   owners: Owner[];
   campanhas: Campanha[];
   canais: Canal[];
   papel?: string;
   perfilId?: string;
-  estagiosFunil?: { id: number; nome: string; ordem: number; grupo: string; probabilidade: number }[];
+  estagiosFunil?: { id: number; nome: string; ordem: number; grupo: string; probabilidade: number; cor: string | null }[];
+  funis?: { id: number; nome: string }[];
+  funilIdInicial?: number | null;
 }) {
   const podeEditar = papel !== 'operador';
   const podeEditarPropria = (op: Oportunidade) =>
@@ -49,6 +51,9 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [ownerFiltro, setOwnerFiltro] = useState('');
   const [campanhaFiltro, setCampanhaFiltro] = useState('');
   const [mostrarEncerrados, setMostrarEncerrados] = useState(false);
+  const [funilId, setFunilId] = useState<number | null>(funilIdInicial);
+  const [estagios, setEstagios] = useState(estagiosFunil);
+  const [carregandoFunil, setCarregandoFunil] = useState(false);
   const [aba, setAba] = useState<'conversa' | 'atividades'>('conversa');
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
@@ -57,6 +62,17 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [canalId, setCanalId] = useState(String(canais[0]?.id ?? ''));
   const [enviando, setEnviando] = useState(false);
   const [novaAtividade, setNovaAtividade] = useState({ tipo: 'tarefa', titulo: '', vence_em: '' });
+
+  // Carregar estágios quando o funil muda
+  useEffect(() => {
+    if (!funilId || funilId === funilIdInicial) { setEstagios(estagiosFunil); return; }
+    setCarregandoFunil(true);
+    fetch(`/api/funis/${funilId}/estagios`)
+      .then((r) => r.json())
+      .then((d) => { if (d.estagios) setEstagios(d.estagios); })
+      .catch(() => {})
+      .finally(() => setCarregandoFunil(false));
+  }, [funilId, funilIdInicial, estagiosFunil]);
 
   // Polling: atualiza mensagens e estágio da oportunidade a cada 15s
   // enquanto a ficha está aberta na aba conversa.
@@ -85,16 +101,16 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   }, [ficha?.id, aba]);
 
   // Usar estágios do funil se disponíveis, senão os hardcoded
-  const estagiosPipeline = estagiosFunil.length
-    ? estagiosFunil.filter((e) => e.grupo === 'pipeline').map((e) => ({
+  const estagiosPipeline = estagios.length
+    ? estagios.filter((e) => e.grupo === 'pipeline').map((e) => ({
         id: e.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_'),
-        nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'pipeline', probabilidade: e.probabilidade,
+        nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'pipeline', probabilidade: e.probabilidade, cor: e.cor,
       }))
     : ESTAGIOS_PIPELINE;
-  const estagiosEncerrados = estagiosFunil.length
-    ? estagiosFunil.filter((e) => e.grupo === 'encerrado').map((e) => ({
+  const estagiosEncerrados = estagios.length
+    ? estagios.filter((e) => e.grupo === 'encerrado').map((e) => ({
         id: e.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_'),
-        nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'encerrado', probabilidade: e.probabilidade,
+        nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'encerrado', probabilidade: e.probabilidade, cor: e.cor,
       }))
     : ESTAGIOS_ENCERRADOS;
 
@@ -239,6 +255,12 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       </section>
 
       <div className="crm-barra">
+        {funis.length > 1 && (
+          <select value={funilId ?? ''} onChange={(e) => setFunilId(e.target.value ? Number(e.target.value) : null)}
+            style={{ height: 40, padding: '0 10px', border: '1px solid var(--rule)', background: 'var(--surface)', borderRadius: 2, color: 'var(--ink-2)', fontWeight: 600 }}>
+            {funis.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+          </select>
+        )}
         <div className="crm-busca"><span>⌕</span><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar empresa, contato, telefone ou etiqueta" /></div>
         <select value={ownerFiltro} onChange={(e) => setOwnerFiltro(e.target.value)}><option value="">Todos os responsáveis</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
         <select value={campanhaFiltro} onChange={(e) => setCampanhaFiltro(e.target.value)}><option value="">Todas as campanhas</option>{campanhas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
@@ -256,7 +278,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             onDragOver={(e) => { e.preventDefault(); setEstagioAlvo(est.id); }}
             onDragLeave={() => setEstagioAlvo((s) => s === est.id ? null : s)}
             onDrop={() => { const op = ops.find((o) => o.id === arrastando); if (op) void moverPara(op, est.id); setArrastando(null); setEstagioAlvo(null); }}>
-            <header className="crm-coluna-cabecalho"><div><span className={`crm-estagio-ponto crm-estagio-${est.id}`} />{est.nome}</div><b>{itens.length}</b><small>{valorFmt(total)}</small></header>
+            <header className="crm-coluna-cabecalho"><div><span className="crm-estagio-ponto" style={{ background: est.cor || undefined }} />{est.nome}</div><b>{itens.length}</b><small>{valorFmt(total)}</small></header>
             <ul className="crm-coluna-cards">
               {itens.map((op) =>               <li key={op.id} className="crm-cartao" draggable={podeEditar || podeEditarPropria(op)}
                 onDragStart={() => setArrastando(op.id)} onDragEnd={() => { setArrastando(null); setEstagioAlvo(null); }} onClick={() => void abrirFicha(op)}>

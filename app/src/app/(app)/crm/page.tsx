@@ -15,7 +15,7 @@ export default async function PaginaCrm() {
   if (!(await perfilTemModulo(admin, perfil, 'crm'))) redirect('/');
 
   const backend = await crmBackend(perfil.conta_id);
-  const [ops, ownersData, campanhasData, canais, funilData] = await Promise.all([
+  const [ops, ownersData, campanhasData, canais, funisData] = await Promise.all([
     backend.listar(perfil.conta_id),
     admin
       .from('perfis')
@@ -25,17 +25,20 @@ export default async function PaginaCrm() {
     admin.from('prospecta_campanhas').select('id, nome')
       .eq('conta_id', perfil.conta_id).order('criado_em', { ascending: false }).limit(100),
     carregarCanais(admin, perfil.conta_id),
-    // Buscar primeiro funil ativo da conta
-    admin.from('funis').select('id').eq('conta_id', perfil.conta_id).eq('ativo', true)
-      .order('criado_em').limit(1).maybeSingle(),
+    // Buscar todos os funis ativos da conta
+    admin.from('funis').select('id, nome').eq('conta_id', perfil.conta_id).eq('ativo', true)
+      .order('criado_em'),
   ]);
 
-  // Carregar estágios do funil (se houver), senão usar hardcoded do crmStages
-  let estagiosFunil: { id: number; nome: string; ordem: number; grupo: string; probabilidade: number }[] = [];
-  if (funilData.data) {
+  const funis = funisData.data ?? [];
+  const funilId = funis[0]?.id ?? null;
+
+  // Carregar estágios do primeiro funil (padrão)
+  let estagiosFunil: { id: number; nome: string; ordem: number; grupo: string; probabilidade: number; cor: string | null }[] = [];
+  if (funilId) {
     const { data } = await admin.from('funil_estagios')
-      .select('id, nome, ordem, grupo, probabilidade')
-      .eq('funil_id', funilData.data.id).order('ordem');
+      .select('id, nome, ordem, grupo, probabilidade, cor')
+      .eq('funil_id', funilId).order('ordem');
     estagiosFunil = data ?? [];
   }
 
@@ -67,6 +70,8 @@ export default async function PaginaCrm() {
         papel={perfil.papel}
         perfilId={perfil.id}
         estagiosFunil={estagiosFunil}
+        funis={funis}
+        funilIdInicial={funilId}
       />
     </div>
   );
