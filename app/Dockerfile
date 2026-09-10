@@ -29,3 +29,4 @@ COPY --from=build --chown=next:nodejs /app/.next/static ./.next/static
 USER next
 EXPOSE 3000
 CMD ["node", "server.js"]
+# qui 10 set 2026 17:35:14 -03
