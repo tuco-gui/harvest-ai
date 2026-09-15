@@ -1006,7 +1006,7 @@ export default function Configuracoes(p: Props) {
           <section className="secao">
             <h2>Opt-outs registrados</h2>
             <p className="resumo-secao">
-              Contatos que solicitaram não receber mensagens. Total: {optOutsTotal}.
+              Contatos que solicitaram não receber mensagens. Total: {p.optOutsTotal}.
             </p>
             <div className="cartaocfg" style={{ marginBottom: 14 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
