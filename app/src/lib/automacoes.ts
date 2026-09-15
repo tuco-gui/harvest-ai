@@ -261,7 +261,7 @@ export async function processarAutomacoes(
   admin: SupabaseClient,
   ctx: ContextoEvento,
 ): Promise<void> {
-  if (!ctx.oportunidadeId) return; // sem oportunidade, sem automação
+  if (!ctx.oportunidadeId) { console.log('[automacao] skip: sem oportunidade'); return; }
 
   // Buscar oportunidade para saber funil + estágio atual
   const { data: oportunidade } = await admin
@@ -271,13 +271,14 @@ export async function processarAutomacoes(
     .eq('conta_id', ctx.contaId)
     .maybeSingle();
 
-  if (!oportunidade?.funil_id) return; // oportunidade sem funil, sem automação
+  if (!oportunidade?.funil_id) { console.log(`[automacao] skip: op ${ctx.oportunidadeId} sem funil`); return; }
 
   const estagioId = oportunidade.funil_estagio_id;
-  if (!estagioId) return; // sem estágio vinculado
+  if (!estagioId) { console.log(`[automacao] skip: op ${ctx.oportunidadeId} sem funil_estagio_id`); return; }
 
   // Carregar automações do estágio
   const automacoes = await carregarAutomacoes(admin, ctx.contaId, oportunidade.funil_id, estagioId);
+  console.log(`[automacao] op=${ctx.oportunidadeId} funil=${oportunidade.funil_id} estagio=${estagioId} autoCount=${automacoes.length} inboundId=${ctx.eventoInboundId} classificacao=${ctx.classificacao}`);
   if (!automacoes.length) return;
 
   for (const auto of automacoes) {
