@@ -2,14 +2,23 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { EventoInboundNormalizado } from './inboundTipos';
 import { classificarMensagem } from './optoutResposta';
 import { suprimirTelefone } from './supressao';
+import { processarAutomacoes } from './automacoes';
 
 /**
- * Pipeline comercial único de inbound (Fase 3B) — depois que um adapter
- * (lib/inboundWaha.ts ou lib/inboundEvolution.ts) normaliza o payload e a
- * conta foi resolvida (lib/inboundConta.ts), TODO evento passa por aqui,
- * não importa o provider. É isso que evita ter duas lógicas comerciais
- * (uma por webhook) — as rotas app/api/webhook/* só fazem parsing + adapter
- * + chamada a esta função.
+ * Pipeline de inbound (Fase 3B → P1 refatorado).
+ *
+ * Fluxo obrigatório:
+ *   receber → registrar → classificar → processar automações
+ *
+ * O pipeline NÃO movimenta o funil automaticamente. Toda movimentação
+ * CRM (mover estágio, encerrar, atribuir, etc.) é feita por automações
+ * configuráveis pelo administrador (lib/automacoes.ts).
+ *
+ * A única ação mandatória é supressão de opt-out (novo disparo bloqueado),
+ * porque isso é proteção legal/operacional, não uma decisão de CRM.
+ *
+ * Chatwoot é a fonte de verdade de conversas/inboxes. Este pipeline
+ * alimenta inbound_eventos (contexto Harvest) — não substitui Chatwoot.
  */
 
 export type ResultadoInbound =
@@ -28,18 +37,15 @@ export async function processarEventoInbound(
     return { ok: true, ignorado: true, motivo: 'mensagem enviada pelo próprio Harvest (fromMe)' };
   }
 
-  // Conta não resolvida com segurança: registra erro técnico e para aqui.
-  // Nunca associa o evento à conta errada, e nunca grava numa tabela sem
-  // conta_id — inbound_eventos é multi-tenant com RLS por conta_id.
+  // Conta não resolvida: descarta com segurança.
   if (!contaId) {
     console.error(
-      `[inbound] ${evento.provider}: evento ${evento.messageIdExterno} não pôde ser associado a uma conta com segurança — descartado, nenhum dado gravado.`,
+      `[inbound] ${evento.provider}: evento ${evento.messageIdExterno} sem conta associada — descartado. tel=${evento.telefone}`,
     );
     return { ok: false, erro: 'conta_nao_resolvida' };
   }
 
-  // Idempotência: mesma (conta, provider, message_id) não processa duas
-  // vezes — checa antes de fazer qualquer trabalho de correlação.
+  // Idempotência: mesma (conta, provider, message_id) não processa duas vezes.
   const { data: existente } = await admin
     .from('inbound_eventos')
     .select('id')
@@ -51,9 +57,7 @@ export async function processarEventoInbound(
     return { ok: true, duplicado: true, eventoId: existente.id };
   }
 
-  // Correlação SEMPRE por telefone normalizado + conta — nunca por nome ou
-  // fuzzy matching. Se não achar, segue sem lead/campanha (evento ainda é
-  // válido: "telefone desconhecido aceito como inbound sem inventar vínculo").
+  // Correlação por telefone normalizado + conta.
   const { data: lead } = await admin
     .from('prospecta_leads')
     .select('id')
@@ -64,9 +68,7 @@ export async function processarEventoInbound(
     .maybeSingle();
   const leadId: number | null = lead?.id ?? null;
 
-  // Última campanha/contato relevante para esse telefone — só preparação
-  // para a Fase 3C (status de resposta) e 3D (Chatwoot). Não altera nada em
-  // Twenty/oportunidade nesta fase.
+  // Última campanha relevante para este telefone.
   const { data: ultimoContato } = await admin
     .from('historico_contato')
     .select('campanha_id')
@@ -77,10 +79,10 @@ export async function processarEventoInbound(
     .maybeSingle();
   const campanhaId: number | null = ultimoContato?.campanha_id ?? null;
 
-  // Classificação da mensagem para a 3C (opt-out vs resposta) — precisa estar
-  // disponível tanto no insert de inbound_eventos quanto no reflixo no funil.
+  // Classificação (P2): resposta / negativa / optout.
   const classificacao = classificarMensagem(evento.mensagem);
 
+  // --- REGISTRAR ---
   const { data: inserido, error } = await admin
     .from('inbound_eventos')
     .insert({
@@ -101,24 +103,21 @@ export async function processarEventoInbound(
     .single();
 
   if (error) {
-    // 23505 = unique_violation — corrida rara entre o check acima e o
-    // insert (dois webhooks quase simultâneos do mesmo evento). Ainda é
-    // idempotência, não erro de verdade.
     if ((error as { code?: string }).code === '23505') {
       return { ok: true, duplicado: true, eventoId: -1 };
     }
     return { ok: false, erro: error.message };
   }
 
-  // --- Fase 3C: refletir a classificação no funil ---
-  // historico_contato SÓ é criado quando o telefone corresponde a um lead
-  // conhecido. Mensagens de números desconhecidos ficam em inbound_eventos
-  // mas não poluem o historico_contato (que representa contatos de prospecção).
   const agora = new Date().toISOString();
 
+  // --- CLASSIFICAR → AÇÕES MANDATÓRIAS ---
+  // Supressão de opt-out é a ÚNICA ação que o pipeline executa direto.
+  // É proteção legal/operacional, não decisão de CRM.
   if (classificacao === 'optout') {
-    // 1) Opt-out: supressão sempre (mesmo sem lead) + histórico só se lead known.
+    // Supressão: impede novos disparos para este telefone (mandatório).
     await suprimirTelefone(admin, contaId, evento.telefone, 'opt_out');
+    // Histórico do lead (se conhecido).
     if (leadId) {
       await admin.from('historico_contato').insert({
         conta_id: contaId,
@@ -132,10 +131,8 @@ export async function processarEventoInbound(
         motivo_bloqueio: 'Opt-out solicitado pelo contato via mensagem inbound.',
       });
     }
-    // Mover oportunidade aberta para optout (encerrado).
-    await moverOportunidadeInbound(admin, contaId, leadId, evento.telefone, 'optout', agora);
   } else {
-    // 2) Resposta comum: marcar lead + histórico (só se lead known) + mover oportunidade.
+    // Resposta ou negativa: registrar no histórico do lead (se conhecido).
     if (leadId) {
       await admin.from('prospecta_leads')
         .update({ respondeu_em: agora, status: 'respondeu', atualizado_em: agora })
@@ -148,79 +145,63 @@ export async function processarEventoInbound(
         telefone: evento.telefone,
         provider: evento.provider,
         canal: 'whatsapp',
-        status: 'recebido',
+        status: classificacao === 'negativa' ? 'negativa' : 'recebido',
         origem: 'resposta',
       });
     }
-    // Mover oportunidade de contatado→respondeu (só avança, nunca retrocede).
-    await moverOportunidadeInbound(admin, contaId, leadId, evento.telefone, 'respondeu', agora);
+  }
+
+  // --- PROCESSAR AUTOMAÇÕES ---
+  // Toda movimentação CRM (mover estágio, encerrar, atribuir, etiqueta, etc.)
+  // acontece aqui, via regras configuráveis pelo admin.
+  // O pipeline NÃO movimenta o funil direto — isso é responsabilidade
+  // das automações (lib/automacoes.ts).
+  try {
+    let oportunidadeId: number | null = null;
+    let estagioAtual: string | null = null;
+
+    if (leadId) {
+      const { data: op } = await admin
+        .from('oportunidades')
+        .select('id, estagio')
+        .eq('conta_id', contaId)
+        .eq('lead_id', leadId)
+        .order('criado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      oportunidadeId = op?.id ?? null;
+      estagioAtual = op?.estagio ?? null;
+    }
+    if (!oportunidadeId && evento.telefone) {
+      const { data: op } = await admin
+        .from('oportunidades')
+        .select('id, estagio')
+        .eq('conta_id', contaId)
+        .eq('telefone', evento.telefone)
+        .order('criado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      oportunidadeId = op?.id ?? null;
+      estagioAtual = op?.estagio ?? null;
+    }
+
+    if (oportunidadeId) {
+      await processarAutomacoes(admin, {
+        contaId,
+        telefone: evento.telefone,
+        mensagem: evento.mensagem,
+        leadId,
+        campanhaId,
+        oportunidadeId,
+        estagioAtual,
+        classificacao,
+        agora,
+      });
+    }
+  } catch (e) {
+    // Falha segura: erro em automação NÃO bloqueia o inbound.
+    console.error(`[inbound] erro ao processar automações tel=${evento.telefone}:`, e);
   }
 
   return { ok: true, eventoId: inserido.id, leadId, campanhaId };
-}
-
-/**
- * Move a oportunidade aberta para o estágio indicado quando uma mensagem
- * inbound é recebida. Só avança (contatado→respondeu) ou encerra
- * (→optout). Nunca retrocede estágios mais avançados (qualificando+).
- *
- * Busca por lead_id primeiro (match exato), depois por telefone (fallback
- * para oportunidades criadas manualmente sem lead_id no prospecção).
- * Só opera em estágios do pipeline (novo/contatado) — oportunidades em
- * estágios avançados ou já encerradas são ignoradas.
- */
-async function moverOportunidadeInbound(
-  admin: SupabaseClient,
-  contaId: string,
-  leadId: number | null,
-  telefone: string,
-  estagioAlvo: 'respondeu' | 'optout',
-  agora: string,
-): Promise<void> {
-  const probabilidade = estagioAlvo === 'optout' ? 0 : 20;
-
-  // Busca por lead_id primeiro.
-  let oportunidade: { id: number; estagio: string; funil_id: number | null } | null = null;
-  if (leadId) {
-    const { data } = await admin.from('oportunidades')
-      .select('id, estagio, funil_id')
-      .eq('conta_id', contaId).eq('lead_id', leadId)
-      .order('criado_em', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    oportunidade = data;
-  }
-
-  // Fallback: buscar por telefone (oportunidades sem lead_id no prospecção).
-  if (!oportunidade && telefone) {
-    const { data } = await admin.from('oportunidades')
-      .select('id, estagio, funil_id')
-      .eq('conta_id', contaId).eq('telefone', telefone)
-      .order('criado_em', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    oportunidade = data;
-  }
-
-  if (!oportunidade) return;
-
-  // Só avança de estágios iniciais (novo/contatado) — nunca retrocede de etapas avançadas.
-  const estagioLower = oportunidade.estagio.toLowerCase();
-  if (!['novo', 'contatado'].includes(estagioLower)) return;
-
-  // Resolver nome canônico do estágio alvo a partir do funil (para manter case consistente).
-  let estagioFinal = estagioAlvo === 'optout' ? 'Opt-out' : 'Respondeu';
-  if (oportunidade.funil_id) {
-    const nomeAlvo = estagioAlvo === 'optout' ? 'Opt-out' : 'Respondeu';
-    const { data: estFunil } = await admin.from('funil_estagios')
-      .select('nome')
-      .eq('funil_id', oportunidade.funil_id)
-      .ilike('nome', nomeAlvo)
-      .maybeSingle();
-    if (estFunil?.nome) estagioFinal = estFunil.nome;
-  }
-
-  await admin.from('oportunidades')
-    .update({ estagio: estagioFinal, probabilidade, atualizado_em: agora })
-    .eq('id', oportunidade.id).eq('conta_id', contaId);
 }
