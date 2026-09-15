@@ -12,3 +12,5 @@ ESTADO.md
 ._*
 
 .worktrees/
+.next/
+node_modules/

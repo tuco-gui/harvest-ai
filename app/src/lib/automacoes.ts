@@ -287,6 +287,7 @@ export async function processarAutomacoes(
     // Idempotência: usar eventoInboundId (único por mensagem) em vez de oportunidadeId.
     // Isso permite que a mesma automação dispare para mensagens diferentes na mesma oportunidade.
     const eventoChave = ctx.eventoInboundId ?? ctx.oportunidadeId;
+    console.log(`[automacao] eval auto=${auto.id} gatilho=${auto.gatilho} eventoChave=${eventoChave} (inbound=${ctx.eventoInboundId} op=${ctx.oportunidadeId})`);
     const { data: existente } = await admin
       .from('automacao_execucoes')
       .select('id')
@@ -299,7 +300,7 @@ export async function processarAutomacoes(
     const resultado = await executarAcao(admin, auto, ctx);
 
     // Registrar execução
-    await admin.from('automacao_execucoes').insert({
+    const { error: insertErr } = await admin.from('automacao_execucoes').insert({
       automacao_id: auto.id,
       conta_id: ctx.contaId,
       evento_tipo: 'inbound',
@@ -307,5 +308,8 @@ export async function processarAutomacoes(
       resultado: resultado.ok ? 'sucesso' : 'erro',
       erro: resultado.erro ?? null,
     });
+    if (insertErr) {
+      console.error(`[automacao] falha ao registrar execução auto=${auto.id} evento=${eventoChave}:`, insertErr.message);
+    }
   }
 }
