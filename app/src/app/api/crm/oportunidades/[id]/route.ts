@@ -6,6 +6,51 @@ import { estagioValido, probabilidadeEstagio } from '@/lib/crmStages';
 import { podeAcessarOportunidade, isAdmin } from '@/lib/crmControleAcesso';
 
 /**
+ * DELETE /api/crm/oportunidades/[id]
+ * Remove a oportunidade. Não deleta conversas do Chatwoot (externo).
+ * - admin/super_admin: pode deletar qualquer oportunidade da conta
+ * - operador: pode deletar SOMENTE suas oportunidades (owner_id = seu id)
+ */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const perfil = await perfilAtual();
+  if (!perfil) return NextResponse.json({ erro: 'Sessão expirada.' }, { status: 401 });
+  if (!perfil.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
+  if (!(await perfilTemModulo(supabaseAdmin(), perfil, 'crm'))) {
+    return NextResponse.json({ erro: 'CRM não habilitado para esta conta.' }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const opId = Number(id);
+  if (!opId) return NextResponse.json({ erro: 'Oportunidade inválida.' }, { status: 400 });
+
+  const acesso = await podeAcessarOportunidade(supabaseAdmin(), perfil, opId);
+  if (!acesso.ok) return NextResponse.json({ erro: acesso.erro }, { status: 403 });
+
+  const backend = await crmBackend(perfil.conta_id);
+
+  const op = await backend.buscar(perfil.conta_id, opId);
+  if (!op) return NextResponse.json({ erro: 'Oportunidade não encontrada.' }, { status: 404 });
+
+  // operador só pode deletar a própria
+  if (perfil.papel === 'operador' && op.owner_id !== perfil.id) {
+    return NextResponse.json({ erro: 'Sem permissão para excluir esta oportunidade.' }, { status: 403 });
+  }
+
+  const { error } = await supabaseAdmin()
+    .from('oportunidades')
+    .delete()
+    .eq('conta_id', perfil.conta_id)
+    .eq('id', opId);
+
+  if (error) return NextResponse.json({ erro: error.message ?? 'Não consegui excluir.' }, { status: 500 });
+
+  // Limpar atividades órfãs vinculadas
+  await supabaseAdmin().from('crm_atividades').delete().eq('oportunidade_id', opId);
+
+  return NextResponse.json({ ok: true, deleted: opId });
+}
+
+/**
  * PATCH /api/crm/oportunidades/[id]
  * Atualiza estágio, owner, valor, próxima ação ou observações.
  * - admin/super_admin: pode editar qualquer oportunidade da conta

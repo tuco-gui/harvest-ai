@@ -51,6 +51,8 @@ export type OportunidadeInput = {
   origem?: string;
   campanha_id?: number | null;
   estagio?: string;
+  funil_id?: number | null;
+  funil_estagio_id?: number | null;
   owner_id?: string | null;
   valor?: number;
   proxima_acao?: string | null;
@@ -104,6 +106,8 @@ class SupabaseCrmBackend implements CrmBackend {
         origem: input.origem ?? 'prospeccao',
         campanha_id: input.campanha_id ?? null,
         estagio,
+        funil_id: input.funil_id ?? null,
+        funil_estagio_id: input.funil_estagio_id ?? null,
         owner_id: input.owner_id ?? null,
         valor: input.valor ?? 0,
         proxima_acao: input.proxima_acao ?? null,

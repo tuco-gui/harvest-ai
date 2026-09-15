@@ -63,6 +63,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [canalId, setCanalId] = useState(String(canais[0]?.id ?? ''));
   const [enviando, setEnviando] = useState(false);
   const [novaAtividade, setNovaAtividade] = useState({ tipo: 'tarefa', titulo: '', vence_em: '' });
+  const [excluindo, setExcluindo] = useState(false);
 
   // Carregar estágios quando o funil muda
   useEffect(() => {
@@ -195,7 +196,8 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
   async function salvarFicha(e: React.FormEvent) {
     e.preventDefault(); if (!ficha) return; setSalvando(true); setErro(null);
-    const r = await fetch(`/api/crm/oportunidades/${ficha.id}`, {
+    const id = ficha.id; // capturar antes do await
+    const r = await fetch(`/api/crm/oportunidades/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         empresa: ficha.empresa, contato: ficha.contato, telefone: ficha.telefone,
         email: ficha.email, estagio: ficha.estagio, owner_id: ficha.owner_id,
@@ -206,7 +208,20 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     });
     const d = await json(r); setSalvando(false);
     if (!r.ok) return setErro(d.erro ?? 'Não consegui salvar.');
-    setFicha(d.oportunidade); setOps((atual) => atual.map((x) => x.id === ficha.id ? d.oportunidade : x));
+    const atualizada = d.oportunidade as Oportunidade;
+    setFicha(atualizada);
+    // Forçar refresh da lista para garantir sincronia com o servidor.
+    try {
+      const lr = await fetch('/api/crm/oportunidades');
+      if (lr.ok) {
+        const ld = await lr.json();
+        setOps(ld.oportunidades ?? []);
+      } else {
+        setOps((atual) => atual.map((x) => x.id === id ? atualizada : x));
+      }
+    } catch {
+      setOps((atual) => atual.map((x) => x.id === id ? atualizada : x));
+    }
   }
 
   async function enviarMensagem(e: React.FormEvent) {
@@ -244,6 +259,21 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       body: JSON.stringify({ atividade_id: a.id, concluida: !a.concluida }),
     });
     if (r.ok) setAtividades((atual) => atual.map((x) => x.id === a.id ? { ...x, concluida: !x.concluida } : x));
+  }
+
+  async function excluirOportunidade(op: Oportunidade) {
+    const ok = window.confirm(`Excluir "${op.empresa || op.contato || 'Sem nome'}" permanentemente? Esta ação não pode ser desfeita.`);
+    if (!ok) return;
+    setExcluindo(true); setErro(null);
+    const r = await fetch(`/api/crm/oportunidades/${op.id}`, { method: 'DELETE' });
+    setExcluindo(false);
+    if (!r.ok) {
+      const d = await json(r);
+      setErro(d.erro ?? 'Não consegui excluir.');
+      return;
+    }
+    setOps((atual) => atual.filter((x) => x.id !== op.id));
+    if (ficha?.id === op.id) setFicha(null);
   }
 
   return (
@@ -361,7 +391,10 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       </section></div>}
 
       {ficha && <div className="crm-overlay" onMouseDown={() => setFicha(null)}><section className="crm-ficha" onMouseDown={(e) => e.stopPropagation()}>
-        <header className="drawer-cabecalho"><div><span className="label">Oportunidade #{ficha.id}</span><h2>{ficha.empresa || ficha.contato}</h2></div><button type="button" aria-label="Fechar" onClick={() => setFicha(null)}>×</button></header>
+        <header className="drawer-cabecalho"><div><span className="label">Oportunidade #{ficha.id}</span><h2>{ficha.empresa || ficha.contato}</h2></div>
+          {(podeEditar || podeEditarPropria(ficha)) && <button type="button" className="btn-perigo" disabled={excluindo} onClick={() => void excluirOportunidade(ficha)} title="Excluir oportunidade">{excluindo ? '…' : 'Excluir'}</button>}
+          <button type="button" aria-label="Fechar" onClick={() => setFicha(null)}>×</button>
+        </header>
         <div className="crm-ficha-corpo">
           <form className="crm-ficha-dados" onSubmit={salvarFicha}><div className="crm-form-grid">
             <label className="campo-largo">Empresa<input value={ficha.empresa} onChange={(e) => setFicha({ ...ficha, empresa: e.target.value })} /></label>

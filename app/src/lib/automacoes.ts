@@ -55,6 +55,8 @@ export type ContextoEvento = {
   estagioAtual: string | null;
   classificacao: 'resposta' | 'negativa' | 'optout';
   agora: string;
+  /** ID do evento inbound (inbound_eventos.id) — usado para idempotência por evento, não por oportunidade. */
+  eventoInboundId?: number | null;
 };
 
 // ---------- Carregamento ----------
@@ -282,12 +284,14 @@ export async function processarAutomacoes(
     // Avaliar gatilho
     if (!correspondeGatilho(auto, ctx)) continue;
 
-    // Idempotência: verificar se já foi executada
+    // Idempotência: usar eventoInboundId (único por mensagem) em vez de oportunidadeId.
+    // Isso permite que a mesma automação dispare para mensagens diferentes na mesma oportunidade.
+    const eventoChave = ctx.eventoInboundId ?? ctx.oportunidadeId;
     const { data: existente } = await admin
       .from('automacao_execucoes')
       .select('id')
       .eq('automacao_id', auto.id)
-      .eq('evento_id', ctx.oportunidadeId)
+      .eq('evento_id', eventoChave)
       .maybeSingle();
     if (existente) continue;
 
@@ -299,7 +303,7 @@ export async function processarAutomacoes(
       automacao_id: auto.id,
       conta_id: ctx.contaId,
       evento_tipo: 'inbound',
-      evento_id: ctx.oportunidadeId,
+      evento_id: eventoChave,
       resultado: resultado.ok ? 'sucesso' : 'erro',
       erro: resultado.erro ?? null,
     });

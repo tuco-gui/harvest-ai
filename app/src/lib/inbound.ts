@@ -196,6 +196,7 @@ export async function processarEventoInbound(
         estagioAtual,
         classificacao,
         agora,
+        eventoInboundId: inserido.id,
       });
     }
   } catch (e) {

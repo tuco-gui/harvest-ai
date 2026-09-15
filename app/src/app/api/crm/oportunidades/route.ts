@@ -98,6 +98,23 @@ export async function POST(req: Request) {
   const probabilidade = Number.isFinite(probabilidadeInformada)
     ? Math.min(100, Math.max(0, probabilidadeInformada))
     : 5;
+
+  // Resolver funil_id + funil_estagio_id a partir do nome do estágio.
+  const estagioStr = String(b.estagio ?? 'novo').trim();
+  let funilId: number | null = null;
+  let funilEstagioId: number | null = null;
+  const { data: estagioDb } = await admin
+    .from('funil_estagios')
+    .select('id, funil_id, nome')
+    .eq('conta_id', perfil.conta_id)
+    .ilike('nome', estagioStr)
+    .limit(1)
+    .maybeSingle();
+  if (estagioDb) {
+    funilEstagioId = estagioDb.id;
+    funilId = estagioDb.funil_id;
+  }
+
   const op = await backend.criar(perfil.conta_id, {
     lead_id: leadId,
     empresa,
@@ -106,7 +123,9 @@ export async function POST(req: Request) {
     email: b.email ? String(b.email).trim() : (lead?.email ?? null),
     origem: String(b.origem ?? (leadId ? 'prospeccao' : 'manual')).trim(),
     campanha_id: campanhaId,
-    estagio: b.estagio,
+    estagio: estagioStr,
+    funil_id: funilId,
+    funil_estagio_id: funilEstagioId,
     owner_id: owner,
     valor: Number(b.valor) || 0,
     probabilidade,
