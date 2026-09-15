@@ -46,6 +46,9 @@ const FRASES_OPT_OUT = [
   'nao perturbe', 'nao mande mensagem', 'sem mensagem',
   'quero sair', 'me descadastre', 'descadastrar',
   'pare de me mandar', 'para de mandar',
+  'nao quero receber', 'nao quero mensagens', 'nao quero mais mensagens',
+  'nao quero nada', 'nao me envie', 'nao me contacte', 'nao me ligue',
+  'nao quero ser contactado', 'nao quero mais contato',
 ];
 
 const PALAVRAS_OPT_OUT = [
