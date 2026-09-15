@@ -64,6 +64,12 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [enviando, setEnviando] = useState(false);
   const [novaAtividade, setNovaAtividade] = useState({ tipo: 'tarefa', titulo: '', vence_em: '' });
   const [excluindo, setExcluindo] = useState(false);
+  // Opt-out override dialog
+  const [optOutDialog, setOptOutDialog] = useState<{
+    optOutId: number; telefone: string; data: string; motivo: string;
+    podeSobrescrever: boolean; motivoPermissao?: string;
+  } | null>(null);
+  const [motivoOverride, setMotivoOverride] = useState('');
 
   // Carregar estágios quando o funil muda
   useEffect(() => {
@@ -231,8 +237,39 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       body: JSON.stringify({ texto: textoMensagem, canal_id: Number(canalId) }),
     });
     const d = await json(r); setEnviando(false);
-    if (!r.ok) return setErro(d.erro ?? 'Não consegui enviar a mensagem.');
+    if (!r.ok) {
+      if (d.suprimido && d.optOut) {
+        setOptOutDialog({
+          optOutId: d.optOut.id,
+          telefone: ficha.telefone ?? '',
+          data: d.optOut.data,
+          motivo: d.optOut.motivo,
+          podeSobrescrever: d.podeSobrescrever ?? false,
+          motivoPermissao: d.motivoPermissao,
+        });
+        return;
+      }
+      return setErro(d.erro ?? 'Não consegui enviar a mensagem.');
+    }
     setTextoMensagem('');
+    const historico = await fetch(`/api/crm/oportunidades/${ficha.id}/mensagens`);
+    const hd = await json(historico); if (historico.ok) setMensagens(hd.mensagens ?? []);
+    if (normalizar(ficha.estagio) === 'novo') {
+      const atualizado = { ...ficha, estagio: 'Contatado', probabilidade: 10 };
+      setFicha(atualizado); setOps((atual) => atual.map((x) => x.id === ficha.id ? atualizado : x));
+    }
+  }
+
+  async function confirmarOverride() {
+    if (!ficha || !optOutDialog || !motivoOverride.trim()) return;
+    setEnviando(true); setErro(null);
+    const r = await fetch(`/api/crm/oportunidades/${ficha.id}/mensagens`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto: textoMensagem, canal_id: Number(canalId), override_optout: true, motivo_override: motivoOverride }),
+    });
+    const d = await json(r); setEnviando(false);
+    if (!r.ok) { setErro(d.erro ?? 'Envio com override falhou.'); setOptOutDialog(null); return; }
+    setTextoMensagem(''); setOptOutDialog(null); setMotivoOverride('');
     const historico = await fetch(`/api/crm/oportunidades/${ficha.id}/mensagens`);
     const hd = await json(historico); if (historico.ok) setMensagens(hd.mensagens ?? []);
     if (normalizar(ficha.estagio) === 'novo') {
@@ -423,6 +460,55 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           </div>
         </div>
       </section></div>}
+
+      {/* Opt-out override dialog */}
+      {optOutDialog && (
+        <div className="crm-overlay" onMouseDown={() => setOptOutDialog(null)}>
+          <section className="crm-modal-nova" onMouseDown={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <header className="drawer-cabecalho">
+              <div><span className="label">Opt-out detectado</span><h2>Este contato não deseja receber mensagens</h2></div>
+              <button type="button" onClick={() => setOptOutDialog(null)}>×</button>
+            </header>
+            <div style={{ padding: 18 }}>
+              <p style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 8 }}>
+                <b>{optOutDialog.telefone}</b> solicitou não receber mensagens em{' '}
+                <b>{new Date(optOutDialog.data).toLocaleDateString('pt-BR')}</b>.
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 16 }}>
+                Motivo: {optOutDialog.motivo}
+              </p>
+              {optOutDialog.podeSobrescrever ? (
+                <>
+                  <div className="grupo" style={{ marginBottom: 14 }}>
+                    <label className="label" htmlFor="motivo-override">Motivo do envio (obrigatório)</label>
+                    <input id="motivo-override" value={motivoOverride} onChange={(e) => setMotivoOverride(e.target.value)}
+                           placeholder="Ex: cliente autorizou por ligação" />
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button type="button" className="ver-detalhes" onClick={() => { setOptOutDialog(null); setMotivoOverride(''); }}>
+                      Cancelar envio
+                    </button>
+                    <button type="button" className="btn-primario" style={{ background: 'var(--red)' }}
+                            disabled={!motivoOverride.trim() || enviando}
+                            onClick={() => void confirmarOverride()}>
+                      {enviando ? 'Enviando…' : 'Continuar envio'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <p style={{ fontSize: 12, color: 'var(--red)', padding: '10px 14px', borderLeft: '2px solid var(--red)', background: 'var(--surface)' }}>
+                    {optOutDialog.motivoPermissao ?? 'Você não tem permissão para sobrescrever opt-outs. Solicite ao administrador.'}
+                  </p>
+                  <div style={{ marginTop: 14, textAlign: 'right' }}>
+                    <button type="button" className="ver-detalhes" onClick={() => setOptOutDialog(null)}>Fechar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

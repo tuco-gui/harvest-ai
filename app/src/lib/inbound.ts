@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { EventoInboundNormalizado } from './inboundTipos';
 import { classificarMensagem } from './optoutResposta';
 import { suprimirTelefone } from './supressao';
+import { registrarOptOut } from './optout';
 import { processarAutomacoes } from './automacoes';
 
 /**
@@ -115,7 +116,17 @@ export async function processarEventoInbound(
   // Supressão de opt-out é a ÚNICA ação que o pipeline executa direto.
   // É proteção legal/operacional, não decisão de CRM.
   if (classificacao === 'optout') {
-    // Supressão: impede novos disparos para este telefone (mandatório).
+    // Registrar opt-out rico (novo sistema — preferência, não bloqueio absoluto)
+    await registrarOptOut(admin, {
+      contaId,
+      telefone: evento.telefone,
+      motivo: 'mensagem',
+      mensagemGeradora: evento.mensagem,
+      criadoPor: null,
+      criadoPorTipo: 'contato',
+      origem: 'inbound',
+    });
+    // Manter retrocompatibilidade: supressão clássica (conta_supressao)
     await suprimirTelefone(admin, contaId, evento.telefone, 'opt_out');
     // Histórico do lead (se conhecido).
     if (leadId) {

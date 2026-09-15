@@ -4,6 +4,7 @@ import { gerarComIA, montarPrompts, validarMensagemWhatsApp, type ProvedorIA } f
 import { getOrCreateSession, sendText as wahaSendText, usaWaha as ehWaha } from '@/lib/waha';
 import { normalizarTelefone } from '@/lib/telefone';
 import { estaSuprimido } from '@/lib/supressao';
+import { estaEmOptOut, podeSobrescreverOptOut, registrarOverride } from '@/lib/optout';
 import {
   contatoJaAbordado, registrarTentativaContato, type ProviderContato,
 } from '@/lib/historicoContato';
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
 
   const {
     lead, indice = 0, campanhaId, canalId = null, canalIds = null, modoEnvio = null,
+    overrideOptOut = false, motivoOverride = '',
   } = await req.json().catch(() => ({}) as any);
   if (!lead?.telefone) {
     return NextResponse.json({ erro: 'Lead sem telefone.' }, { status: 400 });
@@ -127,18 +129,56 @@ export async function POST(req: Request) {
   const provider: ProviderContato = usaWaha ? 'waha' : 'evolution';
   const sessaoWaha = usaWaha ? sessaoWahaDoCanal(canal) : null;
 
-  // Barreira de supressão — Fase 3A. Roda ANTES de qualquer chamada ao
-  // provider (WAHA/Evolution) ou à IA.
-  if (await estaSuprimido(admin, perfil.conta_id, telefone)) {
-    await registrarTentativaContato(admin, {
-      contaId: perfil.conta_id, leadId: leadPersistido.id, campanhaId: campanhaIdNum,
-      telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
-      motivoBloqueio: 'Telefone suprimido (opt-out/supressão central da conta).',
-    });
-    return NextResponse.json(
-      { erro: 'Este contato está suprimido (opt-out) e não pode receber disparo.', suprimido: true },
-      { status: 403 },
-    );
+  // Barreira de opt-out — novo modelo: registra preferência, permite override.
+  const optOut = await estaEmOptOut(admin, perfil.conta_id, telefone);
+  if (optOut) {
+    if (overrideOptOut) {
+      // Override solicitado — verificar permissão
+      const permissao = await podeSobrescreverOptOut(admin, perfil.conta_id, perfil.id, perfil.papel);
+      if (!permissao.permitido) {
+        await registrarTentativaContato(admin, {
+          contaId: perfil.conta_id, leadId: leadPersistido.id, campanhaId: campanhaIdNum,
+          telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
+          motivoBloqueio: `Opt-out ativo. Override negado: ${permissao.motivo}`,
+        });
+        return NextResponse.json(
+          { erro: permissao.motivo ?? 'Sem permissão para sobrescrever opt-out.', suprimido: true, precisaOverride: true },
+          { status: 403 },
+        );
+      }
+      // Registrar auditoria do override
+      await registrarOverride(admin, {
+        contaId: perfil.conta_id,
+        optOutId: optOut.id,
+        telefone,
+        autorizadoPor: perfil.id,
+        autorizadoPorTipo: perfil.papel === 'super_admin' ? 'super_admin' : 'operador_autorizado',
+        enviadoPor: perfil.id,
+        motivo: motivoOverride || 'Override solicitado pelo operador',
+        campanhaId: campanhaIdNum,
+        canalId: canal.id,
+        canalNome: canal.nome,
+      });
+      // Continuar envio — NÃO remove o opt-out
+    } else {
+      // Sem override — retornar info para frontend mostrar aviso
+      const permissao = await podeSobrescreverOptOut(admin, perfil.conta_id, perfil.id, perfil.papel);
+      await registrarTentativaContato(admin, {
+        contaId: perfil.conta_id, leadId: leadPersistido.id, campanhaId: campanhaIdNum,
+        telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
+        motivoBloqueio: 'Contato em opt-out. Envio bloqueado até override.',
+      });
+      return NextResponse.json(
+        {
+          erro: `Este contato solicitou não receber mensagens em ${new Date(optOut.criado_em).toLocaleDateString('pt-BR')}.`,
+          suprimido: true,
+          optOut: { id: optOut.id, data: optOut.criado_em, motivo: optOut.motivo },
+          podeSobrescrever: permissao.permitido,
+          motivoPermissao: permissao.motivo,
+        },
+        { status: 403 },
+      );
+    }
   }
 
   // Informativo, não bloqueia.
@@ -227,17 +267,21 @@ export async function POST(req: Request) {
     mensagem = modoMsg === 'rodizio' ? textos[Number(indice) % textos.length] : textos[0];
   }
 
-  // Barreira final pré-envio (Fase 3A).
-  if (await estaSuprimido(admin, perfil.conta_id, telefone)) {
-    await registrarTentativaContato(admin, {
-      contaId: perfil.conta_id, leadId: leadPersistido.id, campanhaId: campanhaIdNum,
-      telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
-      motivoBloqueio: 'Telefone suprimido (opt-out/supressão central da conta) — detectado na barreira final pré-envio.',
-    });
-    return NextResponse.json(
-      { erro: 'Este contato está suprimido (opt-out) e não pode receber disparo.', suprimido: true },
-      { status: 403 },
-    );
+  // Barreira final pré-envio — re-verificar opt-out (race condition: opt-out pode ter chegado enquanto IA gerava mensagem)
+  const optOutFinal = await estaEmOptOut(admin, perfil.conta_id, telefone);
+  if (optOutFinal) {
+    // Se override já foi registrado no check anterior, permitir continuar
+    if (!overrideOptOut) {
+      await registrarTentativaContato(admin, {
+        contaId: perfil.conta_id, leadId: leadPersistido.id, campanhaId: campanhaIdNum,
+        telefone, provider, canalId: canal.id, status: 'bloqueado_supressao',
+        motivoBloqueio: 'Opt-out detectado na barreira final pré-envio.',
+      });
+      return NextResponse.json(
+        { erro: 'Opt-out detectado durante geração. Envio bloqueado.', suprimido: true, precisaOverride: true },
+        { status: 403 },
+      );
+    }
   }
 
   let entregue = false;

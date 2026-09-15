@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import Configuracoes from '@/componentes/Configuracoes';
 import { carregarCanais } from '@/lib/whatsappCanais';
+import { listarOptOuts, buscarPolitica } from '@/lib/optout';
 
 export default async function Pagina() {
   const perfil = await perfilAtual();
@@ -35,7 +36,7 @@ export default async function Pagina() {
   }
 
   const admin = supabaseAdmin();
-  const [{ data: cred }, { data: envio }, { data: mensagensErro }, { data: leadsComErro }, { data: canais }, { data: conta }, { data: chatwootInbox }] = await Promise.all([
+  const [{ data: cred }, { data: envio }, { data: mensagensErro }, { data: leadsComErro }, { data: canais }, { data: conta }, { data: chatwootInbox }, optOutsResult, politica] = await Promise.all([
     admin.from('conta_credenciais').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('prospecta_mensagens')
@@ -49,6 +50,8 @@ export default async function Pagina() {
     carregarCanais(admin, perfil.conta_id).then((data) => ({ data })),
     admin.from('contas').select('modulos_habilitados').eq('id', perfil.conta_id).maybeSingle(),
     admin.from('chatwoot_inboxes').select('chatwoot_account_id').eq('conta_id', perfil.conta_id).limit(1).maybeSingle(),
+    listarOptOuts(admin, perfil.conta_id),
+    buscarPolitica(admin, perfil.conta_id),
   ]);
 
   const erros = [
@@ -102,6 +105,10 @@ export default async function Pagina() {
       canais={canais ?? []}
       mostraEnriquecimento={mostraEnriquecimento}
       eSuperAdmin={perfil.papel === 'super_admin'}
+      eAdmin={perfil.papel === 'admin'}
+      optOuts={optOutsResult.dados}
+      optOutsTotal={optOutsResult.total}
+      optOutPolicy={politica}
     />
   );
 }

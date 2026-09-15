@@ -18,6 +18,18 @@ type Canal = {
   padrao: boolean;
 };
 
+type OptOut = {
+  id: number;
+  telefone: string;
+  status: string;
+  motivo: string;
+  mensagem_geradora: string | null;
+  criado_por_tipo: string;
+  criado_em: string;
+  removido_em: string | null;
+  origem: string;
+};
+
 type Props = {
   chatwootAccountId: number | null;
   temSerpapi: boolean;
@@ -46,11 +58,15 @@ type Props = {
   canais: Canal[];
   mostraEnriquecimento: boolean;
   eSuperAdmin: boolean;
+  eAdmin: boolean;
+  optOuts: OptOut[];
+  optOutsTotal: number;
+  optOutPolicy: string;
 };
 
 export default function Configuracoes(p: Props) {
   const router = useRouter();
-  const [aba, setAba] = useState<'conexoes' | 'mensagens' | 'tempo' | 'erros'>('conexoes');
+  const [aba, setAba] = useState<'conexoes' | 'mensagens' | 'tempo' | 'erros' | 'optouts'>('conexoes');
 
   const [serpapi, setSerpapi] = useState('');
   const [evoUrl, setEvoUrl] = useState(p.evolutionUrl);
@@ -87,6 +103,15 @@ export default function Configuracoes(p: Props) {
   const [aviso, setAviso] = useState<string | null>(null);
   const [testando, setTestando] = useState<string | null>(null);
   const [testes, setTestes] = useState<Record<string, { ok: boolean; recado: string }>>({});
+
+  // --- Opt-outs state ---
+  const [optOuts, setOptOuts] = useState(p.optOuts);
+  const [optOutPolicy, setOptOutPolicy] = useState(p.optOutPolicy);
+  const [removendoOptOut, setRemovendoOptOut] = useState<number | null>(null);
+  const [motivoRemocao, setMotivoRemocao] = useState('');
+  const [optOutAlvo, setOptOutAlvo] = useState<number | null>(null);
+  const [novoManualTelefone, setNovoManualTelefone] = useState('');
+  const [registrandoManual, setRegistrandoManual] = useState(false);
 
   async function testar(qual: string) {
     setTestando(qual);
@@ -221,6 +246,57 @@ export default function Configuracoes(p: Props) {
     return bruto.split(/^\s*---\s*$/m).map((m) => m.trim()).filter(Boolean);
   }
 
+  // --- Opt-out functions ---
+  async function salvarPolitica() {
+    setAviso(null);
+    const r = await fetch('/api/optouts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ politica: optOutPolicy }),
+    });
+    const d = await r.json();
+    setAviso(r.ok ? 'Política salva.' : (d.erro ?? 'Erro ao salvar política.'));
+  }
+
+  async function removerOptOut(id: number) {
+    if (!motivoRemocao.trim()) return;
+    setRemovendoOptOut(id);
+    const r = await fetch(`/api/optouts/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motivo: motivoRemocao }),
+    });
+    setRemovendoOptOut(null);
+    setMotivoRemocao('');
+    setOptOutAlvo(null);
+    if (r.ok) {
+      setOptOuts((prev) => prev.map((o) => o.id === id ? { ...o, status: 'removido', removido_em: new Date().toISOString() } : o));
+      setAviso('Opt-out removido.');
+    } else {
+      const d = await r.json().catch(() => ({}));
+      setAviso(d.erro ?? 'Erro ao remover opt-out.');
+    }
+  }
+
+  async function registrarManual() {
+    if (!novoManualTelefone.trim()) return;
+    setRegistrandoManual(true);
+    const r = await fetch('/api/optouts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefone: novoManualTelefone, motivo: 'manual' }),
+    });
+    setRegistrandoManual(false);
+    if (r.ok) {
+      setNovoManualTelefone('');
+      setAviso('Opt-out registrado.');
+      router.refresh();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      setAviso(d.erro ?? 'Erro ao registrar opt-out.');
+    }
+  }
+
   async function salvar() {
     setAviso(null);
 
@@ -278,6 +354,11 @@ export default function Configuracoes(p: Props) {
         <button aria-pressed={aba === 'erros'} onClick={() => setAba('erros')}>
           Erros{p.erros.length > 0 ? ` (${p.erros.length})` : ''}
         </button>
+        {(p.eSuperAdmin || p.eAdmin) && (
+          <button aria-pressed={aba === 'optouts'} onClick={() => setAba('optouts')}>
+            Opt-outs{optOuts.filter((o) => o.status === 'ativo').length > 0 ? ` (${optOuts.filter((o) => o.status === 'ativo').length})` : ''}
+          </button>
+        )}
       </div>
 
       {aba === 'conexoes' && (
@@ -891,7 +972,103 @@ export default function Configuracoes(p: Props) {
         </section>
       )}
 
-      {aba !== 'erros' && (
+      {aba === 'optouts' && (p.eSuperAdmin || p.eAdmin) && (
+        <>
+          <section className="secao">
+            <h2>Política de override</h2>
+            <p className="resumo-secao">
+              Define quem pode enviar mensagens para contatos que solicitaram opt-out.
+            </p>
+            <div className="cartaocfg">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {([
+                  ['nenhum', 'Ninguém', 'Ninguém pode sobrescrever opt-out. Envio bloqueado permanentemente.'],
+                  ['admin', 'Apenas Admin', 'Somente administradores da workspace podem autorizar envio.'],
+                  ['admin_operadores', 'Admin + Operadores autorizados', 'Admins e operadores com permissão individual.'],
+                  ['qualquer', 'Qualquer operador', 'Qualquer pessoa da workspace pode autorizar envio.'],
+                ] as [string, string, string][]).map(([valor, titulo, desc]) => (
+                  <label key={valor} style={{ display: 'flex', gap: 10, cursor: 'pointer', padding: '8px 0', borderBottom: '1px solid var(--rule)' }}>
+                    <input type="radio" name="optout-policy" checked={optOutPolicy === valor}
+                           onChange={() => setOptOutPolicy(valor)} style={{ marginTop: 3 }} />
+                    <span>
+                      <b style={{ display: 'block', fontWeight: 600, fontSize: 13 }}>{titulo}</b>
+                      <span className="ajuda" style={{ marginTop: 2, display: 'block' }}>{desc}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <button type="button" className="salvar" style={{ marginTop: 14, height: 40 }} onClick={salvarPolitica}>
+                Salvar política
+              </button>
+            </div>
+          </section>
+
+          <section className="secao">
+            <h2>Opt-outs registrados</h2>
+            <p className="resumo-secao">
+              Contatos que solicitaram não receber mensagens. Total: {optOutsTotal}.
+            </p>
+            <div className="cartaocfg" style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+                <div className="grupo" style={{ flex: 1 }}>
+                  <label className="label" htmlFor="optout-tel">Registrar opt-out manual</label>
+                  <input id="optout-tel" value={novoManualTelefone} onChange={(e) => setNovoManualTelefone(e.target.value)}
+                         placeholder="+55 11 99999-9999" />
+                </div>
+                <button type="button" className="salvar" style={{ height: 46 }} disabled={registrandoManual || !novoManualTelefone.trim()}
+                        onClick={registrarManual}>
+                  {registrandoManual ? 'Registrando…' : 'Registrar'}
+                </button>
+              </div>
+            </div>
+            <table className="tabela">
+              <thead>
+                <tr><th>Telefone</th><th>Data</th><th>Motivo</th><th>Origem</th><th>Registrado por</th><th>Status</th><th>Ações</th></tr>
+              </thead>
+              <tbody>
+                {optOuts.map((o) => (
+                  <tr key={o.id} style={o.status === 'removido' ? { opacity: 0.5 } : undefined}>
+                    <td>{o.telefone}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(o.criado_em).toLocaleDateString('pt-BR')}</td>
+                    <td>{o.motivo}</td>
+                    <td>{o.origem}</td>
+                    <td>{o.criado_por_tipo}</td>
+                    <td>
+                      <span className="selo" style={{
+                        borderColor: o.status === 'ativo' ? 'var(--red)' : 'var(--green)',
+                        color: o.status === 'ativo' ? 'var(--red)' : 'var(--green)',
+                      }}>{o.status === 'ativo' ? 'Ativo' : 'Removido'}</span>
+                    </td>
+                    <td>
+                      {o.status === 'ativo' && (
+                        optOutAlvo === o.id ? (
+                          <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                            <input value={motivoRemocao} onChange={(e) => setMotivoRemocao(e.target.value)}
+                                   placeholder="Motivo" style={{ width: 140, height: 28, fontSize: 11, padding: '0 6px' }} />
+                            <button type="button" className="ver-detalhes" style={{ fontWeight: 600, fontSize: 11 }}
+                                    disabled={removendoOptOut === o.id || !motivoRemocao.trim()}
+                                    onClick={() => removerOptOut(o.id)}>Confirmar</button>
+                            <button type="button" className="ver-detalhes" style={{ fontSize: 11 }}
+                                    onClick={() => { setOptOutAlvo(null); setMotivoRemocao(''); }}>Cancelar</button>
+                          </span>
+                        ) : (
+                          <button type="button" className="ver-detalhes" style={{ color: 'var(--red)' }}
+                                  onClick={() => setOptOutAlvo(o.id)}>Remover opt-out</button>
+                        )
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!optOuts.length && (
+                  <tr><td colSpan={7} style={{ color: 'var(--ink-3)' }}>Nenhum opt-out registrado.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+        </>
+      )}
+
+      {aba !== 'erros' && aba !== 'optouts' && (
         <button className="salvar" onClick={salvar} disabled={salvando}>
           {salvando ? 'Salvando…' : 'Salvar'}
         </button>

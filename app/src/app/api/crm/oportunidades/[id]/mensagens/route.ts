@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import { normalizarTelefone } from '@/lib/telefone';
-import { estaSuprimido } from '@/lib/supressao';
 import { envioPermitidoNoAmbiente } from '@/lib/ambienteEnvio';
+import { estaEmOptOut, podeSobrescreverOptOut, registrarOverride } from '@/lib/optout';
 import { carregarCanais, sessaoWahaDoCanal } from '@/lib/whatsappCanais';
 import { getOrCreateSession, sendText as wahaSendText } from '@/lib/waha';
 import { registrarTentativaContato } from '@/lib/historicoContato';
@@ -81,8 +81,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!telefone) return NextResponse.json({ erro: 'Oportunidade sem telefone válido.' }, { status: 400 });
   const permissao = await envioPermitidoNoAmbiente(ctx.admin, contaId, telefone);
   if (!permissao.ok) return NextResponse.json({ erro: permissao.motivo }, { status: 403 });
-  if (await estaSuprimido(ctx.admin, contaId, telefone)) {
-    return NextResponse.json({ erro: 'Contato em opt-out/supressão. O envio foi bloqueado.', suprimido: true }, { status: 403 });
+
+  const overrideOptOut = b.override_optout === true;
+  const motivoOverride = String(b.motivo_override ?? '').trim();
+
+  const optOut = await estaEmOptOut(ctx.admin, contaId, telefone);
+  if (optOut) {
+    if (overrideOptOut) {
+      const permissaoOverride = await podeSobrescreverOptOut(ctx.admin, contaId, ctx.perfil.id, ctx.perfil.papel);
+      if (!permissaoOverride.permitido) {
+        return NextResponse.json({ erro: permissaoOverride.motivo, suprimido: true, precisaOverride: true }, { status: 403 });
+      }
+      await registrarOverride(ctx.admin, {
+        contaId,
+        optOutId: optOut.id,
+        telefone,
+        autorizadoPor: ctx.perfil.id,
+        autorizadoPorTipo: ctx.perfil.papel === 'super_admin' ? 'super_admin' : 'operador_autorizado',
+        enviadoPor: ctx.perfil.id,
+        motivo: motivoOverride || 'Override via CRM',
+        oportunidadeId: ctx.oportunidade.id,
+      });
+    } else {
+      const permissaoOverride = await podeSobrescreverOptOut(ctx.admin, contaId, ctx.perfil.id, ctx.perfil.papel);
+      return NextResponse.json({
+        erro: `Este contato solicitou não receber mensagens em ${new Date(optOut.criado_em).toLocaleDateString('pt-BR')}.`,
+        suprimido: true,
+        optOut: { id: optOut.id, data: optOut.criado_em, motivo: optOut.motivo },
+        podeSobrescrever: permissaoOverride.permitido,
+        motivoPermissao: permissaoOverride.motivo,
+      }, { status: 403 });
+    }
   }
 
   const canais = await carregarCanais(ctx.admin, contaId);
