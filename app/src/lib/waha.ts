@@ -140,37 +140,26 @@ export async function registrarWebhookWaha(sessionName: string): Promise<boolean
   }
 
   const body = {
-    url,
-    events: ['message', 'message.any'],
-    hmac: { key: hmacKey },
+    config: {
+      webhooks: [{
+        url,
+        events: ['message', 'message.any'],
+        hmac: { key: hmacKey },
+      }],
+    },
   };
 
-  // Tenta PUT primeiro (atualiza webhook existente); se 404, cria com POST.
+  // WAHA chrome-2026.7.2: PUT /api/sessions/{name} atualiza a config inteira.
+  // PUT /api/sessions/{name}/webhook não existe nesta versão.
   try {
-    const put = await fetch(`${base()}/api/sessions/${sessionName}/webhook`, {
+    const put = await fetch(`${base()}/api/sessions/${sessionName}`, {
       method: 'PUT',
       headers: headers(),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15_000),
     });
     if (put.ok) return true;
-    if (put.status !== 404) {
-      console.error(`[waha] PUT webhook ${sessionName} retornou ${put.status}`);
-      return false;
-    }
-  } catch {
-    // PUT falhou — tenta POST
-  }
-
-  try {
-    const post = await fetch(`${base()}/api/sessions/${sessionName}/webhook`, {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (post.ok) return true;
-    console.error(`[waha] POST webhook ${sessionName} retornou ${post.status}`);
+    console.error(`[waha] PUT session ${sessionName} retornou ${put.status}`);
     return false;
   } catch (e) {
     console.error(`[waha] Falha ao registrar webhook ${sessionName}:`, e);
@@ -189,15 +178,17 @@ export async function verificarWebhookWaha(sessionName: string): Promise<{
   erro?: string;
 }> {
   try {
-    const r = await fetch(`${base()}/api/sessions/${sessionName}/webhook`, {
+    const r = await fetch(`${base()}/api/sessions/${sessionName}`, {
       headers: headers(),
       signal: AbortSignal.timeout(15_000),
     });
     if (!r.ok) return { registrado: false, erro: `HTTP ${r.status}` };
     const d = await r.json();
-    const url = d?.url ?? d?.webhookUrl ?? null;
-    const events = d?.events ?? null;
-    const hmacConfigurado = !!(d?.hmac?.key || d?.hmacKey);
+    const webhooks = d?.config?.webhooks ?? [];
+    const webhook = webhooks[0] ?? null;
+    const url = webhook?.url ?? null;
+    const events = webhook?.events ?? null;
+    const hmacConfigurado = !!(webhook?.hmac?.key);
     return {
       registrado: !!url && hmacConfigurado,
       url: url ?? undefined,
