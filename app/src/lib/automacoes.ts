@@ -259,7 +259,7 @@ export async function processarAutomacoes(
   admin: SupabaseClient,
   ctx: ContextoEvento,
 ): Promise<void> {
-  if (!ctx.oportunidadeId || !ctx.leadId) return; // sem oportunidade, sem automação
+  if (!ctx.oportunidadeId) return; // sem oportunidade, sem automação
 
   // Buscar oportunidade para saber funil + estágio atual
   const { data: oportunidade } = await admin
