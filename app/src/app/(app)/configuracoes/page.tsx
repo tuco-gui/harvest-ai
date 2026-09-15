@@ -35,7 +35,7 @@ export default async function Pagina() {
   }
 
   const admin = supabaseAdmin();
-  const [{ data: cred }, { data: envio }, { data: mensagensErro }, { data: leadsComErro }, { data: canais }, { data: conta }] = await Promise.all([
+  const [{ data: cred }, { data: envio }, { data: mensagensErro }, { data: leadsComErro }, { data: canais }, { data: conta }, { data: chatwootInbox }] = await Promise.all([
     admin.from('conta_credenciais').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('prospecta_mensagens')
@@ -48,6 +48,7 @@ export default async function Pagina() {
       .order('enriquecido_em', { ascending: false }).limit(50),
     carregarCanais(admin, perfil.conta_id).then((data) => ({ data })),
     admin.from('contas').select('modulos_habilitados').eq('id', perfil.conta_id).maybeSingle(),
+    admin.from('chatwoot_inboxes').select('chatwoot_account_id').eq('conta_id', perfil.conta_id).limit(1).maybeSingle(),
   ]);
 
   const erros = [
@@ -74,6 +75,7 @@ export default async function Pagina() {
 
   return (
     <Configuracoes
+      chatwootAccountId={chatwootInbox?.chatwoot_account_id ?? null}
       temSerpapi={!!cred?.serpapi_key}
       evolutionUrl={cred?.evolution_url ?? ''}
       evolutionInstancia={cred?.evolution_instancia ?? ''}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PROVEDORES } from '@/lib/ia';
+import CanaisChatwoot from './CanaisChatwoot';
 
 type ErroMensagem = { tipo: string; empresa: string; erro: string; quando: string };
 
@@ -18,6 +19,7 @@ type Canal = {
 };
 
 type Props = {
+  chatwootAccountId: number | null;
   temSerpapi: boolean;
   evolutionUrl: string;
   evolutionInstancia: string;
@@ -507,6 +509,18 @@ export default function Configuracoes(p: Props) {
                   </div>
                 );
               })()}
+            </div>
+          </section>
+
+          <section className="secao">
+            <h2>Canais de atendimento (Chatwoot)</h2>
+            <p className="resumo-secao">
+              Chatwoot é a fonte de verdade das conversas. Vincule inboxes do Chatwoot para que
+              a Harvest visualize e registre contexto. Uma conta pode ter múltiplos inboxes
+              simultaneamente (WhatsApp, Instagram, Messenger, Telegram).
+            </p>
+            <div className="cartaocfg">
+              <CanaisChatwoot chatwootAccountId={p.chatwootAccountId} />
             </div>
           </section>
 

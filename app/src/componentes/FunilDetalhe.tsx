@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import AutomacaoEstagio from './AutomacaoEstagio';
 
 type Funil = { id: number; nome: string; ativo: boolean; criado_em: string };
 type Estagio = {
@@ -272,10 +273,10 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais }: { fu
                 <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>%</span>
               </div>
 
-              {/* Automations area (placeholder) */}
+              {/* Automations config */}
               <div style={{ padding: '8px 12px', borderTop: '1px solid var(--rule)', flex: 1, minHeight: 80 }}>
                 <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>Automações</div>
-                <div style={{ fontSize: 11, color: 'var(--ink-3)', fontStyle: 'italic' }}>Nenhuma automação</div>
+                <AutomacaoEstagio funilId={funil.id} estagio={e} estagios={estagios} />
               </div>
 
               {/* Actions */}
@@ -358,7 +359,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais }: { fu
               </div>
               <div style={{ padding: '8px 12px', borderTop: '1px solid var(--rule)', flex: 1, minHeight: 60 }}>
                 <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 6, fontWeight: 600 }}>Automações</div>
-                <div style={{ fontSize: 11, color: 'var(--ink-3)', fontStyle: 'italic' }}>Nenhuma automação</div>
+                <AutomacaoEstagio funilId={funil.id} estagio={e} estagios={estagios} />
               </div>
               <div style={{ padding: '8px 12px', borderTop: '1px solid var(--rule)', display: 'flex', gap: 6 }}>
                 <button type="button" onClick={() => duplicarEstagio(e)}
