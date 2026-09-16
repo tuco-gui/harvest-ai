@@ -362,16 +362,20 @@ export async function POST(req: Request) {
     }
   }
 
-  // Buscar probabilidade do estágio no funil (se houver)
+  // Buscar probabilidade + ID do estágio no funil (se houver)
   let probabilidade = 10;
+  let funilEstagioId: number | null = null;
   if (funilIdCrm && estagioInicial) {
     const { data: estFunil } = await admin
       .from('funil_estagios')
-      .select('probabilidade')
+      .select('id, probabilidade')
       .eq('funil_id', funilIdCrm)
       .ilike('nome', estagioInicial)
       .maybeSingle();
-    if (estFunil) probabilidade = estFunil.probabilidade;
+    if (estFunil) {
+      probabilidade = estFunil.probabilidade;
+      funilEstagioId = estFunil.id;
+    }
   }
 
   // Buscar oportunidade existente para este lead
@@ -386,7 +390,7 @@ export async function POST(req: Request) {
     // Se está em 'novo', avança para o estágio inicial da campanha
     if (opExistente.estagio === 'novo') {
       await admin.from('oportunidades')
-        .update({ estagio: estagioInicial, probabilidade, atualizado_em: agora })
+        .update({ estagio: estagioInicial, funil_estagio_id: funilEstagioId, probabilidade, atualizado_em: agora })
         .eq('id', opExistente.id);
     }
   } else {
@@ -399,6 +403,7 @@ export async function POST(req: Request) {
       telefone,
       origem: 'prospeccao',
       estagio: estagioInicial,
+      funil_estagio_id: funilEstagioId,
       probabilidade,
       campanha_id: campanhaIdNum,
       funil_id: funilIdCrm,

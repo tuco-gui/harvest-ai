@@ -126,6 +126,16 @@ class SupabaseCrmBackend implements CrmBackend {
   async atualizar(contaId: string, id: number, patch: Partial<OportunidadeInput>): Promise<Oportunidade | null> {
     const limpo: Record<string, unknown> = { ...patch, atualizado_em: new Date().toISOString() };
     if (patch.estagio && !estagioValido(patch.estagio)) delete limpo.estagio;
+    // Sync funil_estagio_id when estagio changes (so automations can match)
+    if (patch.estagio && limpo.estagio && !patch.funil_estagio_id) {
+      const { data: estFunil } = await supabaseAdmin()
+        .from('funil_estagios')
+        .select('id')
+        .ilike('nome', String(limpo.estagio))
+        .limit(1)
+        .maybeSingle();
+      if (estFunil) limpo.funil_estagio_id = estFunil.id;
+    }
     const { data, error } = await supabaseAdmin()
       .from('oportunidades')
       .update(limpo)
