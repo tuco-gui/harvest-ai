@@ -387,11 +387,20 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (opExistente) {
-    // Se está em 'novo', avança para o estágio inicial da campanha
-    if (opExistente.estagio === 'novo') {
-      await admin.from('oportunidades')
-        .update({ estagio: estagioInicial, funil_estagio_id: funilEstagioId, probabilidade, atualizado_em: agora })
-        .eq('id', opExistente.id);
+    // Emitir evento — automações decidem movimentação do funil.
+    try {
+      const { emitirEvento } = await import('@/lib/eventos');
+      await emitirEvento(admin, {
+        tipo: 'mensagem_enviada',
+        contaId: perfil.conta_id!,
+        oportunidadeId: opExistente.id,
+        leadId: leadPersistido.id,
+        telefone,
+        mensagem: null,
+        agora,
+      });
+    } catch (e) {
+      console.error('[disparo] erro ao emitir mensagem_enviada:', e);
     }
   } else {
     // Criar nova oportunidade

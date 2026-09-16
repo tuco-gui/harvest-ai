@@ -126,14 +126,18 @@ class SupabaseCrmBackend implements CrmBackend {
   async atualizar(contaId: string, id: number, patch: Partial<OportunidadeInput>): Promise<Oportunidade | null> {
     const limpo: Record<string, unknown> = { ...patch, atualizado_em: new Date().toISOString() };
     if (patch.estagio && !estagioValido(patch.estagio)) delete limpo.estagio;
-    // Sync funil_estagio_id when estagio changes (so automations can match)
+    // Sync funil_estagio_id when estagio changes — scope by funil_id (funil_estagios não tem conta_id)
     if (patch.estagio && limpo.estagio && !patch.funil_estagio_id) {
-      const { data: estFunil } = await supabaseAdmin()
-        .from('funil_estagios')
-        .select('id')
-        .ilike('nome', String(limpo.estagio))
-        .limit(1)
-        .maybeSingle();
+      let funilId = patch.funil_id ?? null;
+      // Fetch funil_id from the opportunity if not in patch
+      if (!funilId) {
+        const { data: opAtual } = await supabaseAdmin()
+          .from('oportunidades').select('funil_id').eq('id', id).eq('conta_id', contaId).maybeSingle();
+        funilId = opAtual?.funil_id ?? null;
+      }
+      let query = supabaseAdmin().from('funil_estagios').select('id').ilike('nome', String(limpo.estagio));
+      if (funilId) query = query.eq('funil_id', funilId);
+      const { data: estFunil } = await query.limit(1).maybeSingle();
       if (estFunil) limpo.funil_estagio_id = estFunil.id;
     }
     const { data, error } = await supabaseAdmin()

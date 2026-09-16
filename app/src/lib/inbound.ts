@@ -3,7 +3,7 @@ import type { EventoInboundNormalizado } from './inboundTipos';
 import { classificarMensagem } from './optoutResposta';
 import { suprimirTelefone } from './supressao';
 import { registrarOptOut } from './optout';
-import { processarAutomacoes } from './automacoes';
+import { emitirEvento } from './eventos';
 
 /**
  * Pipeline de inbound (Fase 3B → P1 refatorado).
@@ -162,57 +162,55 @@ export async function processarEventoInbound(
     }
   }
 
-  // --- PROCESSAR AUTOMAÇÕES ---
+  // --- EMITIR EVENTO ---
   // Toda movimentação CRM (mover estágio, encerrar, atribuir, etiqueta, etc.)
-  // acontece aqui, via regras configuráveis pelo admin.
-  // O pipeline NÃO movimenta o funil direto — isso é responsabilidade
-  // das automações (lib/automacoes.ts).
+  // acontece via automações (lib/automacoes.ts) despachadas pelo dispatcher.
+  // O pipeline NÃO movimenta o funil direto.
   try {
     let oportunidadeId: number | null = null;
-    let estagioAtual: string | null = null;
 
     if (leadId) {
       const { data: op } = await admin
         .from('oportunidades')
-        .select('id, estagio')
+        .select('id')
         .eq('conta_id', contaId)
         .eq('lead_id', leadId)
         .order('criado_em', { ascending: false })
         .limit(1)
         .maybeSingle();
       oportunidadeId = op?.id ?? null;
-      estagioAtual = op?.estagio ?? null;
     }
     if (!oportunidadeId && evento.telefone) {
       const { data: op } = await admin
         .from('oportunidades')
-        .select('id, estagio')
+        .select('id')
         .eq('conta_id', contaId)
         .eq('telefone', evento.telefone)
         .order('criado_em', { ascending: false })
         .limit(1)
         .maybeSingle();
       oportunidadeId = op?.id ?? null;
-      estagioAtual = op?.estagio ?? null;
     }
 
-    if (oportunidadeId) {
-      await processarAutomacoes(admin, {
-        contaId,
-        telefone: evento.telefone,
-        mensagem: evento.mensagem,
-        leadId,
-        campanhaId,
-        oportunidadeId,
-        estagioAtual,
-        classificacao,
-        agora,
-        eventoInboundId: inserido.id,
-      });
-    }
+    // Mapear classificação para tipo de evento
+    let tipoEvento: 'mensagem_recebida' | 'resposta_positiva' | 'resposta_negativa' | 'opt_out' = 'mensagem_recebida';
+    if (classificacao === 'negativa') tipoEvento = 'resposta_negativa';
+    else if (classificacao === 'optout') tipoEvento = 'opt_out';
+    else tipoEvento = 'resposta_positiva';
+
+    await emitirEvento(admin, {
+      tipo: tipoEvento,
+      contaId,
+      oportunidadeId,
+      leadId,
+      telefone: evento.telefone,
+      mensagem: evento.mensagem,
+      agora,
+      eventoInboundId: inserido.id,
+    });
   } catch (e) {
     // Falha segura: erro em automação NÃO bloqueia o inbound.
-    console.error(`[inbound] erro ao processar automações tel=${evento.telefone}:`, e);
+    console.error(`[inbound] erro ao emitir evento tel=${evento.telefone}:`, e);
   }
 
   return { ok: true, eventoId: inserido.id, leadId, campanhaId };

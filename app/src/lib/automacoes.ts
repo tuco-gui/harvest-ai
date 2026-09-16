@@ -16,6 +16,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type GatilhoAutomacao =
   | 'mensagem_recebida'
+  | 'mensagem_enviada'
   | 'resposta_positiva'
   | 'resposta_negativa'
   | 'opt_out'
@@ -104,6 +105,10 @@ function correspondeGatilho(auto: Automacao, ctx: ContextoEvento): boolean {
   switch (auto.gatilho) {
     case 'mensagem_recebida':
       // Dispara para qualquer mensagem recebida (resposta, negativa ou opt-out)
+      return true;
+
+    case 'mensagem_enviada':
+      // Dispara quando uma mensagem é enviada do CRM (outbound)
       return true;
 
     case 'resposta_positiva':

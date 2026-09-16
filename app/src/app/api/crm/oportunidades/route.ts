@@ -100,16 +100,13 @@ export async function POST(req: Request) {
     : 5;
 
   // Resolver funil_id + funil_estagio_id a partir do nome do estágio.
+  // funil_estagios não tem conta_id — escopo por funil_id quando disponível.
   const estagioStr = String(b.estagio ?? 'novo').trim();
-  let funilId: number | null = null;
+  let funilId: number | null = b.funil_id ? Number(b.funil_id) : null;
   let funilEstagioId: number | null = null;
-  const { data: estagioDb } = await admin
-    .from('funil_estagios')
-    .select('id, funil_id, nome')
-    .eq('conta_id', perfil.conta_id)
-    .ilike('nome', estagioStr)
-    .limit(1)
-    .maybeSingle();
+  let query = admin.from('funil_estagios').select('id, funil_id, nome').ilike('nome', estagioStr);
+  if (funilId) query = query.eq('funil_id', funilId);
+  const { data: estagioDb } = await query.limit(1).maybeSingle();
   if (estagioDb) {
     funilEstagioId = estagioDb.id;
     funilId = estagioDb.funil_id;

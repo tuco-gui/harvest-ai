@@ -172,14 +172,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   });
   if (!entregue) return NextResponse.json({ erro: falha ?? 'Envio não confirmado.' }, { status: 502 });
 
-  if (ctx.oportunidade.estagio === 'novo') {
-    // Lookup funil_estagio_id for 'contatado'
-    const { data: estFunil } = await ctx.admin.from('funil_estagios')
-      .select('id').ilike('nome', 'contatado').limit(1).maybeSingle();
-    await ctx.admin.from('oportunidades').update({
-      estagio: 'contatado', funil_estagio_id: estFunil?.id ?? null,
-      probabilidade: 10, atualizado_em: new Date().toISOString(),
-    }).eq('id', ctx.oportunidade.id).eq('conta_id', contaId);
+  // Emitir evento de mensagem enviada — automações decidem movimentação do funil.
+  try {
+    const { emitirEvento } = await import('@/lib/eventos');
+    await emitirEvento(admin, {
+      tipo: 'mensagem_enviada',
+      contaId,
+      oportunidadeId: ctx.oportunidade.id,
+      leadId: ctx.oportunidade.lead_id,
+      telefone,
+      mensagem: texto,
+      agora: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error('[mensagens] erro ao emitir mensagem_enviada:', e);
   }
+
   return NextResponse.json({ ok: true, canal: { id: canal.id, nome: canal.nome } });
 }
