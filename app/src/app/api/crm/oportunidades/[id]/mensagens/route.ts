@@ -175,7 +175,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // Emitir evento de mensagem enviada — automações decidem movimentação do funil.
   try {
     const { emitirEvento } = await import('@/lib/eventos');
-    await emitirEvento(admin, {
+    await emitirEvento(ctx.admin, {
       tipo: 'mensagem_enviada',
       contaId,
       oportunidadeId: ctx.oportunidade.id,
