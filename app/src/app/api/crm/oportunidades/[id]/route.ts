@@ -6,6 +6,30 @@ import { estagioValido, probabilidadeEstagio } from '@/lib/crmStages';
 import { podeAcessarOportunidade, isAdmin } from '@/lib/crmControleAcesso';
 
 /**
+ * GET /api/crm/oportunidades/[id]
+ * Retorna oportunidade individual com dados completos (inclui pointOfContact do Twenty).
+ */
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const perfil = await perfilAtual();
+  if (!perfil) return NextResponse.json({ erro: 'Sessão expirada.' }, { status: 401 });
+  if (!perfil.conta_id) return NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 });
+  if (!(await perfilTemModulo(supabaseAdmin(), perfil, 'crm'))) {
+    return NextResponse.json({ erro: 'CRM não habilitado para esta conta.' }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const backend = await crmBackend(perfil.conta_id);
+
+  try {
+    const op = await backend.buscar(perfil.conta_id, id as any);
+    if (!op) return NextResponse.json({ erro: 'Oportunidade não encontrada.' }, { status: 404 });
+    return NextResponse.json({ oportunidade: op });
+  } catch (e: any) {
+    return NextResponse.json({ erro: e?.message ?? 'Não consegui buscar.' }, { status: 400 });
+  }
+}
+
+/**
  * DELETE /api/crm/oportunidades/[id]
  * Remove a oportunidade. Não deleta conversas do Chatwoot (externo).
  * - admin/super_admin: pode deletar qualquer oportunidade da conta

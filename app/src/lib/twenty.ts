@@ -20,7 +20,7 @@ import { supabaseAdmin, perfilAtual } from './supabase/server';
 import { ESTAGIO_PADRAO, estagioValido, estagioParaTwentyStage, twentyStageParaEstagio } from './crmStages';
 
 export type Oportunidade = {
-  id: number;
+  id: number | string;
   conta_id: string;
   lead_id: number | null;
   empresa: string;
@@ -65,7 +65,7 @@ export type OportunidadeInput = {
 
 export interface CrmBackend {
   listar(contaId: string): Promise<Oportunidade[]>;
-  buscar(contaId: string, id: number): Promise<Oportunidade | null>;
+  buscar(contaId: string, id: number | string): Promise<Oportunidade | null>;
   criar(contaId: string, input: OportunidadeInput): Promise<Oportunidade>;
   atualizar(contaId: string, id: number, patch: Partial<OportunidadeInput>): Promise<Oportunidade | null>;
   buscarOwners(contaId: string): Promise<{ id: string; nome: string }[]>;
@@ -82,7 +82,7 @@ class SupabaseCrmBackend implements CrmBackend {
     return (data ?? []) as Oportunidade[];
   }
 
-  async buscar(contaId: string, id: number): Promise<Oportunidade | null> {
+  async buscar(contaId: string, id: number | string): Promise<Oportunidade | null> {
     const { data } = await supabaseAdmin()
       .from('oportunidades')
       .select('*')
@@ -222,7 +222,7 @@ function twentyParaOportunidade(contaId: string, o: TwentyOpportunity): Oportuni
     ? [o.pointOfContact.name.firstName, o.pointOfContact.name.lastName].filter(Boolean).join(' ')
     : '';
   return {
-    id: Number(o.id) || 0,
+    id: o.id ?? 0,
     conta_id: contaId,
     lead_id: null,
     empresa: o.name ?? '',
@@ -330,7 +330,7 @@ class TwentyCrmBackend implements CrmBackend {
     return dados.map((o) => twentyParaOportunidade(contaId, o));
   }
 
-  async buscar(contaId: string, id: number): Promise<Oportunidade | null> {
+  async buscar(contaId: string, id: number | string): Promise<Oportunidade | null> {
     const json = await this.request(`/opportunities/${id}`);
     const dado: TwentyOpportunity | undefined = json?.data?.opportunity;
     if (!dado) return null;
