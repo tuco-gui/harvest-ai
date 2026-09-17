@@ -327,13 +327,39 @@ class TwentyCrmBackend implements CrmBackend {
       if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) break;
       cursor = pageInfo.endCursor;
     }
-    return dados.map((o) => twentyParaOportunidade(contaId, o));
+    // Batch-fetch pointOfContact data for all opportunities (Twenty REST doesn't nest it)
+    const pocIds = [...new Set(dados.map((o) => o.pointOfContactId).filter(Boolean) as string[])];
+    const pocMap = new Map<string, any>();
+    await Promise.all(
+      pocIds.map(async (id) => {
+        try {
+          const json = await this.request(`/people/${id}`);
+          const person = json?.data?.person;
+          if (person) pocMap.set(id, person);
+        } catch { /* ignore */ }
+      })
+    );
+    return dados.map((o) => {
+      if (o.pointOfContactId && !o.pointOfContact && pocMap.has(o.pointOfContactId)) {
+        o.pointOfContact = pocMap.get(o.pointOfContactId);
+      }
+      return twentyParaOportunidade(contaId, o);
+    });
   }
 
   async buscar(contaId: string, id: number): Promise<Oportunidade | null> {
     const json = await this.request(`/opportunities/${id}`);
     const dado: TwentyOpportunity | undefined = json?.data?.opportunity;
-    return dado ? twentyParaOportunidade(contaId, dado) : null;
+    if (!dado) return null;
+    // Fetch pointOfContact if present (Twenty REST doesn't nest it)
+    if (dado.pointOfContactId && !dado.pointOfContact) {
+      try {
+        const pocJson = await this.request(`/people/${dado.pointOfContactId}`);
+        const person = pocJson?.data?.person;
+        if (person) dado.pointOfContact = person;
+      } catch { /* ignore */ }
+    }
+    return twentyParaOportunidade(contaId, dado);
   }
 
   /** Busca Company por nome exato; cria se não existir. */
