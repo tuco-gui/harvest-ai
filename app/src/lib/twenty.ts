@@ -327,24 +327,7 @@ class TwentyCrmBackend implements CrmBackend {
       if (!pageInfo?.hasNextPage || !pageInfo?.endCursor) break;
       cursor = pageInfo.endCursor;
     }
-    // Batch-fetch pointOfContact data for all opportunities (Twenty REST doesn't nest it)
-    const pocIds = [...new Set(dados.map((o) => o.pointOfContactId).filter(Boolean) as string[])];
-    const pocMap = new Map<string, any>();
-    await Promise.all(
-      pocIds.map(async (id) => {
-        try {
-          const json = await this.request(`/people/${id}`);
-          const person = json?.data?.person;
-          if (person) pocMap.set(id, person);
-        } catch { /* ignore */ }
-      })
-    );
-    return dados.map((o) => {
-      if (o.pointOfContactId && !o.pointOfContact && pocMap.has(o.pointOfContactId)) {
-        o.pointOfContact = pocMap.get(o.pointOfContactId);
-      }
-      return twentyParaOportunidade(contaId, o);
-    });
+    return dados.map((o) => twentyParaOportunidade(contaId, o));
   }
 
   async buscar(contaId: string, id: number): Promise<Oportunidade | null> {

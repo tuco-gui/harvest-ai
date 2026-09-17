@@ -156,13 +156,15 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
   async function abrirFicha(op: Oportunidade) {
     setFicha(op); setAba('conversa'); setErro(null); setCarregandoContexto(true);
-    const [mr, ar] = await Promise.all([
+    const [mr, ar, fullR] = await Promise.all([
       fetch(`/api/crm/oportunidades/${op.id}/mensagens`),
       fetch(`/api/crm/oportunidades/${op.id}/atividades`),
+      fetch(`/api/crm/oportunidades/${op.id}`),
     ]);
-    const [md, ad] = await Promise.all([json(mr), json(ar)]);
+    const [md, ad, fd] = await Promise.all([json(mr), json(ar), json(fullR)]);
     setMensagens(mr.ok ? md.mensagens ?? [] : []);
     setAtividades(ar.ok ? ad.atividades ?? [] : []);
+    if (fullR.ok && fd.oportunidade) setFicha(fd.oportunidade);
     if (!mr.ok || !ar.ok) setErro(md.erro ?? ad.erro ?? 'Não consegui carregar todo o histórico.');
     setCarregandoContexto(false);
   }
