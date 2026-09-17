@@ -9,6 +9,8 @@ type Automacao = {
   gatilho: string;
   acao: string;
   acao_parametros: Record<string, unknown>;
+  estagio_id?: number;
+  motor?: 'harvest' | 'twenty' | 'chatwoot';
 };
 
 type Estagio = {
@@ -18,6 +20,7 @@ type Estagio = {
 
 const GATILHOS: Record<string, string> = {
   mensagem_recebida: 'Mensagem recebida',
+  mensagem_enviada: 'Mensagem enviada',
   resposta_positiva: 'Resposta positiva',
   resposta_negativa: 'Resposta negativa',
   opt_out: 'Opt-out',
@@ -36,8 +39,14 @@ const ACOES: Record<string, string> = {
   encerrar_oportunidade: 'Encerrar oportunidade',
 };
 
+const MOTORES: Record<string, { label: string; color: string }> = {
+  harvest: { label: 'Harvest (Legacy)', color: '#f59e0b' },
+  twenty: { label: 'Twenty', color: '#3b82f6' },
+  chatwoot: { label: 'Chatwoot', color: '#8b5cf6' },
+};
+
 const GATILHOS_DEFAULT = [
-  'mensagem_recebida', 'resposta_positiva', 'resposta_negativa', 'opt_out',
+  'mensagem_recebida', 'mensagem_enviada', 'resposta_positiva', 'resposta_negativa', 'opt_out',
 ];
 
 const ACOES_DEFAULT = [
@@ -52,12 +61,14 @@ type Props = {
 
 /**
  * Configuração de automações por estágio do funil.
- * Carrega, cria, ativa/desativa e remove automações inline.
+ * Carrega, cria, edita, duplica, ativa/desativa e remove automações.
+ * Mostra motor (Harvest/Twenty/Chatwoot) quando disponível.
  */
 export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) {
   const [automacoes, setAutomacoes] = useState<Automacao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [criando, setCriando] = useState(false);
+  const [editando, setEditando] = useState<number | null>(null);
   const [novoGatilho, setNovoGatilho] = useState('mensagem_recebida');
   const [novaAcao, setNovaAcao] = useState('mover_estagio');
   const [novoEstagioDestino, setNovoEstagioDestino] = useState<number>(0);
@@ -70,11 +81,7 @@ export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) 
     try {
       const r = await fetch(`/api/funis/${funilId}/automacoes`);
       const d = await r.json();
-      const doEstagio = (d.automacoes ?? []).filter((a: Automacao & { estagio_id?: number }) =>
-        // Filtrar por estágio via estagio_id ou por nome do gatilho/ação
-        true // já vem filtrado do backend
-      );
-      setAutomacoes(doEstagio);
+      setAutomacoes(d.automacoes ?? []);
     } catch { /* ok */ }
     setCarregando(false);
   }, [funilId]);
@@ -117,6 +124,66 @@ export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) 
     setSalvando(false);
   }
 
+  async function salvarEdicao(id: number) {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const body: Record<string, unknown> = {
+        nome: novoNome.trim(),
+        gatilho: novoGatilho,
+        acao: novaAcao,
+      };
+      if (novaAcao === 'mover_estagio' && novoEstagioDestino) {
+        body.acao_parametros = { estagio_destino_id: novoEstagioDestino };
+      }
+      const r = await fetch(`/api/funis/${funilId}/automacoes/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) {
+        setEditando(null);
+        setNovoNome('');
+        await carregar();
+      } else {
+        const d = await r.json();
+        setErro(d.erro ?? 'Erro ao salvar.');
+      }
+    } catch {
+      setErro('Falha ao salvar.');
+    }
+    setSalvando(false);
+  }
+
+  async function duplicar(a: Automacao) {
+    setSalvando(true);
+    try {
+      const body: Record<string, unknown> = {
+        nome: `${a.nome} (cópia)`,
+        gatilho: a.gatilho,
+        acao: a.acao,
+        estagio_id: a.estagio_id ?? estagio.id,
+        acao_parametros: a.acao_parametros,
+      };
+      await fetch(`/api/funis/${funilId}/automacoes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      await carregar();
+    } catch { /* ok */ }
+    setSalvando(false);
+  }
+
+  function iniciarEdicao(a: Automacao) {
+    setEditando(a.id);
+    setNovoNome(a.nome);
+    setNovoGatilho(a.gatilho);
+    setNovaAcao(a.acao);
+    setNovoEstagioDestino((a.acao_parametros?.estagio_destino_id as number) ?? 0);
+    setCriando(false);
+  }
+
   async function toggleAtivo(id: number, ativoAtual: boolean) {
     setSalvando(true);
     try {
@@ -138,6 +205,20 @@ export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) 
       await carregar();
     } catch { /* ok */ }
     setSalvando(false);
+  }
+
+  function motorBadge(a: Automacao) {
+    const m = MOTORES[a.motor ?? 'harvest'];
+    if (!m) return null;
+    return (
+      <span style={{
+        fontSize: 9, padding: '1px 4px', borderRadius: 3,
+        background: `${m.color}15`, color: m.color, fontWeight: 600,
+        border: `1px solid ${m.color}30`,
+      }}>
+        {m.label}
+      </span>
+    );
   }
 
   if (carregando) {
@@ -179,10 +260,33 @@ export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) 
                 }}>
                   {a.nome}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--ink-3)', opacity: a.ativo ? 1 : 0.5 }}>
+                <div style={{ fontSize: 10, color: 'var(--ink-3)', opacity: a.ativo ? 1 : 0.5, display: 'flex', alignItems: 'center', gap: 4 }}>
                   {GATILHOS[a.gatilho] ?? a.gatilho} → {ACOES[a.acao] ?? a.acao}
+                  {motorBadge(a)}
                 </div>
               </div>
+              <button
+                onClick={() => iniciarEdicao(a)}
+                disabled={salvando}
+                style={{
+                  fontSize: 10, color: 'var(--accent)', background: 'none',
+                  border: 'none', cursor: 'pointer', padding: '2px 4px', flexShrink: 0,
+                }}
+                title="Editar"
+              >
+                ✎
+              </button>
+              <button
+                onClick={() => duplicar(a)}
+                disabled={salvando}
+                style={{
+                  fontSize: 10, color: 'var(--ink-3)', background: 'none',
+                  border: 'none', cursor: 'pointer', padding: '2px 4px', flexShrink: 0,
+                }}
+                title="Duplicar"
+              >
+                ⧉
+              </button>
               <button
                 onClick={() => excluir(a.id)}
                 disabled={salvando}
@@ -205,8 +309,8 @@ export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) 
         </div>
       )}
 
-      {/* Criar nova */}
-      {!criando && (
+      {/* Criar nova / Editar */}
+      {!criando && !editando && (
         <button
           onClick={() => setCriando(true)}
           style={{
@@ -218,7 +322,7 @@ export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) 
         </button>
       )}
 
-      {criando && (
+      {(criando || editando) && (
         <div style={{
           marginTop: 6, padding: 6, borderRadius: 4,
           border: '1px solid var(--rule)', background: 'var(--sunken)',
@@ -267,7 +371,7 @@ export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) 
           )}
           <div style={{ display: 'flex', gap: 4 }}>
             <button
-              onClick={criar}
+              onClick={editando ? () => salvarEdicao(editando) : criar}
               disabled={salvando || !novoNome.trim()}
               style={{
                 flex: 1, fontSize: 11, fontWeight: 600, padding: '4px 8px',
@@ -276,10 +380,10 @@ export default function AutomacaoEstagio({ funilId, estagio, estagios }: Props) 
                 opacity: salvando || !novoNome.trim() ? 0.5 : 1,
               }}
             >
-              {salvando ? '…' : 'Criar'}
+              {salvando ? '…' : editando ? 'Salvar' : 'Criar'}
             </button>
             <button
-              onClick={() => { setCriando(false); setErro(null); }}
+              onClick={() => { setCriando(false); setEditando(null); setErro(null); setNovoNome(''); }}
               style={{
                 fontSize: 11, padding: '4px 8px',
                 border: '1px solid var(--rule)', borderRadius: 3,

@@ -77,6 +77,14 @@ export async function POST(req: Request) {
     if (!campanha) return NextResponse.json({ erro: 'Campanha não pertence a esta conta.' }, { status: 400 });
   }
 
+  // Validar ownership do funil (funil_estagios não tem conta_id — validar via funis)
+  const funilIdRequest = b.funil_id ? Number(b.funil_id) : null;
+  if (funilIdRequest) {
+    const { data: funilExiste } = await admin.from('funis').select('id')
+      .eq('id', funilIdRequest).eq('conta_id', perfil.conta_id).maybeSingle();
+    if (!funilExiste) return NextResponse.json({ erro: 'Funil não pertence a esta conta.' }, { status: 400 });
+  }
+
   const owner = Object.prototype.hasOwnProperty.call(b, 'owner_id')
     ? (b.owner_id || null)
     : await ownerAtual();

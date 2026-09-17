@@ -2,16 +2,18 @@
  * Dispatcher de eventos do Harvest (thin adapter).
  *
  * Este módulo é o ÚNICO ponto de entrada para emitir eventos de negócio.
- * Ele NÃO é um motor de automações — apenas despacha para:
- *   - Chatwoot (via webhook/adapter) para eventos de conversa
- *   - Twenty (via backend) para movimentação de pipeline
- *   - processarAutomacoes (lib/automacoes.ts) para regras configuráveis
+ * Ele NÃO é um motor de automações — apenas despacha para os motores nativos:
+ *
+ *   - Twenty (via crmBackend) → movimentação de pipeline (estágio)
+ *   - Chatwoot (via webhook/adapter) → automações conversacionais
+ *   - processarAutomacoes → LEGACY fallback (scheduled for removal)
  *
  * Regras:
  *   - NÃO criar novo motor de eventos, fila, state machine ou tabela eventos_harvest
  *   - NÃO duplicar inbound: Chatwoot é source of truth de conversas
  *   - Todo lookup em funil_estagios é por funil_id (tabela não tem conta_id)
  *   - Falha segura: erro aqui NÃO bloqueia a operação que originou o evento
+ *   - NÃO adicionar novos gatilhos em processarAutomacoes (LEGACY)
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { processarAutomacoes } from './automacoes';
@@ -38,11 +40,10 @@ export type EventoNegocio = {
 /**
  * Emite um evento de negócio e despacha para os handlers apropriados.
  *
- * Para eventos INBOUND (mensagem_recebida, resposta_positiva, etc.):
- *   → processarAutomacoes (regras configuráveis do funil)
- *
- * Para eventos OUTBOUND (mensagem_enviada):
- *   → processarAutomacoes (regras com gatilho mensagem_enviada)
+ * Fluxo:
+ *   1. Despacha para processarAutomacoes (LEGACY — usa crmBackend para Twenty)
+ *   2. FUTURO: despachar diretamente para Twenty/Chatwoot adapters
+ *      quando os motores nativos estiverem configurados
  *
  * O dispatcher NÃO movimenta o funil direto — ele apenas despacha.
  * Quem decide a movimentação são as automações registradas.
@@ -58,7 +59,9 @@ export async function emitirEvento(
   if (evento.tipo === 'resposta_negativa') classificacao = 'negativa';
   else if (evento.tipo === 'opt_out') classificacao = 'optout';
 
-  // Despachar para automações (regras configuráveis do funil)
+  // DESPATCH LEGACY: processarAutomacoes (usa crmBackend internamente)
+  // TODO: quando Twenty workflows estiverem configurados via UI,
+  // despachar diretamente para o adapter nativo e remover esta chamada.
   try {
     await processarAutomacoes(admin, {
       contaId: evento.contaId,

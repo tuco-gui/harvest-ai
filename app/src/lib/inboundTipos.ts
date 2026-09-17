@@ -7,7 +7,7 @@
  * a lógica é uma só.
  */
 
-export type ProviderInbound = 'waha' | 'evolution';
+export type ProviderInbound = 'waha' | 'evolution' | 'chatwoot';
 
 export type TipoMensagemInbound = 'texto' | 'midia' | 'outro';
 

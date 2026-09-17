@@ -57,7 +57,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!nome) return NextResponse.json({ erro: 'Falta o nome da automação.' }, { status: 400 });
 
   const gatilhosValidos = [
-    'mensagem_recebida', 'resposta_positiva', 'resposta_negativa',
+    'mensagem_recebida', 'mensagem_enviada', 'resposta_positiva', 'resposta_negativa',
     'opt_out', 'oportunidade_entrando_estagio', 'oportunidade_saindo_estagio',
   ];
   const gatilho = String(b.gatilho ?? '');

@@ -1,15 +1,21 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { crmBackend } from './twenty';
 
 /**
- * Motor de automações do funil (P1) — avaliador e executor de regras.
+ * Motor de automações do funil — LEGACY, scheduled for removal.
+ *
+ * IMPORTANTE: Este motor está sendo substituído por:
+ * - Twenty Workflows (CRM pipeline automations)
+ * - Chatwoot Automations (conversational automations)
+ *
+ * NÃO adicionar novos gatilhos ou ações aqui.
+ * Novas automações devem usar os motores nativos.
  *
  * Princípios:
- *  - Extensível: novos triggers e actions são adicionados como novos valores
- *    de CHECK na tabela, sem alterar este módulo (exceto para novos handlers).
  *  - Idempotente: reprocessar o mesmo evento não executa a mesma automação
  *    duas vezes (checagem via automacao_execucoes).
  *  - Seguro: falha em uma automação não bloqueia as outras nem o inbound.
- *  - Sem dependência de I/O externo: este módulo só interage com o banco.
+ *  - Usa crmBackend() para movimentação — que pode ser Twenty ou Supabase.
  */
 
 // ---------- Tipos ----------
@@ -153,15 +159,26 @@ async function executarAcao(
           .maybeSingle();
         if (!estDestino) return { ok: false, erro: `Estágio destino ${destinoId} não encontrado` };
 
-        await admin.from('oportunidades')
-          .update({
+        // Usar crmBackend() — pode ser Twenty ou Supabase dependendo da conta
+        try {
+          const backend = await crmBackend(ctx.contaId);
+          await backend.atualizar(ctx.contaId, ctx.oportunidadeId, {
             estagio: estDestino.nome,
             probabilidade: estDestino.probabilidade,
-            funil_estagio_id: destinoId,
-            atualizado_em: ctx.agora,
-          })
-          .eq('id', ctx.oportunidadeId)
-          .eq('conta_id', ctx.contaId);
+          });
+        } catch (e) {
+          // Fallback: atualizar diretamente no Supabase se backend falhar
+          console.warn(`[automacao] crmBackend falhou, usando Supabase direto:`, e);
+          await admin.from('oportunidades')
+            .update({
+              estagio: estDestino.nome,
+              probabilidade: estDestino.probabilidade,
+              funil_estagio_id: destinoId,
+              atualizado_em: ctx.agora,
+            })
+            .eq('id', ctx.oportunidadeId)
+            .eq('conta_id', ctx.contaId);
+        }
 
         console.log(`[automacao] mover_estagio: oportunidade ${ctx.oportunidadeId} → ${estDestino.nome}`);
         return { ok: true };
@@ -171,14 +188,23 @@ async function executarAcao(
         if (!ctx.oportunidadeId) return { ok: true };
         const estagioEncerramento = (auto.acao_parametros.estagio as string) || 'Perdido';
 
-        await admin.from('oportunidades')
-          .update({
+        try {
+          const backend = await crmBackend(ctx.contaId);
+          await backend.atualizar(ctx.contaId, ctx.oportunidadeId, {
             estagio: estagioEncerramento,
             probabilidade: 0,
-            atualizado_em: ctx.agora,
-          })
-          .eq('id', ctx.oportunidadeId)
-          .eq('conta_id', ctx.contaId);
+          });
+        } catch (e) {
+          console.warn(`[automacao] crmBackend falhou para encerrar, usando Supabase direto:`, e);
+          await admin.from('oportunidades')
+            .update({
+              estagio: estagioEncerramento,
+              probabilidade: 0,
+              atualizado_em: ctx.agora,
+            })
+            .eq('id', ctx.oportunidadeId)
+            .eq('conta_id', ctx.contaId);
+        }
 
         console.log(`[automacao] encerrar_oportunidade: ${ctx.oportunidadeId} → ${estagioEncerramento}`);
         return { ok: true };
