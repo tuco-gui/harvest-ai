@@ -8,26 +8,77 @@ import { carregarCanais, sessaoWahaDoCanal } from '@/lib/whatsappCanais';
 import { getOrCreateSession, sendText as wahaSendText } from '@/lib/waha';
 import { registrarTentativaContato } from '@/lib/historicoContato';
 import { podeAcessarOportunidade } from '@/lib/crmControleAcesso';
+import { crmBackend } from '@/lib/twenty';
 
-async function contexto(id: number) {
+/**
+ * Busca ou cria localmente a oportunidade.
+ * Para Twenty (UUIDs), cria um registro local se não existir (bridge para bigint PK).
+ */
+async function contexto(idRaw: string) {
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return { erro: NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 }) };
   const admin = supabaseAdmin();
   if (!(await perfilTemModulo(admin, perfil, 'crm'))) {
     return { erro: NextResponse.json({ erro: 'CRM não habilitado para esta conta.' }, { status: 403 }) };
   }
-  const acesso = await podeAcessarOportunidade(admin, perfil, id);
-  if (!acesso.ok) return { erro: NextResponse.json({ erro: acesso.erro }, { status: 403 }) };
-  const { data: oportunidade } = await admin.from('oportunidades')
-    .select('id, lead_id, telefone, empresa, campanha_id, estagio')
-    .eq('id', id).eq('conta_id', perfil.conta_id).maybeSingle();
+
+  const numId = Number(idRaw);
+  let oportunidade: any = null;
+
+  if (numId && numId > 0) {
+    // Local integer ID
+    const acesso = await podeAcessarOportunidade(admin, perfil, numId);
+    if (!acesso.ok) return { erro: NextResponse.json({ erro: acesso.erro }, { status: 403 }) };
+    const { data } = await admin.from('oportunidades')
+      .select('id, lead_id, telefone, empresa, campanha_id, estagio')
+      .eq('id', numId).eq('conta_id', perfil.conta_id).maybeSingle();
+    oportunidade = data;
+  } else {
+    // UUID from Twenty — fetch from Twenty, ensure local record exists
+    try {
+      const backend = await crmBackend(perfil.conta_id);
+      const twentyOp = await backend.buscar(perfil.conta_id, idRaw);
+      if (!twentyOp) return { erro: NextResponse.json({ erro: 'Oportunidade não encontrada no Twenty.' }, { status: 404 }) };
+
+      // Check if local record already exists (by empresa + conta_id + telefone)
+      const { data: existing } = await admin.from('oportunidades')
+        .select('id, lead_id, telefone, empresa, campanha_id, estagio')
+        .eq('conta_id', perfil.conta_id).eq('empresa', twentyOp.empresa).eq('telefone', twentyOp.telefone ?? '')
+        .maybeSingle();
+
+      if (existing) {
+        oportunidade = existing;
+      } else {
+        // Create local bridge record
+        const { data: created } = await admin.from('oportunidades')
+          .insert({
+            conta_id: perfil.conta_id,
+            empresa: twentyOp.empresa,
+            telefone: twentyOp.telefone,
+            email: twentyOp.email,
+            contato: twentyOp.contato,
+            estagio: twentyOp.estagio,
+            origem: 'twenty',
+            owner_id: null,
+            valor: twentyOp.valor,
+            probabilidade: 5,
+          })
+          .select('id, lead_id, telefone, empresa, campanha_id, estagio')
+          .single();
+        oportunidade = created;
+      }
+    } catch (e: any) {
+      return { erro: NextResponse.json({ erro: e?.message ?? 'Erro ao buscar oportunidade.' }, { status: 500 }) };
+    }
+  }
+
   if (!oportunidade) return { erro: NextResponse.json({ erro: 'Oportunidade não encontrada.' }, { status: 404 }) };
   return { perfil, admin, oportunidade };
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const ctx = await contexto(Number(id));
+  const ctx = await contexto(id);
   if ('erro' in ctx) return ctx.erro;
   const telefone = normalizarTelefone(ctx.oportunidade.telefone ?? '');
 
@@ -68,7 +119,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const ctx = await contexto(Number(id));
+  const ctx = await contexto(id);
   if ('erro' in ctx) return ctx.erro;
   const contaId = ctx.perfil.conta_id!;
   const b = await req.json().catch(() => ({}) as any);
