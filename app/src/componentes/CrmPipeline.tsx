@@ -40,7 +40,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const podeEditarPropria = (op: Oportunidade) =>
     papel === 'operador' ? op.owner_id === perfilId : true;
   const [ops, setOps] = useState(oportunidades);
-  const [arrastando, setArrastando] = useState<number | null>(null);
+  const [arrastando, setArrastando] = useState<number | string | null>(null);
   const [estagioAlvo, setEstagioAlvo] = useState<string | null>(null);
   const [ficha, setFicha] = useState<Oportunidade | null>(null);
   const [novaAberta, setNovaAberta] = useState(false);
