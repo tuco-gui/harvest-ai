@@ -257,7 +257,7 @@ class TwentyCrmBackend implements CrmBackend {
   private baseUrl(): string {
     const url = process.env.TWENTY_API_URL;
     if (!url) throw new Error('Twenty backend não configurado: falta TWENTY_API_URL (NÃO VERIFICADO).');
-    return url.replace(/\/$/, '');
+    return url.replace(/\/$/, '') + '/rest';
   }
 
   private headers(): HeadersInit {
