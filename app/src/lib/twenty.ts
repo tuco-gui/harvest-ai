@@ -253,6 +253,14 @@ function twentyParaOportunidade(contaId: string, o: TwentyOpportunity): Oportuni
  * módulo 'twenty_crm' habilitado; as demais continuam em `SupabaseCrmBackend`.
  * Endpoints/campos NÃO VERIFICADOS contra workspace real (Seção 13).
  */
+/** Formata telefone para Twenty: garante prefixo +55 quando número brasileiro. */
+function formatPhone(phone: string): string {
+  const clean = phone.replace(/\D/g, '');
+  if (clean.startsWith('55')) return `+${clean}`;
+  if (clean.length === 11) return `+55${clean}`;
+  return `+${clean}`;
+}
+
 class TwentyCrmBackend implements CrmBackend {
   private baseUrl(): string {
     const url = process.env.TWENTY_API_URL;
@@ -366,7 +374,7 @@ class TwentyCrmBackend implements CrmBackend {
       name: { firstName: firstName || input.contato || '', lastName },
     };
     if (input.email) payload.emails = { primaryEmail: input.email };
-    if (input.telefone) payload.phones = { primaryPhoneNumber: input.telefone };
+    if (input.telefone) payload.phones = { primaryPhoneNumber: formatPhone(input.telefone) };
     if (input.companyId) payload.companyId = input.companyId;
     const criado = await this.request('/people', { method: 'POST', body: JSON.stringify(payload) });
     const nova: TwentyPerson | undefined = criado?.data?.createPerson;
