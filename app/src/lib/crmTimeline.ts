@@ -44,10 +44,13 @@ export function montarTimeline(
   autores: Record<string, string> = {},
   limite = 250,
 ): EventoTimeline[] {
-  const conteudosEnviados = new Set(saidas.map(m => (m.conteudo ?? '').trim()).filter(Boolean));
+  const enviosValidos = saidas
+    .filter(m => (m.conteudo ?? '').trim())
+    .map(m => ({ texto: m.conteudo!.trim(), data: Date.parse(m.enviado_em || m.criado_em) }));
   const eventos: EventoTimeline[] = [
     ...atividades
-      .filter(a => !(a.tipo === 'whatsapp' && a.descricao && conteudosEnviados.has(a.descricao.trim())))
+      .filter(a => !(a.tipo === 'whatsapp' && a.descricao && enviosValidos.some(m =>
+        m.texto === a.descricao!.trim() && Math.abs(Date.parse(a.criado_em) - m.data) <= 300_000)))
       .map(a => ({
         id: `a-${a.id}`, origem: 'atividade' as const,
         titulo: a.titulo || a.tipo, texto: textoResumido(a.descricao, ''),
