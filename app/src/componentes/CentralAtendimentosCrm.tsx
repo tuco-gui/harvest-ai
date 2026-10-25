@@ -294,11 +294,11 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             <div>
               <strong>{selecionada.nome || selecionada.telefone}</strong>
               <span>{selecionada.telefone}</span>
-              {detalhe?.canaisObservados?.length>0 && <label className="crm-inbox-seletor-canal">
+              {(detalhe?.canaisObservados?.length??0)>0 && <label className="crm-inbox-seletor-canal">
                 Conversa por canal
                 <select value={canalFiltro??''} onChange={e=>setCanalFiltro(e.target.value?Number(e.target.value):null)}>
                   <option value="">Histórico geral do telefone</option>
-                  {detalhe.canaisObservados.map(id=><option key={id} value={id}>
+                  {detalhe?.canaisObservados.map(id=><option key={id} value={id}>
                     {nomesCanais.find(n=>n.id===id)?.nome??'Canal '+id}
                   </option>)}
                 </select>
