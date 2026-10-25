@@ -909,3 +909,20 @@ a:hover{color:var(--ink)}
   padding:14px;margin:0 0 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
 .crm-grupo-campos legend{padding:0 8px;font-size:12px;font-weight:700;color:var(--ink)}
 .crm-grupo-campos>label{min-width:0}
+
+/* UX inspirada na hierarquia de tags Kommo, sem gerenciar catálogo dentro do lead. */
+.crm-tags-ficha{display:flex;flex-direction:column;gap:7px;min-width:180px;max-width:100%}
+.crm-tags-ficha-chips{display:flex;flex-wrap:wrap;gap:6px}
+.crm-tags-ficha-menu{position:relative;font-size:12px}
+.crm-tags-ficha-menu summary{color:var(--ink-2);font-weight:700;cursor:pointer;width:max-content}
+.crm-tags-ficha-lista{display:flex;flex-direction:column;gap:8px;max-height:250px;overflow:auto;
+ background:var(--surface);border:1px solid var(--rule);border-radius:6px;
+ padding:12px;margin-top:6px;min-width:220px}
+.crm-tags-ficha-lista label{display:flex;align-items:center;gap:8px}
+.crm-pipeline-filtro-tags{padding:18px;border:1px solid var(--rule);border-radius:6px;
+ background:var(--surface);margin-bottom:15px;display:grid;gap:12px}
+.crm-pipeline-filtro-topo{display:flex;justify-content:space-between;align-items:center}
+.crm-pipeline-filtro-topo button{color:var(--ink-2);text-decoration:underline;cursor:pointer}
+.crm-pipeline-filtro-tags>label{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.crm-contatos-pendentes{border-top:1px solid var(--rule);padding-top:20px;margin-top:25px}
+.crm-contatos-pendentes h2{font-size:17px;margin-bottom:9px}
