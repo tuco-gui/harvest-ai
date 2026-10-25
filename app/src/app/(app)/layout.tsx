@@ -25,15 +25,14 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
     .eq('user_id', perfil.id)
     .eq('ativo', true);
 
-  if (!memError && memberships) {
-    // Tabela existe — usar memberships
-    contas = (memberships ?? [])
-      .filter((m: any) => m.contas?.ativo)
-      .map((m: any) => ({ id: m.conta_id, nome: m.contas.nome }));
-  } else if (ehSuper) {
-    // Tabela não existe ou erro — super admin vê todas as contas
+  if (ehSuper) {
+    // O superadmin ve todas as workspaces ativas mesmo sem vinculo como membro.
     const { data } = await admin.from('contas').select('id, nome').eq('ativo', true).order('nome');
     contas = data ?? [];
+  } else if (!memError && memberships) {
+    contas = memberships
+      .filter((m: any) => m.contas?.ativo)
+      .map((m: any) => ({ id: m.conta_id, nome: m.contas.nome }));
   }
 
   let contaNome = 'Selecione uma conta';

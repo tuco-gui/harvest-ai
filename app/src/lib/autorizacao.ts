@@ -11,7 +11,7 @@ import type { Perfil } from './supabase/server';
  * super_admin enxerga tudo (não há conta a restringir).
  */
 
-export type Modulo = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento' | 'crm';
+export type Modulo = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento' | 'crm' | 'agentes';
 
 /** Módulos que nunca ficam escondidos para um admin de conta (já são operacionais). */
 const MODULOS_PADRAO: Modulo[] = ['whatsapp', 'ia', 'usuarios', 'chamados', 'status'];
