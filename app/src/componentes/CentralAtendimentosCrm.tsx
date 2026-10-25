@@ -158,6 +158,25 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     } finally { setSalvando(false); }
   }
 
+  async function criarNegocioDaConversa(){
+    if(!selecionada || !podeAtribuir)return;
+    setSalvando(true);setErro('');setAviso('');
+    try{
+      const r=await fetch('/api/crm/oportunidades',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({empresa:selecionada.nome||selecionada.telefone,
+          contato:selecionada.nome||'',telefone:selecionada.telefone,
+          origem:'inbox',estagio:'novo'}),
+      });
+      const d=await r.json();if(!r.ok)throw Error(d.erro||'Não foi possível criar o negócio.');
+      const rr=await fetch('/api/crm/atendimentos/'+encodeURIComponent(selecionada.telefone),
+        {cache:'no-store'});
+      if(rr.ok)setDetalhe(await rr.json());
+      setAviso('Negócio criado e vinculado à conversa. Nenhuma mensagem foi enviada.');
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao criar negócio.');}
+    finally{setSalvando(false);}
+  }
+
   async function responder(e:React.FormEvent) {
     e.preventDefault();
     if(!detalhe?.oportunidade || !textoResposta.trim() || !canalSelecionado || enviandoResposta)return;
@@ -271,6 +290,10 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
              ) : <p className="ajuda">{detalhe?.oportunidade
                ? 'Conecte um canal WAHA/Evolution da workspace para responder pelo WhatsApp.'
                : 'Vincule esta conversa a um negócio para habilitar resposta no WhatsApp existente.'}</p>}
+             {!detalhe?.oportunidade && podeAtribuir && <button type="button"
+               disabled={salvando} onClick={()=>void criarNegocioDaConversa()}>
+               Criar negócio a partir da conversa
+             </button>}
            </div>
            <div className="crm-atendimento-editor">
             <h2>Gerenciar atendimento</h2>
