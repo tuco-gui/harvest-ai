@@ -14,6 +14,7 @@ export default function Funis({funis:funisIniciais,canais=[]}:{funis:Funil[];
   const router = useRouter();
   const [criando, setCriando] = useState(false);
   const [novoNome, setNovoNome] = useState('');
+  const [novoCanalId,setNovoCanalId] = useState('');
 
   async function criarFunil() {
     if (!novoNome.trim() || criando) return;
@@ -22,11 +23,12 @@ export default function Funis({funis:funisIniciais,canais=[]}:{funis:Funil[];
       const r = await fetch('/api/funis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: novoNome.trim() }),
+        body: JSON.stringify({ nome: novoNome.trim(), canal_padrao_id:novoCanalId?Number(novoCanalId):null }),
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
         setNovoNome('');
+        setNovoCanalId('');
         router.refresh();
       } else {
         alert(d.erro ?? 'Não consegui criar o funil.');
@@ -57,6 +59,17 @@ export default function Funis({funis:funisIniciais,canais=[]}:{funis:Funil[];
           placeholder="Nome do novo funil…"
           style={{ height: 38, padding: '0 12px', background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14, flex: 1 }}
         />
+        <label style={{display:'grid',gap:3,minWidth:220,fontSize:11}}>
+          WhatsApp deste funil
+          <select aria-label="Canal WhatsApp do novo funil"
+            style={{height:38,padding:'0 9px',background:'var(--surface)',border:'1px solid var(--rule)'}}
+            value={novoCanalId} onChange={e=>setNovoCanalId(e.target.value)}>
+            <option value="">Padrão da workspace</option>
+            {canais.map(c=><option key={c.id} value={c.id}>
+              {c.nome} · {c.provider.toUpperCase()} · {c.status}
+            </option>)}
+          </select>
+        </label>
         <button type="button" disabled={!novoNome.trim() || criando} onClick={criarFunil}
           className="btn-primario" style={{ height: 38, padding: '0 18px', fontSize: 13 }}>
           {criando ? 'Criando…' : 'Criar funil'}
