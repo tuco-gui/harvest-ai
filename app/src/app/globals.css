@@ -903,3 +903,9 @@ a:hover{color:var(--ink)}
 .crm-encaminhamento-chatwoot summary{cursor:pointer;font-weight:700}
 .crm-encaminhamento-chatwoot ol{margin-top:9px;padding-left:18px;line-height:1.7}
 @media(max-width:750px){.crm-chatwoot-campos{grid-template-columns:1fr}}
+
+/* Grupos customizáveis por workspace; sem cor fora da identidade Harvest. */
+.crm-grupo-campos{min-width:0;border:1px solid var(--rule);border-radius:6px;
+  padding:14px;margin:0 0 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.crm-grupo-campos legend{padding:0 8px;font-size:12px;font-weight:700;color:var(--ink)}
+.crm-grupo-campos>label{min-width:0}
