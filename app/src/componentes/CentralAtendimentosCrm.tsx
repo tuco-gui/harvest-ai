@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import EncaminhamentoChatwootCRM from '@/componentes/EncaminhamentoChatwootCRM';
-import GerenciadorEtiquetasCRM from '@/componentes/GerenciadorEtiquetasCRM';
+import SeletorEtiquetasCRM from '@/componentes/SeletorEtiquetasCRM';
 import { estadoSla, NOMES_PRIORIDADE, PRIORIDADES, type Prioridade } from '@/lib/crmEtiquetas';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { STATUS_ATENDIMENTO, type ConversaAtendimento,
@@ -152,7 +152,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     <header className="crm-atendimentos-topo">
       <div>
         <p className="label">CRM · ATENDIMENTO</p>
-        <h1>Central de atendimento</h1>
+        <h1>Comunicação · Inbox</h1>
         <p className="ajuda">Triagem, atribuição e encaminhamento humano das conversas recebidas.</p>
       </div>
       <Link href="/crm">Voltar ao pipeline</Link>
@@ -207,7 +207,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             </div>
             <div className="crm-atendimento-links">
               {detalhe?.oportunidade && <Link href={'/crm?oportunidade=' + detalhe.oportunidade.id}>Abrir negócio</Link>}
-              <Link href={'/inbox?telefone=' + encodeURIComponent(selecionada.telefone)}>Inbox original</Link>
+              
             </div>
           </header>
           {carregandoDetalhe ? <p className="crm-atendimentos-vazio">Carregando mensagens…</p> :
@@ -240,7 +240,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
                 </select>
               </label>
               <div className="crm-atendimento-etiquetas">
-                <GerenciadorEtiquetasCRM selecionadas={etiquetas} onChange={setEtiquetas} desabilitado={salvando}/>
+                <SeletorEtiquetasCRM selecionadas={etiquetas} onChange={setEtiquetas} limite={8} desabilitado={salvando}/>
               </div>
             </div>
             <div className="crm-atendimento-sla-indicador">
