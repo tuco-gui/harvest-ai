@@ -1,0 +1,51 @@
+name: Harvest Deskcomm pilot checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "vendor/deskcommcrm"
+      - ".gitmodules"
+      - "piloto/deskcomm/**"
+      - ".github/workflows/harvest-deskcomm-pilot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Verify pinned Deskcomm commit and MIT license
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f vendor/deskcommcrm/package.json
+          test -f vendor/deskcommcrm/LICENSE
+          test "$(git -C vendor/deskcommcrm rev-parse HEAD)" = "40db34708049e52304d159b7a6f1829bfde23358"
+          grep -q "MIT License" vendor/deskcommcrm/LICENSE
+      - name: Validate shell scripts syntax without executing infrastructure actions
+        run: |
+          bash -n piloto/deskcomm/preparar.sh
+          bash -n piloto/deskcomm/preflight.sh
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@9.15.9 --activate
+      - name: Install upstream dependencies without runtime secrets
+        working-directory: vendor/deskcommcrm
+        run: pnpm install --frozen-lockfile
+      - name: Deskcomm TypeScript
+        working-directory: vendor/deskcommcrm
+        run: pnpm typecheck
+      - name: Deskcomm unit tests
+        working-directory: vendor/deskcommcrm
+        run: pnpm test:unit
