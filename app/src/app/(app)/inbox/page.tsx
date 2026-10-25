@@ -2,6 +2,9 @@ import { redirect } from 'next/navigation';
 import { perfilAtual } from '@/lib/supabase/server';
 import { normalizarTelefone } from '@/lib/telefone';
 import Inbox from '@/componentes/Inbox';
+import CentralAtendimentosCrm from '@/componentes/CentralAtendimentosCrm';
+import { perfilTemModulo } from '@/lib/autorizacao';
+import { supabaseAdmin } from '@/lib/supabase/server';
 
 export default async function PaginaInbox({ searchParams }: { searchParams: Promise<{ telefone?: string }> }) {
   const perfil = await perfilAtual();
@@ -10,5 +13,10 @@ export default async function PaginaInbox({ searchParams }: { searchParams: Prom
 
   const parametros = await searchParams;
   const tel = typeof parametros.telefone === 'string' ? normalizarTelefone(parametros.telefone) : '';
-  return <Inbox telefoneInicial={tel || undefined} />;
+  const admin = supabaseAdmin();
+  const crmAvancado = await perfilTemModulo(admin, perfil, 'crm') &&
+    await perfilTemModulo(admin, perfil, 'crm_avancado');
+  return crmAvancado
+    ? <CentralAtendimentosCrm telefoneInicial={tel || undefined} />
+    : <Inbox telefoneInicial={tel || undefined} />;
 }
