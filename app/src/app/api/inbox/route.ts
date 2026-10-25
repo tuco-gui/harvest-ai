@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+import { perfilTemModulo } from '@/lib/autorizacao';
+import { telefoneAtendimento } from '@/lib/crmAtendimentos';
 
 export async function GET() {
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return NextResponse.json({ erro: 'Sem conta.' }, { status: 400 });
   const admin = supabaseAdmin();
+  // Nas workspaces com CRM avançado, o operador só pode ver conversas
+  // explicitamente atribuídas a ele, inclusive pela Inbox legada.
+  let telefonesPermitidos: Set<string> | null = null;
+  if (perfil.papel === 'operador' && await perfilTemModulo(admin, perfil, 'crm_avancado')) {
+    const { data: atribuicoes, error: erroAtribuicoes } = await admin.from('crm_atendimentos')
+      .select('telefone').eq('conta_id', perfil.conta_id).eq('responsavel_id', perfil.id);
+    if (erroAtribuicoes) return NextResponse.json({ erro: 'Falha ao validar atribuições.' }, { status: 503 });
+    telefonesPermitidos = new Set((atribuicoes ?? []).map(a => a.telefone));
+  }
 
   const { data, error } = await admin
     .rpc('inbox_contatos', { p_conta_id: perfil.conta_id })
@@ -32,6 +43,7 @@ export async function GET() {
     }>();
 
     for (const r of raw) {
+      if (telefonesPermitidos && !telefonesPermitidos.has(telefoneAtendimento(r.telefone) || '')) continue;
       const tel = r.telefone;
       const existing = byPhone.get(tel);
       if (existing) {
@@ -61,5 +73,8 @@ export async function GET() {
     return NextResponse.json({ contatos });
   }
 
-  return NextResponse.json({ contatos: data ?? [] });
+  const contatos = telefonesPermitidos
+    ? (data ?? []).filter((x: { telefone: string }) => telefonesPermitidos!.has(telefoneAtendimento(x.telefone) || ''))
+    : data ?? [];
+  return NextResponse.json({ contatos });
 }

@@ -68,8 +68,8 @@ export default function LinhaDoTempoCrm({ oportunidadeId, telefone }: {
           disabled={carregando}>{carregando ? 'Atualizando…' : 'Atualizar'}</button>
       </div>
       {telefone && <div className="crm-timeline-atendimento">
-        <Link href={`/inbox?telefone=${encodeURIComponent(telefone)}`}>
-          Abrir conversa na caixa de entrada
+        <Link href={`/crm/atendimentos?telefone=${encodeURIComponent(telefone)}`}>
+          Abrir na central de atendimento
         </Link>
       </div>}
       {aviso && <p className="crm-timeline-aviso">{aviso}</p>}
