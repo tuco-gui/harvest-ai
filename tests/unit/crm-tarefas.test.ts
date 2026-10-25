@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { classificarPrazo, filtrarTarefas, validarNovaTarefa, type TarefaCrm } from '../../app/src/lib/crmTarefas.ts';
+import { classificarPrazo, filtrarTarefas, validarNovaTarefa, dataLocalParaInput, type TarefaCrm } from '../../app/src/lib/crmTarefas.ts';
 import { modulosDaConta } from '../../app/src/lib/autorizacao.ts';
 
 assert(!modulosDaConta(['crm'], 'super_admin').has('crm_avancado'), 'feature comercial nao pode furar superadmin');
@@ -28,4 +28,11 @@ assert.equal(filtrarTarefas(tarefas, 'todas', 'inexistente', '', agora).length, 
 assert(validarNovaTarefa('', null, null));
 assert(validarNovaTarefa('Nova tarefa', 'data-invalida', null));
 assert.equal(validarNovaTarefa('Nova tarefa', new Date().toISOString(), 'Descrição'), null);
+assert.equal(dataLocalParaInput(null), '');
+assert.equal(dataLocalParaInput('texto-invalido'), '');
+const iso = '2026-10-25T13:20:00.000Z';
+const local = dataLocalParaInput(iso);
+assert.equal(new Date(local).getTime(), new Date(iso).getTime(), 'fuso local deve preservar instante');
+assert(validarNovaTarefa('Editar', 'data-invalidada', 'descrição'));
+assert.equal(validarNovaTarefa('Editar', null, 'Nova descrição'), null);
 console.log('crm avançado: isolamento de módulo, prazos, filtros e validação OK');
