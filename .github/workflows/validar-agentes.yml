@@ -13,6 +13,8 @@ on:
       - "tests/unit/crm-contatos.test.ts"
       - "tests/unit/crm-timeline.test.ts"
       - "tests/unit/crm-atendimentos.test.ts"
+      - "tests/unit/crm-atendimentos-canais.test.ts"
+      - "sql/043_atendimentos_independentes_por_canal.sql"
       - "tests/unit/crm-etiquetas.test.ts"
       - "tests/unit/canais-unificados.test.ts"
       - "tests/unit/canal-funil.test.ts"
@@ -66,6 +68,8 @@ jobs:
         run: node --experimental-strip-types tests/unit/canal-funil.test.ts
       - name: Validar recepção por canal e roteamento não ambíguo
         run: node --experimental-strip-types tests/unit/inbound-canal-funil.test.ts
+      - name: Testar atendimento e responsáveis isolados por canal
+        run: node --experimental-strip-types tests/unit/crm-atendimentos-canais.test.ts
       - name: Instalar dependencias
         working-directory: app
         run: npm ci
