@@ -58,8 +58,12 @@ export async function responsaveisDaWorkspace(admin: SupabaseClient, perfil: Per
     admin.from('perfis').select('id,nome,email').eq('conta_id', perfil.conta_id!),
   ]);
   if (perfis.error) throw Error('Falha ao carregar responsáveis.');
-  const ids = new Set((perfis.data ?? []).map(p => p.id));
-  if (!membros.error) for (const m of membros.data ?? []) ids.add(m.user_id);
+  // Se memberships estao disponiveis, somente membros ATIVOS podem receber.
+  // O fallback para perfis legados e usado apenas quando a tabela de
+  // memberships nao esta acessivel.
+  const ids = membros.error
+    ? new Set((perfis.data ?? []).map(p => p.id))
+    : new Set((membros.data ?? []).map(m => m.user_id));
   if (perfil.papel === 'super_admin') ids.add(perfil.id);
   if (!ids.size) return [];
   const { data, error } = await admin.from('perfis').select('id,nome,email').in('id', [...ids]).limit(250);
