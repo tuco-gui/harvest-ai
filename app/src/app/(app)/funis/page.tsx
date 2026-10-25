@@ -12,7 +12,7 @@ export default async function Pagina() {
 
   const { data: funis } = await admin
     .from('funis')
-    .select('id, nome, ativo, criado_em')
+    .select('id, nome, ativo, criado_em, canal_padrao_id')
     .eq('conta_id', perfil.conta_id)
     .order('nome');
 
