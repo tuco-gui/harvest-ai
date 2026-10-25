@@ -52,6 +52,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [novaAberta, setNovaAberta] = useState(false);
   const [nova, setNova] = useState(NOVA_OPORTUNIDADE);
   const [salvando, setSalvando] = useState(false);
+  const [salvandoTags, setSalvandoTags] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [filtroAberto, setFiltroAberto] = useState(false);
@@ -165,6 +166,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   }, [opsDoFunil, encerradosNorm]);
 
   const estagios = mostrarEncerrados ? estagiosEncerrados : estagiosPipeline;
+  const probabilidadeLocal = (id:string) => [...estagiosPipeline,...estagiosEncerrados].find(e=>e.id===id)?.probabilidade ?? probabilidadeEstagio(id);
   const agrupar = (estagio: string) => visiveis.filter((o) => normalizar(o.estagio) === estagio);
   const nomeOwner = (id: string | null) => owners.find((o) => o.id === id)?.nome ?? 'Sem responsável';
   const nomeCampanha = (id: number | null) => campanhas.find((c) => c.id === id)?.nome ?? null;
@@ -219,6 +221,24 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     if (!r.ok) return setErro(d.erro ?? 'Não consegui criar a oportunidade.');
     setOps((atual) => [d.oportunidade, ...atual]); setNova(NOVA_OPORTUNIDADE); setNovaAberta(false);
     await abrirFicha(d.oportunidade);
+  }
+
+  async function salvarTagsFicha(tags:string[]){
+    if(!ficha || salvandoTags)return;
+    const id=ficha.id,anteriores=ficha.tags??[];
+    setFicha(atual=>atual?.id===id?{...atual,tags}:atual);
+    setSalvandoTags(true);setErro(null);
+    try{
+      const r=await fetch('/api/crm/oportunidades/'+id,{
+        method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({tags}),
+      });
+      const d=await json(r);
+      if(!r.ok)throw Error(d.erro||'Falha ao salvar etiquetas.');
+      setOps(ops=>ops.map(o=>o.id===id?{...o,tags}:o));
+    }catch(e){
+      setFicha(atual=>atual?.id===id?{...atual,tags:anteriores}:atual);
+      setErro(e instanceof Error?e.message:'Não foi possível salvar etiquetas.');
+    }finally{setSalvandoTags(false);}
   }
 
   async function salvarFicha(e: React.FormEvent) {
@@ -366,6 +386,11 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
       <div className="crm-barra">
         {avancado && <Link className="crm-atalho-tarefas" href="/crm/tarefas">Tarefas e prazos</Link>}
+         {avancado && podeEditar && <details className="crm-pipeline-menu">
+           <summary title="Opções do pipeline">···</summary>
+           <div><Link href="/funis">Editar pipeline</Link>
+             <Link href="/crm/campos-personalizados">Personalizar campos</Link></div>
+         </details>}
         {funis.length > 0 && (
           <select value={funilId ?? ''} onChange={(e) => setFunilId(e.target.value ? Number(e.target.value) : null)}
             style={{ height: 40, padding: '0 10px', border: '1px solid var(--rule)', background: 'var(--surface)', borderRadius: 2, color: 'var(--ink-2)', fontWeight: 600 }}>
@@ -468,7 +493,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           <label>E-mail<input type="email" value={nova.email} onChange={(e) => setNova({ ...nova, email: e.target.value })} /></label>
           <label>Responsável<select value={nova.owner_id} onChange={(e) => setNova({ ...nova, owner_id: e.target.value })}><option value="">Sem responsável</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
           <label>Campanha/origem<select value={nova.campanha_id} onChange={(e) => setNova({ ...nova, campanha_id: e.target.value })}><option value="">Sem campanha</option>{campanhas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-          <label>Etapa<select value={nova.estagio} onChange={(e) => setNova({ ...nova, estagio: e.target.value, probabilidade: String(probabilidadeEstagio(e.target.value)) })}>{(avancado ? [...estagiosPipeline,...estagiosEncerrados] : ESTAGIOS_CRM).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
+          <label>Etapa<select value={nova.estagio} onChange={(e) => setNova({ ...nova, estagio: e.target.value, probabilidade: String(probabilidadeLocal(e.target.value)) })}>{(avancado ? [...estagiosPipeline,...estagiosEncerrados] : ESTAGIOS_CRM).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
           <label>Valor<input type="number" min="0" step="0.01" value={nova.valor} onChange={(e) => setNova({ ...nova, valor: e.target.value })} /></label>
           <label>Probabilidade<input type="number" min="0" max="100" value={nova.probabilidade} onChange={(e) => setNova({ ...nova, probabilidade: e.target.value })} /></label>
           <label>Previsão de fechamento<input type="date" value={nova.previsao_fechamento} onChange={(e) => setNova({ ...nova, previsao_fechamento: e.target.value })} /></label>
@@ -481,7 +506,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       {ficha && <div className="crm-overlay" onMouseDown={() => setFicha(null)}><section className="crm-ficha" onMouseDown={(e) => e.stopPropagation()}>
         <header className="drawer-cabecalho"><div><span className="label">Oportunidade #{ficha.id}</span><h2>{ficha.empresa || ficha.contato}</h2>
          {avancado && <SeletorEtiquetasCRM limite={20} selecionadas={ficha.tags ?? []}
-           onChange={tags => setFicha({...ficha,tags})} desabilitado={!(podeEditar || podeEditarPropria(ficha))}/>}</div>
+           onChange={tags => void salvarTagsFicha(tags)} desabilitado={salvandoTags||!(podeEditar || podeEditarPropria(ficha))}/>}</div>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             {(podeEditar || podeEditarPropria(ficha)) && <button type="button" className="btn-excluir-inline" disabled={excluindo} onClick={() => void excluirOportunidade(ficha)} title="Excluir oportunidade"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>}
             <button type="button" aria-label="Fechar" onClick={() => setFicha(null)}>×</button>
@@ -493,7 +518,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             <label>Contato<input value={ficha.contato} onChange={(e) => setFicha({ ...ficha, contato: e.target.value })} /></label>
             <label>Telefone<input value={ficha.telefone ?? ''} onChange={(e) => setFicha({ ...ficha, telefone: e.target.value })} /></label>
             <label>E-mail<input value={ficha.email ?? ''} onChange={(e) => setFicha({ ...ficha, email: e.target.value })} /></label>
-            <label>Etapa<select value={ficha.estagio} onChange={(e) => setFicha({ ...ficha, estagio: e.target.value, probabilidade: probabilidadeEstagio(e.target.value) })}>{(avancado ? [...estagiosPipeline,...estagiosEncerrados] : ESTAGIOS_CRM).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
+            <label>Etapa<select value={ficha.estagio} onChange={(e) => setFicha({ ...ficha, estagio: e.target.value, probabilidade: probabilidadeLocal(e.target.value) })}>{(avancado ? [...estagiosPipeline,...estagiosEncerrados] : ESTAGIOS_CRM).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
             <label>Responsável<select value={ficha.owner_id ?? ''} onChange={(e) => setFicha({ ...ficha, owner_id: e.target.value || null })} disabled={!podeEditar}><option value="">Sem responsável</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
             <label>Valor<input type="number" min="0" step="0.01" value={ficha.valor} onChange={(e) => setFicha({ ...ficha, valor: Number(e.target.value) })} /></label>
             <label>Probabilidade<input type="number" min="0" max="100" value={ficha.probabilidade} onChange={(e) => setFicha({ ...ficha, probabilidade: Number(e.target.value) })} /></label>
