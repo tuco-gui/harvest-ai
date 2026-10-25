@@ -124,7 +124,7 @@ export default function Topo(p: Props) {
   }
 
   function link(href: string, label: string) {
-    const ativo = href === '/' ? caminho === '/' : caminho.startsWith(href);
+    const ativo = href === '/' || href === '/crm' ? caminho === href : caminho.startsWith(href);
     return (
       <Link key={href} href={href} className="lateral-link" aria-current={ativo ? 'page' : undefined}>
         <span className="nav-icone">{ICONES[href]}</span>
