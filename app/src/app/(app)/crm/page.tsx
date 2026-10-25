@@ -14,6 +14,7 @@ export default async function PaginaCrm() {
   const admin = supabaseAdmin();
   if (!(await perfilTemModulo(admin, perfil, 'crm'))) redirect('/');
 
+  const avancado = await perfilTemModulo(admin, perfil, 'crm_avancado');
   const backend = await crmBackend(perfil.conta_id);
   const [ops, ownersData, campanhasData, canais, funisData] = await Promise.all([
     backend.listar(perfil.conta_id),
@@ -61,6 +62,7 @@ export default async function PaginaCrm() {
         </p>
       </header>
       <CrmPipeline
+        avancado={avancado}
         oportunidades={opsFiltradas}
         owners={owners}
         campanhas={(campanhasData.data ?? []) as { id: number; nome: string }[]}
