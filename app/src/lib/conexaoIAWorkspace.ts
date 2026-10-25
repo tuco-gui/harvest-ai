@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { PROVEDORES, type ProvedorIA } from './ia';
+import { PROVEDORES, type ProvedorIA } from './ia.ts';
 
 /**
  * Uma unica fonte de configuracao das LLMs: Configuracoes > Inteligencia Artificial
