@@ -36,7 +36,7 @@ type Campanha = {
   mensagem_modo?: string | null; mensagens?: string[] | null; contexto_ia?: string | null;
   cadencia_modo?: string; cadencia_min?: number | null; cadencia_max?: number | null;
   agendado_para?: string | null; agendado_timezone?: string | null;
-  modo_envio_numero?: string; canal_ids?: number[];
+  modo_envio_numero?: string; canal_ids?: number[]; funil_id?: number|null;
 };
 
 type Metricas = {
@@ -63,10 +63,10 @@ const CADENCIAS: Record<string, [number, number] | null> = {
 
 export default function CampanhaDetalhe({
   campanha, leads: leadsIniciais, intervaloMin, intervaloMax, canais, metricas,
-  tentativasRecentes = [], crmHabilitado = false,
+  tentativasRecentes = [], crmHabilitado = false, canalPadraoFunilId = null,
 }: {
   campanha: Campanha; leads: Lead[]; intervaloMin: number; intervaloMax: number; canais: Canal[];
-  metricas?: Metricas; tentativasRecentes?: Tentativa[]; crmHabilitado?: boolean;
+  metricas?: Metricas; tentativasRecentes?: Tentativa[]; crmHabilitado?: boolean; canalPadraoFunilId?: number|null;
 }) {
   const router = useRouter();
   const [leads, setLeads] = useState(leadsIniciais);
@@ -89,12 +89,16 @@ export default function CampanhaDetalhe({
 
   // Número de envio (Fase 3B.1): fixo num canal escolhido, ou rodízio entre os ativos.
   const canaisConectados = canais.filter((c) => c.ativo && c.status === 'conectado');
-  const [modoEnvio, setModoEnvio] = useState<'fixo' | 'rodizio'>(
-    campanha.modo_envio_numero === 'rodizio' ? 'rodizio' : 'fixo',
+  const [modoEnvio, setModoEnvio] = useState<'herdar'|'fixo'|'rodizio'>(
+    campanha.funil_id && !(campanha.canal_ids?.length) ? 'herdar'
+      : campanha.modo_envio_numero === 'rodizio' ? 'rodizio' : 'fixo',
   );
   const padrao = canaisConectados.find((c) => c.padrao) ?? canaisConectados[0];
   const canalSalvo = canaisConectados.find((c) => campanha.canal_ids?.[0] === c.id);
   const [canalFixoId, setCanalFixoId] = useState<number | null>(canalSalvo?.id ?? padrao?.id ?? null);
+  const canalHerdado = canalPadraoFunilId != null
+    ? canaisConectados.find(c=>c.id===canalPadraoFunilId)
+    : padrao;
   const [canaisRodizio, setCanaisRodizio] = useState<Set<number>>(
     new Set(campanha.canal_ids?.filter((id) => canaisConectados.some((c) => c.id === id))
       ?? canaisConectados.map((c) => c.id)),
@@ -266,7 +270,8 @@ export default function CampanhaDetalhe({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lead: l, indice: i, campanhaId: campanha.id,
-          canalId, canalIds: Array.from(canaisRodizio), modoEnvio,
+          canalId, canalIds: modoEnvio === 'herdar' ? [] : modoEnvio === 'rodizio' ? Array.from(canaisRodizio) : canalFixoId == null ? [] : [canalFixoId],
+          modoEnvio: modoEnvio==='herdar'?'fixo':modoEnvio,
         }),
       }).catch(() => null);
       // eslint-disable-next-line no-await-in-loop
@@ -366,12 +371,17 @@ export default function CampanhaDetalhe({
           <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>Número de envio:</span>
           <select
             value={modoEnvio}
-            onChange={(e) => setModoEnvio(e.target.value as 'fixo' | 'rodizio')}
+            onChange={(e) => setModoEnvio(e.target.value as 'herdar'|'fixo'|'rodizio')}
             style={{ height: 36, padding: '0 10px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14 }}
           >
+            {campanha.funil_id && <option value="herdar">Usar canal do funil</option>}
             <option value="fixo">Canal fixo</option>
             <option value="rodizio">Rodízio entre canais</option>
           </select>
+          {modoEnvio === 'herdar' && <span className="ajuda" role="status">
+            {canalHerdado ? canalHerdado.nome+' · '+canalHerdado.provider.toUpperCase() :
+              'Nenhum canal conectado está disponível para o funil.'}
+          </span>}
           {modoEnvio === 'fixo' && (
             <select
               value={canalFixoId ?? ''}
@@ -404,7 +414,7 @@ export default function CampanhaDetalhe({
               </span>
             </div>
           )}
-          {!canaisConectados.length && (
+          {modoEnvio!=='herdar' && !canaisConectados.length && (
             <span style={{ fontSize: 12, color: 'var(--red)' }}>Nenhum canal conectado em Configurações → WhatsApp</span>
           )}
         </div>
@@ -460,7 +470,7 @@ export default function CampanhaDetalhe({
             <button type="button" onClick={pararDisparo}>Parar disparo</button>
           ) : (
             <button type="button" disabled={!escolhidos.size || !canaisConectados.length
-              || (modoEnvio === 'fixo' ? canalFixoId == null : canaisRodizio.size === 0)} onClick={dispararSelecionados}>
+              || (modoEnvio === 'herdar' ? !canalHerdado : modoEnvio === 'fixo' ? canalFixoId == null : canaisRodizio.size === 0)} onClick={dispararSelecionados}>
               Disparar selecionados
             </button>
           )}
