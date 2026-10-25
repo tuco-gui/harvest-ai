@@ -23,6 +23,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     const op = await backend.buscar(perfil.conta_id, id as any);
     if (!op) return NextResponse.json({ erro: 'Oportunidade não encontrada.' }, { status: 404 });
+    // O backend remoto/local deriva a conta da sessão, mas a ficha exige
+    // também ownership para operadores, assim como a listagem do CRM.
+    if (!isAdmin(perfil.papel) && op.owner_id !== perfil.id) {
+      return NextResponse.json({ erro: 'Sem acesso a esta oportunidade.' }, { status: 403 });
+    }
     return NextResponse.json({ oportunidade: op });
   } catch (e: any) {
     return NextResponse.json({ erro: e?.message ?? 'Não consegui buscar.' }, { status: 400 });
