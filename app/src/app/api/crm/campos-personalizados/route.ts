@@ -33,7 +33,7 @@ export async function POST(req:Request){
     conta_id:s.perfil.conta_id,entidade:b.entidade,chave:b.chave,rotulo:b.rotulo.trim(),
     tipo:b.tipo,opcoes:b.tipo==='selecao'?b.opcoes:[],grupo:normalizarGrupoCampo(b.grupo),
     obrigatorio:b.obrigatorio,ativo:true,
-  }).select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo').single();
+  }).select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo,grupo').single();
   if(error)return NextResponse.json({erro:'Falha ao criar campo. Chave já existente?'},{status:500});
   return NextResponse.json({campo:data},{status:201});
 }
