@@ -1952,3 +1952,40 @@ preservação), telefone duplicado, telefone suprimido, tenant isolation, permis
 - QA autenticado no staging (Figueira QA) ainda não executado nesta sessão — branch só
   acabou de ser enviada ao Vercel.
 - Scheduler (Prioridade 3) não iniciado, por instrução explícita.
+
+---
+
+## Entrega 23 — Preparação auditável do piloto DeskcommCRM / Harvest e recuperação da documentação (2026-10-24)
+
+**Escopo:** INSTITUCIONAL — Figueira Marketing / Harvest AI. **Estado:** código/fonte/documentação preparados; **não é instalação nem QA E2E aprovado**.
+
+### Consultas e recuperação de memória/histórico
+- Consultados histórico do projeto Harvest (produto SaaS, ADR-002/007, bases de dados, staging, separação Brain/Wiki, contrato de não exclusão), repositório `tuco-gui/harvest-ai` e branch `docs/remote-agent-onboarding`.
+- Conferido `main` em `f1457ed633781c13455519c34785e4d24b2ac879`, sem alteração da branch durante esta rodada.
+- Reintegrados **integralmente como arquivos novos desta branch** o Plano Mestre, Relatório de Entregas (histórico 01–22), Governança, Arquitetura e Handoff. Arquivos da branch original não foram alterados nem apagados.
+- Identificado Brain/Wiki canônico no Mac `/Users/gui_t/Figueira_Marketing/brain`; não disponível neste ambiente. Preparada nota para sincronização aditiva, sem afirmar que o Vault local foi modificado.
+
+### Implementação versionada
+- Criada branch `feature/harvest-deskcomm-pilot-20261024` a partir de `main`.
+- Vinculada fonte DeskcommCRM MIT como submódulo `vendor/deskcommcrm`, revisão `40db34708049e52304d159b7a6f1829bfde23358`; atribuição original preservada por referência à licença upstream.
+- Documentada decisão ADR-010, requisitos de agente rápido por cliente, critérios de aceite, isolamento de ambiente, riscos da troca do motor e política de rollback.
+- Preparados scripts `piloto/deskcomm/preparar.sh` e `preflight.sh` que **não realizam deploy e não usam credenciais reais**.
+- Registrada nota `docs/brain-sync/2026-10-24-harvest-deskcomm.md` para Wiki/Brain.
+
+### Verificações e limitações
+- Código Deskcomm consultado: agentes versionados, base RAG (PDF, TXT, MD, FAQ), roteadores, WhatsApp, handoff humano, funil e sandbox identificados em código/docs. **Sem execução de teste E2E ou login** neste momento.
+- Código Harvest e documentação demonstram Twenty/Chatwoot/WAHA/Evolution como arquitetura anterior preservada. Nenhuma migration, envio ou webhook alterados.
+- Credenciais continuam no armazenamento existente; nenhuma chave foi movida, exibida ou rotacionada.
+- Instância Deskcomm isolada **não criada**; exige Supabase/WAHA de QA separados, sizing, acesso operacional e validação dos serviços persistentes.
+- Nenhum dado de cliente, campanha, contato, opt-out, fluxo n8n ou arquivo de projeto removido. Nenhum deploy de produção.
+
+### Pendências com gate
+1. Confirmar isolação e recursos, criar ambiente de QA próprio do novo motor sem tocar o Supabase existente.
+2. Inicialização de stack Deskcomm com todos os componentes, health checks, autenticação e RLS.
+3. Criar agente BDR da Figueira QA, subir FAQ/PDF, indexar, testar sandbox e conectar WhatsApp QA.
+4. E2E: receber → responder → qualificar → mover estágio → handoff humano → log → opt-out.
+5. Reconciliar/migrar as funções exclusivas de campanhas, disparo, enriquecimento e gestão da Figueira.
+6. Sincronizar nota datada na Wiki do Obsidian quando acesso ao Vault local existir. Não criar segundo Brain.
+7. Após testes, obter autorização explícita de publicação/migração e manter rollback pronto.
+
+**Link branch:** https://github.com/tuco-gui/harvest-ai/tree/feature/harvest-deskcomm-pilot-20261024
