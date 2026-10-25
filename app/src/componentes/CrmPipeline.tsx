@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   ESTAGIOS_CRM, ESTAGIOS_ENCERRADOS, ESTAGIOS_PIPELINE,
-  probabilidadeEstagio,
+  probabilidadeEstagio, chaveEstagio,
 } from '@/lib/crmStages';
 import type { Oportunidade } from '@/lib/twenty';
 import LinhaDoTempoCrm from '@/componentes/LinhaDoTempoCrm';
@@ -121,19 +121,19 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   type EstagioKanban = { id: string; nome: string; ordem: number; grupo: 'pipeline' | 'encerrado'; probabilidade: number; cor?: string | null };
   const estagiosPipeline: EstagioKanban[] = estagiosDb.length
     ? estagiosDb.filter((e) => e.grupo === 'pipeline').map((e) => ({
-        id: e.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_'),
+        id: chaveEstagio(e.nome),
         nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'pipeline', probabilidade: e.probabilidade, cor: e.cor,
       }))
     : ESTAGIOS_PIPELINE;
   const estagiosEncerrados: EstagioKanban[] = estagiosDb.length
     ? estagiosDb.filter((e) => e.grupo === 'encerrado').map((e) => ({
-        id: e.nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_'),
+        id: chaveEstagio(e.nome),
         nome: e.nome, ordem: e.ordem, grupo: e.grupo as 'encerrado', probabilidade: e.probabilidade, cor: e.cor,
       }))
     : ESTAGIOS_ENCERRADOS;
 
   const encerradosIds = useMemo(() => new Set(estagiosEncerrados.map((e) => e.id)), [estagiosEncerrados]);
-  const normalizar = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_');
+  const normalizar = chaveEstagio;
   const encerradosNorm = useMemo(() => new Set([...encerradosIds].map(normalizar)), [encerradosIds]);
   const opsDoFunil = useMemo(() => ops.filter(op => !funilId ||
     op.funil_id === funilId ||
@@ -191,10 +191,11 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     if (normalizar(op.estagio) === estagio) return;
     if (!podeEditar && !podeEditarPropria(op)) return;
     const anterior = op;
-    const atualizado = { ...op, estagio, probabilidade: probabilidadeEstagio(estagio) };
+    const probNova = [...estagiosPipeline,...estagiosEncerrados].find(e=>e.id===estagio)?.probabilidade ?? probabilidadeEstagio(estagio);
+    const atualizado = { ...op, estagio, probabilidade: probNova };
     setOps((atual) => atual.map((x) => x.id === op.id ? atualizado : x));
     const r = await fetch(`/api/crm/oportunidades/${op.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estagio }),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estagio, probabilidade: probNova }),
     });
     if (!r.ok) {
       const d = await json(r);
@@ -226,7 +227,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     const r = await fetch(`/api/crm/oportunidades/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         empresa: ficha.empresa, contato: ficha.contato, telefone: ficha.telefone,
-        email: ficha.email, estagio: ficha.estagio, owner_id: ficha.owner_id,
+        email: ficha.email, estagio: ficha.estagio, ...(podeEditar ? {owner_id:ficha.owner_id} : {}),
         valor: ficha.valor, probabilidade: ficha.probabilidade, campanha_id: ficha.campanha_id,
         tags: ficha.tags, proxima_acao: ficha.proxima_acao, observacoes: ficha.observacoes,
         previsao_fechamento: ficha.previsao_fechamento, motivo_perda: ficha.motivo_perda,
@@ -382,7 +383,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           <button type="button" className={visualizacao === 'lista' ? 'ativa' : ''} onClick={() => setVisualizacao('lista')} title="Lista">☰</button>
         </div>
         <button className="crm-alternar" type="button" onClick={() => setMostrarEncerrados((v) => !v)}>{mostrarEncerrados ? 'Ver pipeline' : 'Ver encerrados'}</button>
-        {podeEditar && <button className="btn-primario crm-nova" type="button" onClick={() => { setNovaAberta(true); setErro(null); }}>+ Nova oportunidade</button>}
+        {podeEditar && <button className="btn-primario crm-nova" type="button" onClick={() => { setNova({...NOVA_OPORTUNIDADE,estagio:estagiosPipeline[0]?.id||'novo'}); setNovaAberta(true); setErro(null); }}>+ Nova oportunidade</button>}
       </div>
 
       {avancado && filtroAberto && <section className="crm-pipeline-filtro-tags">
@@ -467,7 +468,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           <label>E-mail<input type="email" value={nova.email} onChange={(e) => setNova({ ...nova, email: e.target.value })} /></label>
           <label>Responsável<select value={nova.owner_id} onChange={(e) => setNova({ ...nova, owner_id: e.target.value })}><option value="">Sem responsável</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
           <label>Campanha/origem<select value={nova.campanha_id} onChange={(e) => setNova({ ...nova, campanha_id: e.target.value })}><option value="">Sem campanha</option>{campanhas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-          <label>Etapa<select value={nova.estagio} onChange={(e) => setNova({ ...nova, estagio: e.target.value, probabilidade: String(probabilidadeEstagio(e.target.value)) })}>{ESTAGIOS_CRM.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
+          <label>Etapa<select value={nova.estagio} onChange={(e) => setNova({ ...nova, estagio: e.target.value, probabilidade: String(probabilidadeEstagio(e.target.value)) })}>{(avancado ? [...estagiosPipeline,...estagiosEncerrados] : ESTAGIOS_CRM).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
           <label>Valor<input type="number" min="0" step="0.01" value={nova.valor} onChange={(e) => setNova({ ...nova, valor: e.target.value })} /></label>
           <label>Probabilidade<input type="number" min="0" max="100" value={nova.probabilidade} onChange={(e) => setNova({ ...nova, probabilidade: e.target.value })} /></label>
           <label>Previsão de fechamento<input type="date" value={nova.previsao_fechamento} onChange={(e) => setNova({ ...nova, previsao_fechamento: e.target.value })} /></label>
@@ -492,7 +493,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             <label>Contato<input value={ficha.contato} onChange={(e) => setFicha({ ...ficha, contato: e.target.value })} /></label>
             <label>Telefone<input value={ficha.telefone ?? ''} onChange={(e) => setFicha({ ...ficha, telefone: e.target.value })} /></label>
             <label>E-mail<input value={ficha.email ?? ''} onChange={(e) => setFicha({ ...ficha, email: e.target.value })} /></label>
-            <label>Etapa<select value={ficha.estagio} onChange={(e) => setFicha({ ...ficha, estagio: e.target.value, probabilidade: probabilidadeEstagio(e.target.value) })}>{ESTAGIOS_CRM.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
+            <label>Etapa<select value={ficha.estagio} onChange={(e) => setFicha({ ...ficha, estagio: e.target.value, probabilidade: probabilidadeEstagio(e.target.value) })}>{(avancado ? [...estagiosPipeline,...estagiosEncerrados] : ESTAGIOS_CRM).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></label>
             <label>Responsável<select value={ficha.owner_id ?? ''} onChange={(e) => setFicha({ ...ficha, owner_id: e.target.value || null })} disabled={!podeEditar}><option value="">Sem responsável</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
             <label>Valor<input type="number" min="0" step="0.01" value={ficha.valor} onChange={(e) => setFicha({ ...ficha, valor: Number(e.target.value) })} /></label>
             <label>Probabilidade<input type="number" min="0" max="100" value={ficha.probabilidade} onChange={(e) => setFicha({ ...ficha, probabilidade: Number(e.target.value) })} /></label>
