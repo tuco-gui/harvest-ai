@@ -22,3 +22,13 @@ Corrigir a última duplicidade funcional: o mesmo contato falando com dois Whats
 
 ## Próxima etapa
 Definir opção explícita por funil para **criação automática de oportunidades** em mensagens novas, com deduplicação por conversa/canal e consentimento. Manter desligada por padrão até validar webhook real; não inferir destinos quando o canal é compartilhado por vários funis.
+
+## Implantação concluída em 25/10/2026
+- PR #25 mesclado: `7c51117e95a49203795edb57b0145f1ca8a93db1`.
+- CI TypeScript, testes e build validados; imagem main publicada por GitHub Actions, sem build na VPS.
+- SQL 043 aplicada como `supabase_admin` com exit 0, trigger de validação e auditoria ativos, RLS ativado. `crm_atendimentos_canais=0` após aplicação; `crm_atendimentos=0` histórico; `inbound_eventos=6072` preservados; exclusão de etiquetas sincronizada.
+- Imagem ativa: `ghcr.io/tuco-gui/harvest-ai:7c51117e95a49203795edb57b0145f1ca8a93db1@sha256:94742b5966691a74bbd4e1b8e81ac15fff8838fbbaf416139f504cf43b536f14`.
+- Rollback imagem: `ghcr.io/tuco-gui/harvest-ai:89454d97b8c487076fd6f7a83c3f9b1dcd9b4688@sha256:9eb0e5f435d5ec93a055af2606a223ccb37848f065030de606430a75dc7cd748`.
+- Docker Swarm `harvest_harvest` update completed, tarefa running sem erro; contêiner iniciou com RestartCount 0.
+- Smoke anônimo interno: `/entrar 200`; `/inbox,/crm,/funis,/api/crm/atendimentos` devolveram `307 /entrar` como esperado.
+- No E2E autenticado ou WhatsApp real enviado. Precisa validação visual com duas sessões reais distintas.
