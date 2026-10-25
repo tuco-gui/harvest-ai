@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
-import { tipoAgenteValido, promptsDoLaboratorio } from '@/lib/agentes';
+import { tipoAgenteValido, promptsDoLaboratorio, validarHistoricoLaboratorio } from '@/lib/agentes';
 import { gerarComIA } from '@/lib/ia';
 import { carregarConexaoIA } from '@/lib/conexaoIAWorkspace';
 
@@ -21,6 +21,11 @@ export async function POST(req: Request) {
   const mensagem = typeof b?.mensagem === 'string' ? b.mensagem.trim() : '';
   if (!tipoAgenteValido(b?.tipo) || mensagem.length < 2 || mensagem.length > 1000) {
     return NextResponse.json({ erro: 'Informe o agente e uma mensagem com até 1.000 caracteres.' }, { status: 400 });
+  }
+
+  const historico = validarHistoricoLaboratorio(b.historico);
+  if (!historico.ok) {
+    return NextResponse.json({ erro: historico.erro }, { status: 400 });
   }
 
   // Mesma conexao de Configuracoes > Inteligencia Artificial, carregada
@@ -45,10 +50,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Não foi possível consultar a IA da workspace.' }, { status: 503 });
   }
 
-  const { system, user } = promptsDoLaboratorio(conexao.agente, mensagem);
+  const { system, user } = promptsDoLaboratorio(conexao.agente, mensagem, historico.historico);
   try {
     const resposta = await gerarComIA(conexao.llm.provedor, conexao.llm.chave, system, user, conexao.llm.modelo);
-    const limpa = resposta.trim().slice(0, 4000);
+    const limpa = resposta.trim().slice(0, 1500);
     if (!limpa) throw new Error('resposta vazia');
     // Não salva conversas, não envia mensagem e nunca retorna credenciais.
     return NextResponse.json({ resposta: limpa, modo: 'simulacao', enviado: false });

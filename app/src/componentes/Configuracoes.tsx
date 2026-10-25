@@ -82,6 +82,8 @@ export default function Configuracoes(p: Props) {
   const [iaProvedor, setIaProvedor] = useState(p.iaProvedor);
   const [iaKey, setIaKey] = useState('');
   const [iaModelo, setIaModelo] = useState(p.iaModelo);
+  const [salvandoIa, setSalvandoIa] = useState(false);
+  const [avisoIa, setAvisoIa] = useState('');
   const [decisorProvedor, setDecisorProvedor] = useState(p.decisorProvedor);
   const [perplexityKey, setPerplexityKey] = useState('');
   const [serperKey, setSerperKey] = useState('');
@@ -112,6 +114,27 @@ export default function Configuracoes(p: Props) {
   const [optOutAlvo, setOptOutAlvo] = useState<number | null>(null);
   const [novoManualTelefone, setNovoManualTelefone] = useState('');
   const [registrandoManual, setRegistrandoManual] = useState(false);
+
+  async function salvarSomenteIA() {
+    if (salvandoIa) return;
+    setSalvandoIa(true);
+    setAvisoIa('');
+    try {
+      const r = await fetch('/api/configuracoes/ia', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ia_provedor: iaProvedor, ia_modelo: iaModelo, ia_key: iaKey }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.erro ?? 'Não foi possível salvar a IA.');
+      setIaKey('');
+      setAvisoIa('Conexão salva nesta workspace. Os agentes e a prospecção já podem reutilizá-la.');
+      router.refresh();
+    } catch (e) {
+      setAvisoIa(e instanceof Error ? e.message : 'Erro ao salvar a IA.');
+    } finally {
+      setSalvandoIa(false);
+    }
+  }
 
   async function testar(qual: string) {
     setTestando(qual);
@@ -633,8 +656,8 @@ export default function Configuracoes(p: Props) {
           <section className="secao">
             <h2>Inteligência artificial</h2>
             <p className="resumo-secao">
-              Só necessária no modo "A IA escreve". Nos outros modos pode ficar em branco. Groq e
-              Gemini têm plano gratuito — bons para testar sem custo.
+              Esta é a conexão de IA compartilhada da workspace. O mesmo provedor, modelo e chave
+              são utilizados nos agentes de atendimento e no modo "A IA escreve" da prospecção.
             </p>
             <div className="cartaocfg">
               <div className="grupo">
@@ -672,6 +695,17 @@ export default function Configuracoes(p: Props) {
                     ? 'Copie o nome exato de ollama.com/models — ex.: gpt-oss:120b-cloud, glm-4.6:cloud, qwen3:cloud.'
                     : 'Só mexa aqui se quiser um modelo específico desse provedor. Em branco, usamos um rápido e barato por padrão.'}
                 </p>
+              </div>
+              <div className="grupo">
+                <button type="button" className="btn-teste" disabled={salvandoIa}
+                  onClick={salvarSomenteIA}>
+                  {salvandoIa ? 'Salvando conexão…' : 'Salvar somente conexão de IA'}
+                </button>
+                <p className="ajuda">
+                  Salva a IA desta workspace sem alterar WhatsApp, campanhas, mensagens ou intervalos.
+                  A chave existente permanece salva se o campo ficar em branco.
+                </p>
+                {avisoIa && <p role="status" className="resultado-teste">{avisoIa}</p>}
               </div>
             </div>
           </section>
