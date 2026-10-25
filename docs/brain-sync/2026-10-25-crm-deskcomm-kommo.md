@@ -73,3 +73,18 @@ Brain local do Mac não foi sincronizado diretamente; este markdown é handoff a
 - Smoke test interno, sem login: `GET /entrar=200`; `GET /crm=307`; `GET /crm/tarefas=307`; `GET /api/crm/oportunidades/1/timeline=307`; `PUT/DELETE /api/crm/tarefas=307`. Sem sessão, operações são bloqueadas.
 - Auditoria somente leitura no banco: `crm_avancado` habilitado em **1 workspace, Figueira Marketing**, **0 clientes**.
 - **Teste autenticado e funcional real pendente** (abrir timeline, editar tarefa de teste, realizar rollback via UI). Não declarar produção validada ponta a ponta antes desta etapa.
+
+
+## PR #16 — Inbox operacional do CRM (produção)
+- Repositório: [PR #16](https://github.com/tuco-gui/harvest-ai/pull/16); merge SHA `ce2bb4d60440942643390fdc27f8ea053ae1aa00`.
+- Nova central `/crm/atendimentos` com busca, filtragem por aberto/pendente/resolvido/sem responsável, histórico de mensagens, etiquetas, atribuição de responsáveis e transferência humana manual.
+- A Inbox **não envia** WhatsApp, não altera as mensagens da fonte e não aciona IA. Os metadados operacionais são armazenados em `public.crm_atendimentos` com chave composta `(conta_id, telefone)`.
+- Tabela criada pela migração aditiva `sql/036_crm_atendimentos.sql`, verificada: `RLS=true`, `authenticated SELECT=false`, `service_role SELECT=true`, inicialmente `0` registros. Não existem políticas públicas de acesso direto.
+- Segurança: API deriva `conta_id` da sessão, verifica `crm` e `crm_avancado`, só permite delegação a usuários ativos da workspace; operador vê apenas conversas explicitamente atribuídas, inclusive pelas rotas da Inbox legada quando `crm_avancado` está habilitado.
+- Limitação operacional: lista usa as 500 mensagens inbound mais recentes; detalhe e saídas até 150 eventos por fonte. Nenhum dado é migrado do Chatwoot.
+- CI do PR aprovado (testes de fila, escopo e permissões, TypeScript e build). Imagem GitHub Actions `40202253358` publicada com sucesso; serviço Swarm atualizado para `ghcr.io/tuco-gui/harvest-ai:latest@sha256:69deb23aa07ce4ad4705df265aaf98c328ea056c40dbc731a9acb58a57d1a972`, tarefa **running**, sem erro.
+- Smoke interno anônimo no contêiner: `GET /entrar=200`; `GET /crm/atendimentos=307`, `GET /api/crm/atendimentos=307`, `GET /api/crm/atendimentos/[telefone]=307`, `PATCH /api/crm/atendimentos=307`; rotas legadas de Inbox também redirecionam para login.
+- Banco verificado antes da implantação: workspace Figueira Marketing possui **0 inbound_eventos**; a Inbox ficará vazia até receber mensagens. Há 1 membro ativo da workspace e 0 perfis cujo `conta_id` próprio aponte para ela (membership é a fonte de verdade).
+- Release restrito pelo módulo `crm_avancado`: zero workspaces de clientes receberam o acesso. Nenhum envio externo.
+- **Ainda pendente**: QA com sessão real autenticada e conversa real ou sintética criada em contexto de teste autorizado da workspace; não afirmar teste completo de atribuição/transferência até ele ocorrer.
+- Próxima fase: logs auditáveis de mudanças e atribuições, gestão de SLA/prioridades, resposta manual via integrações existentes com opt-out e autorização, confirmação de handoff com Chatwoot. Sem staging separado e sem sobrescrever o Brain no Mac.
