@@ -28,3 +28,15 @@ Documentação Kommo, verificada:
 
 ## Portas de qualidade e rollback
 Validar CI do PR e build Next no GitHub; publicar imagem fora da VPS; atualizar somente a imagem do serviço `harvest_harvest`, sem recriar stack. Smoke interno autenticidade/login e inspecionar tarefa running. QA funcional na workspace `figueira-marketing` continua necessário para confirmar telas; caso falhe, restaurar imagem anterior do Swarm, sem remover SQL 040 já aplicado.
+
+## Implantação em produção — 25/10/2026
+- PR #21 mesclado via squash: `af768055d6fe49a10efab63e8cabbcfcc90ca994`.
+- CI da branch validado por GitHub Actions com TypeScript, testes unitários e build. A imagem na main publicada com sucesso pela execução [40236460098](https://github.com/tuco-gui/harvest-ai/actions/runs/40236460098).
+- Serviço Swarm `harvest_harvest` teve **apenas a imagem** atualizada, sem StackUpdate do Portainer, sem tocar em Docker secrets, volumes, bancos nem serviços de terceiros.
+- Imagem atual: `ghcr.io/tuco-gui/harvest-ai:af768055d6fe49a10efab63e8cabbcfcc90ca994@sha256:01906dd5132250f0e6c6d55291557239e8ede3daa15ce842454cca795611fd34`.
+- Imagem anterior para rollback: `ghcr.io/tuco-gui/harvest-ai:48f5513cd6db98bc0eab58aefb33f029584d98b7@sha256:22ee15555157ab56828f33a3e0ffc37500e85af1e99bb2a3ed9f4b8269cc9965`.
+- Swarm confirmou `update completed`; tarefa nova `running` com a imagem correta e sem erro.
+- Smoke interno executado no novo contêiner: `/entrar=200`; `/inbox=307`, `/crm=307`, `/crm/contatos=307`, `/crm/cadastros/contatos=307` redirecionam para login sem sessão. Processo exit 0.
+- Contêiner Docker CLI de manutenção removido após a verificação.
+- O **stack file** original mantido no Portainer pode referenciar `:latest` mesmo quando o serviço executa a revisão imutável. Confirmar SHA antes de redeploy futuro.
+- **QA funcional autenticado pendente**, especialmente Inbox avançada, criar negócio e responder via canal realmente conectado, editar contatos e associar tags/etapas na workspace Figueira Marketing. Não declarar integração Instagram/Messenger/Google/webchat em funcionamento.
