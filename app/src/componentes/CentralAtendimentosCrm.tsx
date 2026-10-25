@@ -12,7 +12,7 @@ type Atendente = { id: string; nome: string };
 type Msg = { id: string; direcao: 'entrada' | 'saida'; texto: string; data: string; status: string | null };
 type Detalhe = {
   telefone: string; timeline: Msg[]; nome: string | null;
-  oportunidade: { id: number; estagio: string } | null;
+  oportunidade: { id: number; estagio: string; funil_id:number|null;canal_padrao_id:number|null } | null;
 };
 const STATUS: Record<StatusAtendimento, string> = {
   aberto: 'Aberto', pendente: 'Aguardando', resolvido: 'Resolvido',
@@ -103,6 +103,16 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     }).catch(()=>{});
     return ()=>ctl.abort();
   },[]);
+  useEffect(()=>{
+    if(!detalhe)return;
+    const escolhido=detalhe.oportunidade?.canal_padrao_id;
+    if(escolhido!=null) {
+      const cadastrado=canaisWhatsApp.find(c=>c.id===escolhido);
+      setCanalSelecionado(cadastrado?String(cadastrado.id):'');
+    } else {
+      setCanalSelecionado(String(canaisWhatsApp[0]?.id??''));
+    }
+  },[detalhe?.oportunidade?.id,detalhe?.oportunidade?.canal_padrao_id,canaisWhatsApp]);
   const selecionada = conversas.find(c => c.telefone === telefone);
   useEffect(() => {
     if (!telefone || !mostrarAuditoria) return;
@@ -272,6 +282,11 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
               {detalhe && !detalhe.timeline.length && <p>Nenhuma mensagem disponível.</p>}
             </div>}
           <div className="crm-inbox-compositor">
+             {detalhe?.oportunidade?.canal_padrao_id!=null && !canaisWhatsApp.some(
+               c=>c.id===detalhe.oportunidade?.canal_padrao_id) && (
+               <p className="crm-aviso" role="status">O canal deste funil não está conectado.
+                 Selecione outro manualmente para responder; não haverá troca automática.</p>
+             )}
              {detalhe?.oportunidade && canaisWhatsApp.length>0 ? (
                <form onSubmit={responder}>
                  <label>Responder pelo WhatsApp (WAHA/Evolution)
@@ -281,9 +296,10 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
                  </label>
                  <select aria-label="Canal WhatsApp para resposta" value={canalSelecionado}
                    onChange={e=>setCanalSelecionado(e.target.value)}>
+                   <option value="">Selecione um canal conectado</option>
                    {canaisWhatsApp.map(c=><option key={c.id} value={c.id}>{c.nome} · {c.provider}</option>)}
                  </select>
-                 <button className="btn-primario" disabled={!textoResposta.trim()||enviandoResposta} type="submit">
+                 <button className="btn-primario" disabled={!textoResposta.trim()||!canalSelecionado||enviandoResposta} type="submit">
                    {enviandoResposta?'Enviando…':'Enviar resposta'}
                  </button>
                </form>
