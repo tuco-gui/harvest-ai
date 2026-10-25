@@ -1,0 +1,32 @@
+name: Validar manutencao segura do Harvest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/admin/recuperar-superadmin-harvest.sh"
+      - ".github/workflows/validar-operacao-superadmin.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar sintaxe Bash
+        run: bash -n scripts/admin/recuperar-superadmin-harvest.sh
+      - name: Verificar sintaxe do JavaScript incorporado
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          content = Path('scripts/admin/recuperar-superadmin-harvest.sh').read_text()
+          script = content.split("cat <<'NODE'\n", 1)[1].split("\nNODE\n", 1)[0]
+          Path('/tmp/harvest_auth_maintenance_check.mjs').write_text(script)
+          PY
+          node --check /tmp/harvest_auth_maintenance_check.mjs
+      - name: Impedir senha fixa ou vazamento de segredos no utilitario
+        run: |
+          ! grep -nE 'SUPABASE_SERVICE_KEY=[^# ]|NOVA_SENHA="[^$]|password: .(hardcoded)' scripts/admin/recuperar-superadmin-harvest.sh
