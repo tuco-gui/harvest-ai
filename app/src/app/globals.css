@@ -751,3 +751,60 @@ a:hover{color:var(--ink)}
  .crm-tarefa-item{flex-wrap:wrap}
  .crm-tarefa-acoes{margin-left:31px}
 }
+
+
+/* CRM Inbox — fluxo de triagem estilo Deskcomm/Kommo, com identidade Harvest. */
+.crm-atendimentos{display:flex;flex-direction:column;min-height:calc(100vh - 90px);min-width:0;padding:20px 24px 26px}
+.crm-atendimentos-topo{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:16px}
+.crm-atendimentos-topo h1{font-family:var(--display);font-size:26px;letter-spacing:-.04em;margin:3px 0 6px}
+.crm-atendimentos-topo>a{color:var(--ink);font-size:12px;font-weight:700;text-decoration:underline}
+.crm-atendimentos-corpo{display:grid;grid-template-columns:minmax(290px,340px) minmax(0,1fr);min-height:600px;height:calc(100vh - 200px);border:1px solid var(--rule);border-radius:9px;overflow:hidden;background:var(--surface)}
+.crm-atendimentos-lista{display:flex;flex-direction:column;min-height:0;min-width:0;border-right:1px solid var(--rule)}
+.crm-atendimentos-resumo{padding:17px 16px 10px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.crm-atendimentos-resumo strong{font-size:13px}.crm-atendimentos-resumo span{font-size:11px;color:var(--ink-3)}
+.crm-atendimentos-lista>input{height:38px;margin:4px 12px 10px;padding:0 12px;color:var(--ink);font:inherit;font-size:12px;background:var(--sunken);border:1px solid var(--rule);border-radius:6px}
+.crm-atendimentos-filtros{display:flex;gap:4px;padding:0 12px 10px;flex-wrap:wrap}
+.crm-atendimentos-filtros button{font-size:10px;line-height:1.2;border:1px solid var(--rule);border-radius:15px;background:var(--surface);color:var(--ink-2);padding:6px 9px}
+.crm-atendimentos-filtros button.ativa{color:var(--bg);background:var(--ink);border-color:var(--ink)}
+.crm-atendimentos-scroll{flex:1;overflow:auto;min-height:0}
+.crm-atendimentos-vazio{padding:36px 22px;color:var(--ink-3);font-size:13px;text-align:center;line-height:1.6}
+.crm-atendimento-contato{display:flex;flex-direction:column;gap:7px;width:100%;padding:15px 16px;text-align:left;border:0;border-top:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer}
+.crm-atendimento-contato:hover{background:var(--hover)}.crm-atendimento-contato.selecionado{background:var(--sunken);box-shadow:inset 3px 0 var(--red)}
+.crm-atendimento-contato-topo{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.crm-atendimento-contato-topo strong{font-size:13px;min-width:0;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-atendimento-contato-topo time{font-size:10px;color:var(--ink-3);white-space:nowrap}
+.crm-atendimento-preview{font-size:11px;color:var(--ink-3);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.crm-atendimento-contato-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--ink-3);font-size:10px}
+.crm-atendimento-status{border:1px solid var(--rule);border-radius:12px;font-size:10px;padding:3px 8px;color:var(--ink-2)}
+.crm-atendimento-status.aberto{border-color:var(--red);color:var(--red)}
+.crm-atendimento-status.resolvido{color:var(--ink-3)}
+.crm-atendimento-detalhe{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--sunken)}
+.crm-atendimento-detalhe>header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:9px;padding:14px 20px;background:var(--surface);border-bottom:1px solid var(--rule)}
+.crm-atendimento-detalhe>header>div:first-child{display:flex;flex-direction:column;gap:3px}
+.crm-atendimento-detalhe>header strong{font-size:14px}
+.crm-atendimento-detalhe>header span{font-size:11px;color:var(--ink-3)}
+.crm-atendimento-links{display:flex;align-items:center;gap:14px}
+.crm-atendimento-links a{color:var(--ink);font-weight:600;font-size:11px;text-decoration:underline;text-underline-offset:3px}
+.crm-atendimento-mensagens{display:flex;flex:1;min-height:170px;overflow-y:auto;flex-direction:column;gap:9px;padding:16px 19px}
+.crm-atendimento-mensagem{width:fit-content;max-width:min(75%,550px);padding:11px 13px;border-radius:10px;background:var(--surface);border:1px solid var(--rule)}
+.crm-atendimento-mensagem.saida{align-self:flex-end;background:color-mix(in srgb,var(--red) 5%,var(--surface))}
+.crm-atendimento-mensagem.entrada{align-self:flex-start}
+.crm-atendimento-mensagem p{font-size:12px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 6px}
+.crm-atendimento-mensagem small{font-size:10px;color:var(--ink-3)}
+.crm-atendimento-editor{border-top:1px solid var(--rule);padding:16px 20px;background:var(--surface)}
+.crm-atendimento-editor h2{font-size:14px;margin:0 0 12px;font-weight:800}
+.crm-atendimento-campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.crm-atendimento-campos label{display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:600;color:var(--ink-2)}
+.crm-atendimento-campos input,.crm-atendimento-campos select{height:37px;border:1px solid var(--rule);border-radius:5px;padding:0 10px;min-width:0;background:var(--sunken);color:var(--ink);font:inherit}
+.crm-atendimento-campos .crm-atendimento-etiquetas{grid-column:1/-1}
+.crm-atendimento-somente-leitura{padding:11px;color:var(--ink-3);font-size:12px}
+.crm-atendimento-acoes{display:flex;gap:14px;justify-content:space-between;align-items:center;margin-top:13px;flex-wrap:wrap}
+.crm-atendimento-acoes .ajuda{max-width:410px;font-size:10px}
+.crm-atendimento-acoes button{flex:none;padding:10px 15px}
+@media(max-width:850px){
+ .crm-atendimentos{padding:12px}
+ .crm-atendimentos-corpo{grid-template-columns:1fr;height:auto;min-height:0}
+ .crm-atendimentos-lista{border-right:0;border-bottom:1px solid var(--rule);max-height:340px}
+ .crm-atendimento-detalhe{min-height:460px}
+ .crm-atendimento-mensagens{max-height:350px}
+}
