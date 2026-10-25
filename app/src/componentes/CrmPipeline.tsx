@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   ESTAGIOS_CRM, ESTAGIOS_ENCERRADOS, ESTAGIOS_PIPELINE,
   probabilidadeEstagio,
@@ -25,8 +26,9 @@ const NOVA_OPORTUNIDADE = {
   proxima_acao: '', previsao_fechamento: '', observacoes: '', tags: '',
 };
 
-export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel, perfilId, estagiosFunil = [], funis = [], funilIdInicial = null }: {
+export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel, perfilId, estagiosFunil = [], funis = [], funilIdInicial = null, avancado = false }: {
   oportunidades: Oportunidade[];
+  avancado?: boolean;
   owners: Owner[];
   campanhas: Campanha[];
   canais: Canal[];
@@ -315,8 +317,17 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     if (ficha?.id === op.id) setFicha(null);
   }
 
+  // Link direto das tarefas para o negócio correspondente.
+  useEffect(() => {
+    if (!avancado) return;
+    const destino = new URLSearchParams(window.location.search).get('oportunidade');
+    if (!destino) return;
+    const oportunidade = oportunidades.find(o => String(o.id) === destino);
+    if (oportunidade) void abrirFicha(oportunidade);
+  }, []); // abertura inicial: a lista completa veio do servidor com escopo da conta
+
   return (
-    <div className="crm-shell">
+    <div className={'crm-shell' + (avancado ? ' crm-kommo' : '')}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         {funis.length > 1 && funilId && (
           <span style={{ fontFamily: 'var(--display)', fontWeight: 800, fontSize: 15, letterSpacing: '-.02em', color: 'var(--ink)' }}>
@@ -337,6 +348,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       </section>
 
       <div className="crm-barra">
+        {avancado && <Link className="crm-atalho-tarefas" href="/crm/tarefas">Tarefas e prazos</Link>}
         {funis.length > 0 && (
           <select value={funilId ?? ''} onChange={(e) => setFunilId(e.target.value ? Number(e.target.value) : null)}
             style={{ height: 40, padding: '0 10px', border: '1px solid var(--rule)', background: 'var(--surface)', borderRadius: 2, color: 'var(--ink-2)', fontWeight: 600 }}>
@@ -366,6 +378,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             onDragLeave={() => setEstagioAlvo((s) => s === est.id ? null : s)}
             onDrop={() => { const op = ops.find((o) => o.id === arrastando); if (op) void moverPara(op, est.id); setArrastando(null); setEstagioAlvo(null); }}>
             <header className="crm-coluna-cabecalho"><div><span className="crm-estagio-ponto" style={{ background: est.cor || undefined }} />{est.nome}</div><b>{itens.length}</b><small>{valorFmt(total)}</small></header>
+            {avancado && <div className="crm-coluna-progresso" role="img" aria-label={`${itens.length} oportunidades neste estágio`} style={{ background: est.cor || 'var(--red)', width: `${Math.max(3, 100 * itens.length / Math.max(1, visiveis.length))}%` }} />}
             <ul className="crm-coluna-cards">
               {itens.map((op) =>               <li key={op.id} className="crm-cartao" draggable={podeEditar || podeEditarPropria(op)}
                 onDragStart={() => setArrastando(op.id)} onDragEnd={() => { setArrastando(null); setEstagioAlvo(null); }} onClick={() => void abrirFicha(op)}>
