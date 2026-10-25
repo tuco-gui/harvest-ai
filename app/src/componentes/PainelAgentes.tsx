@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { EstadoConexaoIA } from '@/lib/conexaoIAWorkspace';
 import {
   CATALOGO_AGENTES, TIPOS_AGENTE, type TipoAgente,
-  validarConfiguracaoAgente,
+  validarConfiguracaoAgente, type TurnoLaboratorio,
 } from '@/lib/agentes';
 
 type AgenteTela = {
@@ -27,7 +27,7 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
   const [aviso, setAviso] = useState('');
   const [erro, setErro] = useState('');
   const [mensagem, setMensagem] = useState('');
-  const [resposta, setResposta] = useState('');
+  const [conversas, setConversas] = useState<Partial<Record<TipoAgente, TurnoLaboratorio[]>>>({});
 
   useEffect(() => {
     let ativo = true;
@@ -46,11 +46,11 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
   }, []);
 
   const atual = agentes.find(a => a.tipo === tipo);
+  const historicoAtual = conversas[tipo] ?? [];
   function editar(patch: Partial<AgenteTela>) {
     setAgentes(lista => lista.map(a => a.tipo === tipo ? { ...a, ...patch } : a));
     setErro('');
     setAviso('');
-    setResposta('');
   }
 
   async function salvar() {
@@ -72,17 +72,52 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
     finally { setSalvando(false); }
   }
 
+  function novaConversa() {
+    if (testando) return;
+    setConversas(prev => ({ ...prev, [tipo]: [] }));
+    setMensagem('');
+    setAviso('Conversa reiniciada. Nada foi armazenado no servidor.');
+    setErro('');
+  }
+
+  async function copiarParaHumano() {
+    if (!atual || !historicoAtual.length) return;
+    const texto = [
+      'Encaminhamento manual · Harvest AI (simulação)',
+      'Agente: ' + atual.nome,
+      'Nenhuma ação externa foi executada.',
+      '',
+      ...historicoAtual.map(t => (t.papel === 'cliente' ? 'Cliente: ' : 'Agente: ') + t.texto),
+    ].join('\\n\\n');
+    try {
+      await navigator.clipboard.writeText(texto);
+      setAviso('Conversa copiada para encaminhamento humano. Nenhum envio foi realizado.');
+    } catch {
+      setErro('Não foi possível copiar automaticamente. Selecione o conteúdo da conversa para copiar.');
+    }
+  }
+
   async function testar() {
     if (!atual || !mensagem.trim()) return;
-    setErro(''); setAviso(''); setResposta(''); setTestando(true);
+    setErro(''); setAviso(''); setTestando(true);
+    const tipoTeste = tipo;
+    const textoEnviado = mensagem.trim();
+    const contextoAnterior = conversas[tipoTeste] ?? [];
     try {
       const r = await fetch('/api/agentes/testar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo, mensagem: mensagem.trim() }),
+        body: JSON.stringify({ tipo: tipoTeste, mensagem: textoEnviado, historico: contextoAnterior }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro ?? 'Não foi possível testar.');
-      setResposta(j.resposta);
+      setConversas(prev => ({
+        ...prev,
+        [tipoTeste]: [...contextoAnterior,
+          { papel: 'cliente' as const, texto: textoEnviado },
+          { papel: 'agente' as const, texto: String(j.resposta) },
+        ].slice(-10),
+      }));
+      setMensagem('');
       setAviso('Resposta simulada. Nenhum WhatsApp, agendamento ou ação foi executado.');
     } catch (e: any) { setErro(e.message); }
     finally { setTestando(false); }
@@ -125,7 +160,7 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
               const a = agentes.find(x => x.tipo === t);
               return (
                 <button key={t} onClick={() => {
-                  setTipo(t); setMensagem(''); setResposta(''); setAviso(''); setErro('');
+                  setTipo(t); setMensagem(''); setAviso(''); setErro('');
                 }}
                   aria-pressed={tipo === t}
                   style={{
@@ -191,10 +226,31 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
 
             {editavel && <section style={card} aria-label="Teste manual">
               <h2 style={{ fontSize: 16, marginBottom: 6 }}>Simular conversa</h2>
+              <p className="ajuda" style={{ marginBottom: 8 }}>A conversa continua a partir das respostas anteriores. Histórico temporário, disponível apenas nesta tela.</p>
               <p className="ajuda" style={{ marginBottom: 14 }}>
                 Digite uma mensagem de exemplo, sem senhas nem dados pessoais de clientes.
                 Usa a conexão já cadastrada em Configurações nesta workspace.
               </p>
+              {historicoAtual.length > 0 && (
+                <div aria-label="Histórico da simulação" aria-live="polite" style={{
+                  display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14,
+                  maxHeight: 380, overflowY: 'auto',
+                }}>
+                  {historicoAtual.map((turno, indice) => (
+                    <div key={indice} style={{
+                      background: turno.papel === 'cliente' ? 'var(--hover)' : 'var(--sunken)',
+                      borderLeft: turno.papel === 'agente' ? '3px solid var(--red)' : '3px solid var(--rule-2)',
+                      padding: '11px 13px', borderRadius: 4, whiteSpace: 'pre-wrap',
+                      overflowWrap: 'anywhere', fontSize: 13, lineHeight: 1.5,
+                    }}>
+                      <strong style={{ display: 'block', marginBottom: 5 }}>
+                        {turno.papel === 'cliente' ? 'Cliente (simulado)' : atual.nome}
+                      </strong>
+                      {turno.texto}
+                    </div>
+                  ))}
+                </div>
+              )}
               <label htmlFor="agente-mensagem" style={{ display: 'block', marginBottom: 6 }}>Mensagem simulada</label>
               <textarea id="agente-mensagem" style={{ ...campo, minHeight: 90, resize: 'vertical' }}
                 value={mensagem} maxLength={1000}
@@ -203,9 +259,9 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
               <button style={{ ...btn, marginTop: 12 }} disabled={testando || !mensagem.trim() || !atual.id || !conexaoIa?.configurada}
                 onClick={testar}>{testando ? 'Consultando IA…' : 'Gerar resposta de teste'}</button>
               {!atual.id && <p className="ajuda" style={{ marginTop: 9 }}>Salve o agente antes de testar.</p>}
-              {resposta && <div style={{ marginTop: 16, padding: 14, borderLeft: '3px solid var(--red)', background: 'var(--hover)', whiteSpace: 'pre-wrap' }}>
-                <strong style={{ display: 'block', marginBottom: 8 }}>Resposta sugerida</strong>
-                {resposta}
+              {historicoAtual.length > 0 && <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                <button type="button" style={btn} disabled={testando} onClick={novaConversa}>Nova conversa</button>
+                <button type="button" style={btn} onClick={copiarParaHumano}>Copiar para atendimento humano</button>
               </div>}
             </section>}
           </div>
