@@ -86,7 +86,7 @@ export function validarHistoricoLaboratorio(
       return { ok: false, erro: 'O histórico deve alternar cliente e agente sem mensagens vazias.' };
     }
     tamanhoTotal += obj.texto.length;
-    if (tamanhoTotal > 8000) {
+    if (tamanhoTotal > 13000) {
       return { ok: false, erro: 'Histórico muito longo. Inicie uma nova conversa.' };
     }
     historico.push({ papel: papelEsperado, texto: obj.texto.trim() });
