@@ -1,0 +1,41 @@
+name: Validar hotfix de autenticacao Harvest
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/src/middleware.ts"
+      - "app/src/lib/rotasPublicas.ts"
+      - "app/src/app/api/auth/**"
+      - "app/src/app/esqueci-senha/**"
+      - "tests/unit/rotasPublicas.test.ts"
+      - ".github/workflows/validar-auth.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  autenticacao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Testar allowlist de autenticação
+        run: node --experimental-strip-types tests/unit/rotasPublicas.test.ts
+      - name: Instalar dependencias
+        working-directory: app
+        run: npm ci
+      - name: Verificar tipos
+        working-directory: app
+        run: npx tsc --noEmit
+      - name: Build do Harvest fora da VPS
+        working-directory: app
+        run: npm run build
