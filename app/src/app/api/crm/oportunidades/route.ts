@@ -3,6 +3,7 @@ import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { crmBackend, ownerAtual } from '@/lib/twenty';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import { isAdmin } from '@/lib/crmControleAcesso';
+import { chaveEstagio, estagioValido } from '@/lib/crmStages';
 
 /**
  * GET  /api/crm/oportunidades  → lista do tenant.
@@ -112,9 +113,13 @@ export async function POST(req: Request) {
   const estagioStr = String(b.estagio ?? 'novo').trim();
   let funilId: number | null = b.funil_id ? Number(b.funil_id) : null;
   let funilEstagioId: number | null = null;
-  let query = admin.from('funil_estagios').select('id, funil_id, nome').ilike('nome', estagioStr);
-  if (funilId) query = query.eq('funil_id', funilId);
-  const { data: estagioDb } = await query.limit(1).maybeSingle();
+  const { data: estagiosDb } = funilId
+    ? await admin.from('funil_estagios').select('id,funil_id,nome')
+      .eq('funil_id',funilId).limit(100)
+    : { data: [] };
+  const estagioDb = (estagiosDb ?? []).find(e => chaveEstagio(e.nome)===chaveEstagio(estagioStr));
+  if(!estagioValido(estagioStr) && !estagioDb)
+    return NextResponse.json({erro:'Etapa não pertence ao funil escolhido.'},{status:400});
   if (estagioDb) {
     funilEstagioId = estagioDb.id;
     funilId = estagioDb.funil_id;

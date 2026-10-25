@@ -6,8 +6,8 @@ import {
 } from '@/lib/crmEtiquetas';
 
 export default function GerenciadorEtiquetasCRM({
-  selecionadas, onChange, desabilitado = false, contexto = 'conversa', limite = 8,
-}: { selecionadas: string[]; onChange: (v: string[]) => void; desabilitado?: boolean; contexto?: 'conversa' | 'negócio'; limite?: number }) {
+  selecionadas, onChange, desabilitado = false, contexto = 'conversa', limite = 8, contagens = {},
+}: { selecionadas: string[]; onChange: (v: string[]) => void; desabilitado?: boolean; contexto?: 'conversa' | 'negócio'; limite?: number; contagens?: Record<string,number> }) {
   const [catalogo, setCatalogo] = useState<EtiquetaCRM[]>([]);
   const [podeGerenciar, setPodeGerenciar] = useState(false);
   const [novoNome, setNovoNome] = useState('');
@@ -110,7 +110,7 @@ export default function GerenciadorEtiquetasCRM({
         <input type="checkbox" checked={selecionadas.includes(t.nome)}
           onChange={()=>alternar(t.nome)}/>
         <span className="crm-tag-ponto" style={{backgroundColor:t.cor??'var(--ink-3)'}} aria-hidden="true"/>
-        {t.nome}
+        {t.nome} <small>({contagens[t.nome]??0})</small>
       </label>):<p className="ajuda">Nenhuma etiqueta cadastrada. Crie a primeira abaixo.</p>}
     </fieldset>
     {!!selecionadas.length && <button className="crm-etiquetas-limpar" type="button"

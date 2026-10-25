@@ -7,6 +7,7 @@ import CadastrosCRM from '@/componentes/CadastrosCRM';
 
 export default async function Pagina({params}:{params:Promise<{entidade:string}>}) {
  const {entidade}=await params;
+ if(entidade==='contatos')redirect('/crm/contatos');
  if(!cadastroValido(entidade))notFound();
  const perfil=await perfilAtual();
  if(!perfil)redirect('/entrar');

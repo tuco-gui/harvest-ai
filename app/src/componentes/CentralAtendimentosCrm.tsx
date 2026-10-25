@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import EncaminhamentoChatwootCRM from '@/componentes/EncaminhamentoChatwootCRM';
-import GerenciadorEtiquetasCRM from '@/componentes/GerenciadorEtiquetasCRM';
+import SeletorEtiquetasCRM from '@/componentes/SeletorEtiquetasCRM';
 import { estadoSla, NOMES_PRIORIDADE, PRIORIDADES, type Prioridade } from '@/lib/crmEtiquetas';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { STATUS_ATENDIMENTO, type ConversaAtendimento,
@@ -26,6 +26,10 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
   const [telefone, setTelefone] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<Detalhe | null>(null);
   const [busca, setBusca] = useState('');
+  const [canaisWhatsApp, setCanaisWhatsApp] = useState<Array<{id:number;nome:string;provider:string}>>([]);
+  const [canalSelecionado, setCanalSelecionado] = useState('');
+  const [textoResposta, setTextoResposta] = useState('');
+  const [enviandoResposta, setEnviandoResposta] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [carregando, setCarregando] = useState(true);
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
@@ -88,6 +92,17 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     return () => ctrl.abort();
   }, [telefone]); // Seleção muda somente ao trocar de conversa.
 
+  useEffect(() => {
+    const ctl=new AbortController();
+    fetch('/api/canais',{signal:ctl.signal}).then(r=>r.json()).then(d=>{
+      if(ctl.signal.aborted)return;
+      const ativos=(d.canais??[]).filter((c:any)=>
+        c.ativo && c.status==='conectado' && ['waha','evolution'].includes(c.provider));
+      setCanaisWhatsApp(ativos.map((c:any)=>({id:c.id,nome:c.nome,provider:c.provider})));
+      if(ativos[0])setCanalSelecionado(String(ativos[0].id));
+    }).catch(()=>{});
+    return ()=>ctl.abort();
+  },[]);
   const selecionada = conversas.find(c => c.telefone === telefone);
   useEffect(() => {
     if (!telefone || !mostrarAuditoria) return;
@@ -143,6 +158,44 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     } finally { setSalvando(false); }
   }
 
+  async function criarNegocioDaConversa(){
+    if(!selecionada || !podeAtribuir)return;
+    setSalvando(true);setErro('');setAviso('');
+    try{
+      const r=await fetch('/api/crm/oportunidades',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({empresa:selecionada.nome||selecionada.telefone,
+          contato:selecionada.nome||'',telefone:selecionada.telefone,
+          origem:'inbox',estagio:'novo'}),
+      });
+      const d=await r.json();if(!r.ok)throw Error(d.erro||'Não foi possível criar o negócio.');
+      const rr=await fetch('/api/crm/atendimentos/'+encodeURIComponent(selecionada.telefone),
+        {cache:'no-store'});
+      if(rr.ok)setDetalhe(await rr.json());
+      setAviso('Negócio criado e vinculado à conversa. Nenhuma mensagem foi enviada.');
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao criar negócio.');}
+    finally{setSalvando(false);}
+  }
+
+  async function responder(e:React.FormEvent) {
+    e.preventDefault();
+    if(!detalhe?.oportunidade || !textoResposta.trim() || !canalSelecionado || enviandoResposta)return;
+    setEnviandoResposta(true);setErro('');setAviso('');
+    try{
+      const r=await fetch('/api/crm/oportunidades/'+detalhe.oportunidade.id+'/mensagens',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({texto:textoResposta.trim(),canal_id:Number(canalSelecionado)}),
+      });
+      const d=await r.json();
+      if(!r.ok)throw Error(d.erro||'O envio não foi confirmado.');
+      setTextoResposta('');
+      const rr=await fetch('/api/crm/atendimentos/'+encodeURIComponent(detalhe.telefone),{cache:'no-store'});
+      if(rr.ok)setDetalhe(await rr.json());
+      setAviso('Mensagem enviada pelo canal WhatsApp selecionado.');
+    }catch(e){setErro(e instanceof Error?e.message:'Erro ao enviar.');}
+    finally{setEnviandoResposta(false);}
+  }
+
   const contagemSlaVencido = conversas.filter(c=>estadoSla(c.prazo_triagem_em,c.status)==='vencido').length;
   const nomeAtendente = (id: string | null) =>
     atendentes.find(a => a.id === id)?.nome ?? (id ? 'Atendente atribuído' : 'Sem responsável');
@@ -152,7 +205,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     <header className="crm-atendimentos-topo">
       <div>
         <p className="label">CRM · ATENDIMENTO</p>
-        <h1>Central de atendimento</h1>
+        <h1>Comunicação · Inbox</h1>
         <p className="ajuda">Triagem, atribuição e encaminhamento humano das conversas recebidas.</p>
       </div>
       <Link href="/crm">Voltar ao pipeline</Link>
@@ -207,7 +260,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             </div>
             <div className="crm-atendimento-links">
               {detalhe?.oportunidade && <Link href={'/crm?oportunidade=' + detalhe.oportunidade.id}>Abrir negócio</Link>}
-              <Link href={'/inbox?telefone=' + encodeURIComponent(selecionada.telefone)}>Inbox original</Link>
+              
             </div>
           </header>
           {carregandoDetalhe ? <p className="crm-atendimentos-vazio">Carregando mensagens…</p> :
@@ -218,7 +271,31 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
               </article>)}
               {detalhe && !detalhe.timeline.length && <p>Nenhuma mensagem disponível.</p>}
             </div>}
-          <div className="crm-atendimento-editor">
+          <div className="crm-inbox-compositor">
+             {detalhe?.oportunidade && canaisWhatsApp.length>0 ? (
+               <form onSubmit={responder}>
+                 <label>Responder pelo WhatsApp (WAHA/Evolution)
+                   <textarea maxLength={4096} value={textoResposta}
+                     onChange={e=>setTextoResposta(e.target.value)}
+                     placeholder="Digite sua resposta…"/>
+                 </label>
+                 <select aria-label="Canal WhatsApp para resposta" value={canalSelecionado}
+                   onChange={e=>setCanalSelecionado(e.target.value)}>
+                   {canaisWhatsApp.map(c=><option key={c.id} value={c.id}>{c.nome} · {c.provider}</option>)}
+                 </select>
+                 <button className="btn-primario" disabled={!textoResposta.trim()||enviandoResposta} type="submit">
+                   {enviandoResposta?'Enviando…':'Enviar resposta'}
+                 </button>
+               </form>
+             ) : <p className="ajuda">{detalhe?.oportunidade
+               ? 'Conecte um canal WAHA/Evolution da workspace para responder pelo WhatsApp.'
+               : 'Vincule esta conversa a um negócio para habilitar resposta no WhatsApp existente.'}</p>}
+             {!detalhe?.oportunidade && podeAtribuir && <button type="button"
+               disabled={salvando} onClick={()=>void criarNegocioDaConversa()}>
+               Criar negócio a partir da conversa
+             </button>}
+           </div>
+           <div className="crm-atendimento-editor">
             <h2>Gerenciar atendimento</h2>
             <div className="crm-atendimento-campos">
               <label>Situação
@@ -240,7 +317,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
                 </select>
               </label>
               <div className="crm-atendimento-etiquetas">
-                <GerenciadorEtiquetasCRM selecionadas={etiquetas} onChange={setEtiquetas} desabilitado={salvando}/>
+                <SeletorEtiquetasCRM selecionadas={etiquetas} onChange={setEtiquetas} limite={8} desabilitado={salvando}/>
               </div>
             </div>
             <div className="crm-atendimento-sla-indicador">
@@ -267,7 +344,9 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             </ol>}
             {erro && <p role="alert" className="crm-aviso">{erro}</p>}
             {aviso && <p role="status" className="ajuda">{aviso}</p>}
-            {podeAtribuir && <EncaminhamentoChatwootCRM telefone={selecionada.telefone} />}
+            {podeAtribuir && <details><summary>Integração opcional com Chatwoot</summary>
+               <EncaminhamentoChatwootCRM telefone={selecionada.telefone}/>
+             </details>}
             <div className="crm-atendimento-acoes">
               <p className="ajuda">A transferência altera somente o responsável pela conversa. Não movimenta negócios nem envia mensagens.</p>
               <button className="btn-primario" type="button" disabled={salvando} onClick={() => void salvar()}>

@@ -23,6 +23,8 @@ export type Oportunidade = {
   id: number | string;
   conta_id: string;
   lead_id: number | null;
+  funil_id?: number | null;
+  funil_estagio_id?: number | null;
   empresa: string;
   contato: string;
   telefone: string | null;
@@ -93,7 +95,7 @@ class SupabaseCrmBackend implements CrmBackend {
   }
 
   async criar(contaId: string, input: OportunidadeInput): Promise<Oportunidade> {
-    const estagio = input.estagio && estagioValido(input.estagio) ? input.estagio : ESTAGIO_PADRAO;
+    const estagio = input.estagio && (estagioValido(input.estagio) || (input.funil_id && input.funil_estagio_id)) ? input.estagio : ESTAGIO_PADRAO;
     const { data, error } = await supabaseAdmin()
       .from('oportunidades')
       .insert({
@@ -125,7 +127,7 @@ class SupabaseCrmBackend implements CrmBackend {
 
   async atualizar(contaId: string, id: number, patch: Partial<OportunidadeInput>): Promise<Oportunidade | null> {
     const limpo: Record<string, unknown> = { ...patch, atualizado_em: new Date().toISOString() };
-    if (patch.estagio && !estagioValido(patch.estagio)) delete limpo.estagio;
+    if (patch.estagio && !estagioValido(patch.estagio) && !patch.funil_estagio_id) delete limpo.estagio;
     // Sync funil_estagio_id when estagio changes — scope by funil_id (funil_estagios não tem conta_id)
     if (patch.estagio && limpo.estagio && !patch.funil_estagio_id) {
       let funilId = patch.funil_id ?? null;

@@ -32,6 +32,11 @@ export const ESTAGIOS_CRM: Estagio[] = [
 export const ESTAGIOS_PIPELINE = ESTAGIOS_CRM.filter((e) => e.grupo === 'pipeline');
 export const ESTAGIOS_ENCERRADOS = ESTAGIOS_CRM.filter((e) => e.grupo === 'encerrado');
 
+/** ID determinístico para nomes de etapas configuráveis no banco. */
+export function chaveEstagio(nome:string):string {
+  return nome.toLocaleLowerCase('pt-BR').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,'_');
+}
 export const ESTAGIO_PADRAO = 'novo';
 
 export function estagioValido(id: string): boolean {

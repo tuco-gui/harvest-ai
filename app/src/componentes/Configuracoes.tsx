@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PROVEDORES } from '@/lib/ia';
+import { CANAIS_HARVEST } from '@/lib/canaisUnificados';
 import CanaisChatwoot from './CanaisChatwoot';
 
 type ErroMensagem = { tipo: string; empresa: string; erro: string; quando: string };
@@ -454,7 +455,15 @@ export default function Configuracoes(p: Props) {
           )}
 
           <section className="secao">
-            <h2>WhatsApp — canais</h2>
+            <h2>Conexões de atendimento</h2>
+             <p className="ajuda">A Inbox foi desenhada para receber diferentes provedores em uma única conversa por canal e workspace. Os itens planejados ainda não recebem nem enviam mensagens.</p>
+             <div className="crm-canais-capacidades">
+               {CANAIS_HARVEST.map(c=><div key={c.id}>
+                 <strong>{c.nome}</strong>
+                 <span>{c.situacao==='operacional'?'Adaptador disponível':c.situacao==='planejado'?'Conector ainda não implementado':'Serviço encerrado'}</span>
+               </div>)}
+             </div>
+             <h2>WhatsApp — canais</h2>
             <p className="resumo-secao">
               Cada linha é um número/comunicação de WhatsApp da sua conta. O disparo escolhe
               um destes canais (fixo ou em rodízio). Para conectar pelo QR Code, use WAHA.

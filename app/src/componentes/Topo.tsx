@@ -187,19 +187,15 @@ export default function Topo(p: Props) {
 
         <nav className="lateral-nav">
           <div className="lateral-grupo">
-            {link('/inbox', 'Inbox')}
+            {link('/inbox', 'Comunicação')}
             {link('/', 'Prospecção')}
             {link('/campanhas', 'Campanhas')}
-            {temCrm && link('/crm', 'CRM')}
-            {temCrm && p.modulos.includes('crm_avancado') && link('/crm/atendimentos', 'Atendimentos')}
-            {temCrm && p.modulos.includes('crm_avancado') && link('/crm/contatos', 'Contatos')}
+            {temCrm && link('/crm', 'Pipelines')}
+                        {temCrm && p.modulos.includes('crm_avancado') && link('/crm/contatos', 'Contatos')}
             {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/cadastros/empresas', 'Empresas')}
-            {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/cadastros/contatos', 'Contatos cadastrados')}
-            {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/cadastros/produtos', 'Produtos')}
-            {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/campos-personalizados', 'Campos CRM')}
-            {temCrm && p.modulos.includes('crm_avancado') && link('/crm/tarefas', 'Tarefas CRM')}
+                        {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/cadastros/produtos', 'Produtos')}
+            {temCrm && p.modulos.includes('crm_avancado') && link('/crm/tarefas', 'Tarefas')}
             {temAgentes && link('/agentes', 'Agentes de IA')}
-            {temCrm && p.papel !== 'operador' && link('/funis', 'Funis')}
           </div>
           <div className="lateral-grupo">
             <div className="lateral-grupo-titulo">Sistema</div>
