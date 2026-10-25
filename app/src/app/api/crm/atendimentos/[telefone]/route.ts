@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ telefon
       .eq('conta_id', perfil.conta_id).eq('telefone', telefone)
       .order('recebido_em', { ascending: false }).limit(150),
     admin.from('oportunidades')
-      .select('id,estagio,owner_id')
+      .select('id,estagio,owner_id,funil_id')
       .eq('conta_id', perfil.conta_id).eq('telefone', telefone)
       .order('criado_em', { ascending: false }).limit(1).maybeSingle(),
   ]);
@@ -39,6 +39,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ telefon
     return NextResponse.json({ erro: 'Não foi possível consultar as mensagens.' }, { status: 503 });
   }
   if (!entradas.data?.length) return NextResponse.json({ erro: 'Conversa não localizada.' }, { status: 404 });
+  const { data:funilDaOportunidade } = oportunidade.data?.funil_id
+    ? await admin.from('funis').select('canal_padrao_id')
+      .eq('id',oportunidade.data.funil_id).eq('conta_id',perfil.conta_id).maybeSingle()
+    : {data:null};
   const leadId = entradas.data.find(e => e.lead_id)?.lead_id ?? null;
   const saidas = leadId
     ? await admin.from('prospecta_mensagens')
@@ -64,7 +68,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ telefon
     // se o usuario for o responsavel ou tiver papel de administrador.
     oportunidade: oportunidade.data && (perfil.papel !== 'operador' ||
       oportunidade.data.owner_id === perfil.id)
-      ? { id: oportunidade.data.id, estagio: oportunidade.data.estagio } : null,
+      ? { id: oportunidade.data.id, estagio: oportunidade.data.estagio,
+          funil_id: oportunidade.data.funil_id,
+          canal_padrao_id:funilDaOportunidade?.canal_padrao_id??null } : null,
     limitePorFonte: 150,
   });
 }
