@@ -48,3 +48,5 @@ Data: 25/10/2026. Este documento é um **registro aditivo no GitHub**, não uma 
 - Smoke interno: `/entrar=200`; sem sessão, `/crm=307`, `/crm/campos-personalizados=307`, `/api/crm/etiquetas=307` para a página de login.
 - **Ainda pendente:** QA funcional autenticado com a Figueira Marketing (criar etiqueta, associar ao negócio, mover campo de grupo e validar dados na ficha). Não afirmar que houve esse teste.
 - Brain e Wiki locais do Mac **não** foram sincronizados diretamente; este arquivo registra a decisão e o resultado para a futura sincronização aditiva.
+
+- **Atenção operacional:** o arquivo de stack armazenado no Portainer ainda referencia a tag `ghcr.io/tuco-gui/harvest-ai:latest`, enquanto o serviço Swarm executa a revisão imutável `48f5513...`. Em um futuro redeploy da stack, conferir a imagem e o histórico antes de aplicar para não trocar a revisão inadvertidamente.
