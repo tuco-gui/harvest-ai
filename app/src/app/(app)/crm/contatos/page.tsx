@@ -4,6 +4,7 @@ import { perfilTemModulo } from '@/lib/autorizacao';
 import { isAdmin } from '@/lib/crmControleAcesso';
 import { crmBackend } from '@/lib/twenty';
 import ContatosCrm from '@/componentes/ContatosCrm';
+import CadastrosCRM from '@/componentes/CadastrosCRM';
 
 export default async function PaginaContatosCrm() {
   const perfil = await perfilAtual();
@@ -22,5 +23,7 @@ export default async function PaginaContatosCrm() {
   const owners = (donos.data ?? []).map(o => ({
     id: o.id, nome: o.nome || o.email || 'Responsável',
   }));
-  return <ContatosCrm oportunidades={oportunidades} owners={owners}/>;
+  return isAdmin(perfil.papel)
+    ? <CadastrosCRM entidade="contatos" oportunidadesRelacionadas={oportunidades} />
+    : <ContatosCrm oportunidades={oportunidades} owners={owners}/>;
 }
