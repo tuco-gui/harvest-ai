@@ -14,6 +14,25 @@ CREATE TABLE IF NOT EXISTS public.crm_vinculos_inbound_negocio (
  PRIMARY KEY(conta_id,canal_id,telefone),
  UNIQUE (oportunidade_id)
 );
+-- Isolamento por tenant mesmo diante de inserts administrativos futuros.
+CREATE OR REPLACE FUNCTION public.crm_validar_vinculo_negocio_inbound()
+RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM public.whatsapp_canais
+    WHERE id=NEW.canal_id AND conta_id=NEW.conta_id)
+ OR NOT EXISTS(SELECT 1 FROM public.funis
+    WHERE id=NEW.funil_id AND conta_id=NEW.conta_id AND canal_padrao_id=NEW.canal_id)
+ OR NOT EXISTS(SELECT 1 FROM public.oportunidades
+    WHERE id=NEW.oportunidade_id AND conta_id=NEW.conta_id AND funil_id=NEW.funil_id) THEN
+  RAISE EXCEPTION 'Vínculo inbound fora da workspace/funil'
+    USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $;
+DROP TRIGGER IF EXISTS crm_validar_vinculo_negocio ON public.crm_vinculos_inbound_negocio;
+CREATE TRIGGER crm_validar_vinculo_negocio BEFORE INSERT OR UPDATE
+ ON public.crm_vinculos_inbound_negocio FOR EACH ROW
+ EXECUTE FUNCTION public.crm_validar_vinculo_negocio_inbound();
 ALTER TABLE public.crm_vinculos_inbound_negocio ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.crm_vinculos_inbound_negocio FROM PUBLIC,anon,authenticated;
 GRANT SELECT,INSERT ON public.crm_vinculos_inbound_negocio TO service_role;
