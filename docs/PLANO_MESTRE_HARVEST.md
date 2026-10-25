@@ -310,3 +310,7 @@ explícita (não incluída nesta instrução).
 **Critério final:** os testes E2E do ambiente próprio precisam passar antes de promover, com autorização específica. Ver `docs/decisoes/ADR-010-harvest-deskcomm-piloto.md` e `docs/brain-sync/2026-10-24-harvest-deskcomm.md`.
 
 **Brain/Wiki:** esta documentação operacional é espelho parcial público, não nova fonte institucional. O Vault do Mac em `/Users/gui_t/Figueira_Marketing/brain` não estava acessível diretamente nesta execução; sua cópia ainda aguarda sincronização no local, sem substituir a Wiki existente.
+
+### Adendo técnico da rodada — conector de QA sem ativação
+
+Incluída rota de diagnóstico `/api/piloto/deskcomm/saude` (somente GET, superadmin, staging e conta Figueira QA, disabled by default) e `app/src/lib/deskcommPiloto.ts`, com token de leitura `mcp:read` futuro. O novo núcleo não está conectado a Supabase/WAHA reais e **não é considerado pronto**. Documento de configuração sem secrets: `piloto/deskcomm/harvest-adapter.env.example`. Ver Entrega 24 do relatório.
