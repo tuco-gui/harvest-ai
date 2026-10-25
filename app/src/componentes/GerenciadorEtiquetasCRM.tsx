@@ -71,7 +71,7 @@ export default function GerenciadorEtiquetasCRM({
 
   async function excluir(nome: string) {
     if(!window.confirm('Excluir DEFINITIVAMENTE a etiqueta "'+nome+
-      '" do catálogo e de TODAS as conversas desta workspace? A operação não pode ser desfeita.'))return;
+      '" do catálogo e de TODOS os atendimentos e negócios desta workspace? A operação não pode ser desfeita.'))return;
     setOcupado(true);setErro('');setAviso('');
     try{
       const r=await fetch('/api/crm/etiquetas',{method:'DELETE',
@@ -81,7 +81,7 @@ export default function GerenciadorEtiquetasCRM({
       if(!r.ok)throw Error(d.erro||'Falha ao excluir etiqueta.');
       setCatalogo(arr=>arr.filter(x=>x.nome!==nome));
       onChange(selecionadas.filter(x=>x!==nome));
-      setAviso('Etiqueta excluída e desvinculada de '+d.desvinculadaDe+' conversa(s).');
+      setAviso('Etiqueta excluída e desvinculada de '+d.desvinculadaDe+' registro(s).');
     }catch(err){setErro(err instanceof Error?err.message:'Falha ao excluir.');}
     finally{setOcupado(false);}
   }
