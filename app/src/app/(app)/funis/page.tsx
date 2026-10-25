@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import Funis from '@/componentes/Funis';
+import { carregarCanais } from '@/lib/whatsappCanais';
 
 export default async function Pagina() {
   const perfil = await perfilAtual();
@@ -12,7 +13,7 @@ export default async function Pagina() {
 
   const { data: funis } = await admin
     .from('funis')
-    .select('id, nome, ativo, criado_em')
+    .select('id, nome, ativo, criado_em, canal_padrao_id')
     .eq('conta_id', perfil.conta_id)
     .order('nome');
 
@@ -32,5 +33,7 @@ export default async function Pagina() {
     total_estagios: contagem.get(f.id) ?? 0,
   }));
 
-  return <Funis funis={funisComContagem} />;
+  const canais = await carregarCanais(admin,perfil.conta_id);
+  return <Funis funis={funisComContagem}
+    canais={canais.map(c=>({id:c.id,nome:c.nome,status:c.status,provider:c.provider}))}/>;
 }

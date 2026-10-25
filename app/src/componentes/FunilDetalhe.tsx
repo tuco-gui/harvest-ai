@@ -5,7 +5,8 @@ import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AutomacaoEstagio from './AutomacaoEstagio';
 
-type Funil = { id: number; nome: string; ativo: boolean; criado_em: string };
+type Funil = { id: number; nome: string; ativo: boolean; criado_em: string; canal_padrao_id: number|null };
+type Canal = {id:number;nome:string;numero:string|null;status:string;provider:string;padrao:boolean};
 type Estagio = {
   id: number; funil_id: number; nome: string; ordem: number;
   grupo: 'pipeline' | 'encerrado'; probabilidade: number; cor: string | null;
@@ -16,11 +17,30 @@ const CORES_PADRAO = [
   '#d55c2a', '#1A7A4A', '#C4191F', '#555555', '#2196F3',
 ];
 
-export default function FunilDetalhe({ funil, estagios: estagiosIniciais }: { funil: Funil; estagios: Estagio[] }) {
+export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais }: { funil: Funil; estagios: Estagio[]; canais: Canal[] }) {
   const router = useRouter();
   const [estagios, setEstagios] = useState(estagiosIniciais);
   const [salvando, setSalvando] = useState(false);
   const [sujo, setSujo] = useState(false);
+  const [canalFunil, setCanalFunil] = useState<number|null>(funil.canal_padrao_id);
+  const [salvandoCanal,setSalvandoCanal] = useState(false);
+  const [avisoCanal,setAvisoCanal] = useState('');
+  async function salvarCanalPadrao() {
+    if(salvandoCanal)return;
+    setSalvandoCanal(true);setAvisoCanal('');
+    try {
+      const resposta=await fetch('/api/funis/'+funil.id,{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({canal_padrao_id:canalFunil}),
+      });
+      const d=await resposta.json();
+      if(!resposta.ok)throw Error(d.erro||'Não consegui salvar o canal.');
+      setAvisoCanal('Canal deste funil salvo. Campanhas com seleção manual não foram alteradas.');
+      router.refresh();
+    } catch(e) {
+      setAvisoCanal(e instanceof Error?e.message:'Falha ao salvar vínculo.');
+    } finally {setSalvandoCanal(false);}
+  }
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
@@ -198,6 +218,40 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais }: { fu
         {funil.ativo ? 'Ativo' : 'Inativo'} · {pipeline.length} estágio(s) no pipeline · {encerrados.length} encerrado(s)
       </p>
 
+      {/* Configuração de canal permanece DENTRO da edição do funil. */}
+      <section className="secao crm-funil-canal" aria-label="Canal de WhatsApp do funil">
+        <h3>Canal de WhatsApp deste funil</h3>
+        <p className="ajuda">
+          Use um número diferente para cada funil, reaproveitando canais já cadastrados em
+          Configurações → Conexões. Campanhas podem herdar este número ou escolher outro.
+          Um canal desconectado nunca é substituído silenciosamente por outro número.
+        </p>
+        <div className="crm-funil-canal-acoes">
+          <label>Canal padrão do funil
+            <select value={canalFunil??''} onChange={e=>{
+              setCanalFunil(e.target.value?Number(e.target.value):null);setAvisoCanal('');
+            }}>
+              <option value="">Usar o padrão geral da workspace</option>
+              {canais.map(c=><option key={c.id} value={c.id}>
+                {c.nome} · {c.numero||'sem número'} · {c.provider.toUpperCase()} · {c.status==='conectado'?'Conectado':'Desconectado'}
+              </option>)}
+            </select>
+          </label>
+          <button type="button" className="btn-primario"
+            disabled={salvandoCanal || canalFunil===funil.canal_padrao_id}
+            onClick={()=>void salvarCanalPadrao()}>
+              {salvandoCanal?'Salvando…':'Salvar canal do funil'}
+          </button>
+        </div>
+        {canalFunil!==null && canais.find(c=>c.id===canalFunil)?.status!=='conectado' &&
+          <p className="crm-aviso" role="status">Este canal ainda não está conectado. A vinculação pode ser salva,
+            mas nenhum disparo usará outro número automaticamente.</p>}
+        {avisoCanal && <p role="status" className="ajuda">{avisoCanal}</p>}
+        {!canais.length && <p className="ajuda">
+          Nenhum canal cadastrado nesta workspace. Cadastre o canal em Configurações → Conexões,
+          sem desconectar números de outras workspaces.
+        </p>}
+      </section>
       {/* Pipeline stages — horizontal */}
       <section style={{ marginBottom: 32 }}>
         <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>

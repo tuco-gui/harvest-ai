@@ -37,7 +37,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     admin.from('campanha_leads').select('lead_id').eq('campanha_id', id),
     admin.from('conta_config_envio').select('intervalo_min, intervalo_max').eq('conta_id', campanha.conta_id).maybeSingle(),
     carregarCanais(admin, campanha.conta_id).then((data) => ({ data })),
-    admin.from('funis').select('id, nome, ativo').eq('conta_id', campanha.conta_id).eq('ativo', true).order('nome'),
+    admin.from('funis').select('id, nome, ativo, canal_padrao_id').eq('conta_id', campanha.conta_id).eq('ativo', true).order('nome'),
   ]);
 
   const idsExtras = (vinculos ?? [])

@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation';
 
 type Funil = {
   id: number; nome: string; ativo: boolean; criado_em: string;
-  total_estagios: number;
+  total_estagios: number; canal_padrao_id?: number | null;
 };
 
-export default function Funis({ funis: funisIniciais }: { funis: Funil[] }) {
+export default function Funis({funis:funisIniciais,canais=[]}:{funis:Funil[];
+ canais?:{id:number;nome:string;status:string;provider:string}[]}) {
   const router = useRouter();
   const [criando, setCriando] = useState(false);
   const [novoNome, setNovoNome] = useState('');
@@ -76,7 +77,13 @@ export default function Funis({ funis: funisIniciais }: { funis: Funil[] }) {
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{f.nome}</div>
               <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>
-                {f.total_estagios} estágio(s)
+                {f.total_estagios} estágio(s) · {(()=>{
+                  const id=f.canal_padrao_id;
+                  const c=canais.find(c=>c.id===id);
+                  return id==null?'WhatsApp padrão da workspace':c
+                    ? 'WhatsApp: '+c.nome+' ('+c.status+')'
+                    : 'Canal do funil indisponível';
+                })()}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>

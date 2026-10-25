@@ -10,7 +10,7 @@ export async function GET() {
   const admin = supabaseAdmin();
   const { data: funis, error } = await admin
     .from('funis')
-    .select('id, nome, ativo, criado_em')
+    .select('id, nome, ativo, criado_em, canal_padrao_id')
     .eq('conta_id', perfil.conta_id)
     .order('nome');
 
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const { data: funil, error: funilErr } = await admin
     .from('funis')
     .insert({ conta_id: perfil.conta_id, nome })
-    .select('id, nome, ativo, criado_em')
+    .select('id, nome, ativo, criado_em, canal_padrao_id')
     .single();
 
   if (funilErr) return NextResponse.json({ erro: funilErr.message }, { status: 500 });
