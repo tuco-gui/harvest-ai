@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { classificarPrazo, filtrarTarefas, validarNovaTarefa,
+import { classificarPrazo, filtrarTarefas, validarNovaTarefa, dataLocalParaInput,
   type FiltroTarefa, type TarefaCrm } from '@/lib/crmTarefas';
 
 type OportunidadeResumo = {
@@ -28,6 +28,7 @@ export default function CentralTarefasCrm({
   const [erro, setErro] = useState('');
   const [mensagem, setMensagem] = useState('');
   const [novoAberto, setNovoAberto] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<number | null>(null);
   const [nova, setNova] = useState({ oportunidade_id: '', titulo: '', descricao: '', vence_em: '' });
   const nomeOwner = (id: string | null) => owners.find(x => x.id === id)?.nome
     ?? (id ? 'Responsável da oportunidade' : 'Sem responsável');
@@ -75,6 +76,38 @@ export default function CentralTarefasCrm({
     } finally { setEnviando(false); }
   }
 
+  function editar(t: TarefaCrm) {
+    if (enviando) return;
+    setEmEdicao(t.id);
+    setNova({
+      oportunidade_id: String(t.oportunidade_id), titulo: t.titulo,
+      descricao: t.descricao || '', vence_em: dataLocalParaInput(t.vence_em),
+    });
+    setNovoAberto(true); setErro(''); setMensagem('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function excluir(t: TarefaCrm) {
+    if (enviando) return;
+    if (!window.confirm(`Excluir definitivamente a tarefa "${t.titulo}"? O negócio não será excluído.`)) return;
+    setEnviando(true); setErro(''); setMensagem('');
+    try {
+      const r = await fetch('/api/crm/tarefas', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: t.id }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.erro || 'Erro ao excluir tarefa.');
+      setTarefas(prev => prev.filter(x => x.id !== t.id));
+      if (emEdicao === t.id) { setNovoAberto(false); setEmEdicao(null); }
+      setMensagem('Tarefa excluída. A oportunidade e demais atividades permanecem intactas.');
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível excluir.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   async function criar(e: React.FormEvent) {
     e.preventDefault();
     const falha = validarNovaTarefa(nova.titulo, nova.vence_em, nova.descricao);
@@ -83,16 +116,18 @@ export default function CentralTarefasCrm({
     setErro(''); setMensagem(''); setEnviando(true);
     try {
       const res = await fetch('/api/crm/tarefas', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: emEdicao ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...nova, oportunidade_id: Number(nova.oportunidade_id),
+          ...nova, ...(emEdicao ? { id: emEdicao } : {}),
+          oportunidade_id: Number(nova.oportunidade_id),
           vence_em: nova.vence_em ? new Date(nova.vence_em).toISOString() : null,
         }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro ?? 'Não foi possível criar a tarefa.');
       setNova({ oportunidade_id: '', titulo: '', descricao: '', vence_em: '' });
-      setNovoAberto(false); setMensagem('Tarefa criada e vinculada à oportunidade.');
+      setNovoAberto(false); setEmEdicao(null);
+      setMensagem(emEdicao ? 'Tarefa atualizada.' : 'Tarefa criada e vinculada à oportunidade.');
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao criar tarefa.');
@@ -109,7 +144,8 @@ export default function CentralTarefasCrm({
           <p className="ajuda">Prazos e próximos passos vinculados às oportunidades do funil.</p>
         </div>
         {podeEditar && <button type="button" className="btn-primario" onClick={() => {
-          setNovoAberto(v => !v); setErro('');
+          setNovoAberto(v => !v); setEmEdicao(null);
+          setNova({ oportunidade_id: '', titulo: '', descricao: '', vence_em: '' }); setErro('');
         }}>{novoAberto ? 'Fechar' : '+ Nova tarefa'}</button>}
       </header>
 
@@ -121,9 +157,9 @@ export default function CentralTarefasCrm({
       </section>
 
       {novoAberto && <form className="crm-tarefas-form" onSubmit={criar}>
-        <h2>Nova tarefa</h2>
+        <h2>{emEdicao ? 'Editar tarefa' : 'Nova tarefa'}</h2>
         <label>Oportunidade
-          <select required value={nova.oportunidade_id}
+          <select required disabled={emEdicao !== null} value={nova.oportunidade_id}
             onChange={e => setNova(n => ({ ...n, oportunidade_id: e.target.value }))}>
             <option value="">Selecionar negócio</option>
             {oportunidades.map(o => <option key={o.id} value={o.id}>
@@ -146,7 +182,7 @@ export default function CentralTarefasCrm({
         </label>
         <p className="ajuda">A tarefa será atribuída ao responsável da oportunidade selecionada.</p>
         <button type="submit" className="btn-primario" disabled={enviando || !oportunidades.length}>
-          {enviando ? 'Salvando…' : 'Criar tarefa'}
+          {enviando ? 'Salvando…' : emEdicao ? 'Salvar alterações' : 'Criar tarefa'}
         </button>
       </form>}
 
@@ -196,6 +232,12 @@ export default function CentralTarefasCrm({
                 </span>}
                 {!t.vence_em && <span>Sem prazo</span>}
               </div>
+            </div>
+            <div className="crm-tarefa-acoes">
+              <button type="button" disabled={enviando} onClick={() => editar(t)}
+                aria-label={'Editar tarefa: ' + t.titulo}>Editar</button>
+              <button type="button" disabled={enviando} onClick={() => void excluir(t)}
+                aria-label={'Excluir tarefa: ' + t.titulo}>Excluir</button>
             </div>
             <span className="crm-tarefa-status">{t.concluida ? 'Concluída' : estado === 'atrasada' ? 'Atrasada' : 'Pendente'}</span>
           </article>;
