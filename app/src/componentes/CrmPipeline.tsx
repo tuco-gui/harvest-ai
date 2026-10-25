@@ -9,6 +9,7 @@ import {
 import type { Oportunidade } from '@/lib/twenty';
 import LinhaDoTempoCrm from '@/componentes/LinhaDoTempoCrm';
 import CamposOportunidadeCRM from '@/componentes/CamposOportunidadeCRM';
+import GerenciadorEtiquetasCRM from '@/componentes/GerenciadorEtiquetasCRM';
 
 type Owner = { id: string; nome: string };
 type Campanha = { id: number; nome: string };
@@ -25,7 +26,7 @@ type Mensagem = {
 const NOVA_OPORTUNIDADE = {
   empresa: '', contato: '', telefone: '', email: '', origem: 'manual',
   campanha_id: '', estagio: 'novo', owner_id: '', valor: '', probabilidade: '5',
-  proxima_acao: '', previsao_fechamento: '', observacoes: '', tags: '',
+  proxima_acao: '', previsao_fechamento: '', observacoes: '', tags: [] as string[],
 };
 
 export default function CrmPipeline({ oportunidades, owners, campanhas, canais, papel, perfilId, estagiosFunil = [], funis = [], funilIdInicial = null, avancado = false }: {
@@ -196,7 +197,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         ...nova, campanha_id: nova.campanha_id ? Number(nova.campanha_id) : null,
         owner_id: nova.owner_id || null, valor: Number(nova.valor) || 0,
         probabilidade: Number(nova.probabilidade) || 5,
-        tags: nova.tags.split(',').map((v) => v.trim()).filter(Boolean),
+        tags: nova.tags,
         previsao_fechamento: nova.previsao_fechamento || null,
       }),
     });
@@ -438,7 +439,8 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           <label>Valor<input type="number" min="0" step="0.01" value={nova.valor} onChange={(e) => setNova({ ...nova, valor: e.target.value })} /></label>
           <label>Probabilidade<input type="number" min="0" max="100" value={nova.probabilidade} onChange={(e) => setNova({ ...nova, probabilidade: e.target.value })} /></label>
           <label>Previsão de fechamento<input type="date" value={nova.previsao_fechamento} onChange={(e) => setNova({ ...nova, previsao_fechamento: e.target.value })} /></label>
-          <label className="campo-largo">Etiquetas <small>separadas por vírgula</small><input value={nova.tags} onChange={(e) => setNova({ ...nova, tags: e.target.value })} /></label>
+          {avancado ? <div className="campo-largo"><GerenciadorEtiquetasCRM contexto="negócio" limite={20} selecionadas={nova.tags} onChange={tags => setNova({ ...nova, tags })}/></div>
+             : <label className="campo-largo">Etiquetas<input value={nova.tags.join(', ')} onChange={e => setNova({ ...nova, tags: e.target.value.split(',').map(v => v.trim()).filter(Boolean) })}/></label>}
           <label className="campo-largo">Próxima ação<textarea value={nova.proxima_acao} onChange={(e) => setNova({ ...nova, proxima_acao: e.target.value })} /></label>
           <div className="crm-form-acoes campo-largo"><button type="button" onClick={() => setNovaAberta(false)}>Cancelar</button><button className="btn-primario" disabled={salvando}>{salvando ? 'Criando…' : 'Criar oportunidade'}</button></div>
         </form>
@@ -463,7 +465,8 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             <label>Probabilidade<input type="number" min="0" max="100" value={ficha.probabilidade} onChange={(e) => setFicha({ ...ficha, probabilidade: Number(e.target.value) })} /></label>
             <label>Previsão<input type="date" value={ficha.previsao_fechamento ?? ''} onChange={(e) => setFicha({ ...ficha, previsao_fechamento: e.target.value || null })} /></label>
             <label className="campo-largo">Campanha/origem<select value={ficha.campanha_id ?? ''} onChange={(e) => setFicha({ ...ficha, campanha_id: e.target.value ? Number(e.target.value) : null })}><option value="">Sem campanha</option>{campanhas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-            <label className="campo-largo">Etiquetas<input value={(ficha.tags ?? []).join(', ')} onChange={(e) => setFicha({ ...ficha, tags: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} /></label>
+            {avancado ? <div className="campo-largo"><GerenciadorEtiquetasCRM contexto="negócio" limite={20} selecionadas={ficha.tags ?? []} onChange={tags => setFicha({ ...ficha, tags })}/></div>
+             : <label className="campo-largo">Etiquetas<input value={(ficha.tags ?? []).join(', ')} onChange={e => setFicha({ ...ficha, tags: e.target.value.split(',').map(v => v.trim()).filter(Boolean) })}/></label>}
             <label className="campo-largo">Próxima ação<textarea value={ficha.proxima_acao ?? ''} onChange={(e) => setFicha({ ...ficha, proxima_acao: e.target.value })} /></label>
             {encerradosIds.has(ficha.estagio) && <label className="campo-largo">Motivo do encerramento<textarea value={ficha.motivo_perda ?? ''} onChange={(e) => setFicha({ ...ficha, motivo_perda: e.target.value })} /></label>}
             <label className="campo-largo">Observações<textarea value={ficha.observacoes ?? ''} onChange={(e) => setFicha({ ...ficha, observacoes: e.target.value })} /></label>

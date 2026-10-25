@@ -6,8 +6,8 @@ import {
 } from '@/lib/crmEtiquetas';
 
 export default function GerenciadorEtiquetasCRM({
-  selecionadas, onChange, desabilitado = false,
-}: { selecionadas: string[]; onChange: (v: string[]) => void; desabilitado?: boolean }) {
+  selecionadas, onChange, desabilitado = false, contexto = 'conversa', limite = 8,
+}: { selecionadas: string[]; onChange: (v: string[]) => void; desabilitado?: boolean; contexto?: 'conversa' | 'negócio'; limite?: number }) {
   const [catalogo, setCatalogo] = useState<EtiquetaCRM[]>([]);
   const [podeGerenciar, setPodeGerenciar] = useState(false);
   const [novoNome, setNovoNome] = useState('');
@@ -32,13 +32,12 @@ export default function GerenciadorEtiquetasCRM({
     if (desabilitado || ocupado) return;
     const nova = selecionadas.includes(nome)
       ? selecionadas.filter(n => n !== nome) : [...selecionadas, nome];
-    if (nova.length > 8) { setErro('Até oito etiquetas por conversa.'); return; }
+    if (nova.length > limite) { setErro(`Até ${limite} etiquetas por ${contexto}.`); return; }
     onChange(nova);
     setErro('');
   }
 
-  async function criar(e: React.FormEvent) {
-    e.preventDefault();
+  async function criar() {
     const nome = nomeEtiqueta(novoNome);
     if (!nome) { setErro('Nome deve ter entre 1 e 28 caracteres.'); return; }
     setOcupado(true); setErro(''); setAviso('');
@@ -51,7 +50,7 @@ export default function GerenciadorEtiquetasCRM({
       if(!r.ok) throw Error(d.erro || 'Não foi possível criar.');
       setCatalogo(antigo => [...antigo.filter(x=>x.nome!==d.etiqueta.nome),d.etiqueta]
         .sort((a,b)=>a.nome.localeCompare(b.nome)));
-      if (selecionadas.length < 8 && !selecionadas.includes(nome)) onChange([...selecionadas,nome]);
+      if (selecionadas.length < limite && !selecionadas.includes(nome)) onChange([...selecionadas,nome]);
       setNovoNome('');setNovaCor(null);setAviso('Etiqueta criada e incluída na seleção.');
     } catch(err) {setErro(err instanceof Error?err.message:'Falha ao criar.');}
     finally {setOcupado(false);}
@@ -71,7 +70,7 @@ export default function GerenciadorEtiquetasCRM({
 
   async function excluir(nome: string) {
     if(!window.confirm('Excluir DEFINITIVAMENTE a etiqueta "'+nome+
-      '" do catálogo e de TODAS as conversas desta workspace? A operação não pode ser desfeita.'))return;
+      '" do catálogo e de TODOS os atendimentos e negócios desta workspace? A operação não pode ser desfeita.'))return;
     setOcupado(true);setErro('');setAviso('');
     try{
       const r=await fetch('/api/crm/etiquetas',{method:'DELETE',
@@ -81,7 +80,7 @@ export default function GerenciadorEtiquetasCRM({
       if(!r.ok)throw Error(d.erro||'Falha ao excluir etiqueta.');
       setCatalogo(arr=>arr.filter(x=>x.nome!==nome));
       onChange(selecionadas.filter(x=>x!==nome));
-      setAviso('Etiqueta excluída e desvinculada de '+d.desvinculadaDe+' conversa(s).');
+      setAviso('Etiqueta excluída e desvinculada de '+d.desvinculadaDe+' registro(s).');
     }catch(err){setErro(err instanceof Error?err.message:'Falha ao excluir.');}
     finally{setOcupado(false);}
   }
@@ -92,13 +91,13 @@ export default function GerenciadorEtiquetasCRM({
       <span className="crm-tag-ponto" style={{backgroundColor:cor??'var(--ink-3)'}} aria-hidden="true"/>
       {nome}
       <button type="button" disabled={ocupado||desabilitado}
-        aria-label={'Remover etiqueta '+nome+' desta conversa'} onClick={()=>alternar(nome)}>×</button>
+        aria-label={'Remover etiqueta '+nome+' deste '+contexto} onClick={()=>alternar(nome)}>×</button>
     </span>;
   }
 
   return <div className="crm-gestao-etiquetas">
     <div className="crm-gestao-etiquetas-cabecalho">
-      <strong>Etiquetas ({selecionadas.length}/8)</strong>
+      <strong>Etiquetas ({selecionadas.length}/{limite})</strong>
       <button type="button" onClick={()=>setGerenciando(!gerenciando)}
         aria-expanded={gerenciando}>{gerenciando?'Fechar catálogo':'Gerenciar etiquetas'}</button>
     </div>
@@ -116,11 +115,11 @@ export default function GerenciadorEtiquetasCRM({
     </fieldset>
     {!!selecionadas.length && <button className="crm-etiquetas-limpar" type="button"
       disabled={ocupado||desabilitado} onClick={()=>onChange([])}>
-      Remover todas as etiquetas desta conversa
+      Remover todas as etiquetas deste {contexto}
     </button>}
     {gerenciando && <div className="crm-etiquetas-gerenciar">
       {podeGerenciar ? <>
-        <form onSubmit={criar}>
+        <div className="crm-etiqueta-nova">
           <label>Nova etiqueta
             <input value={novoNome} maxLength={28}
               onChange={e=>setNovoNome(e.target.value)} placeholder="Ex.: proposta enviada"/>
@@ -133,8 +132,8 @@ export default function GerenciadorEtiquetasCRM({
               style={{backgroundColor:t.cor}}/>)}
             <button type="button" className="sem-cor" onClick={()=>setNovaCor(null)}>Sem cor</button>
           </div>
-          <button type="submit" disabled={ocupado||!novoNome.trim()}>+ Criar etiqueta</button>
-        </form>
+          <button type="button" onClick={()=>void criar()} disabled={ocupado||!novoNome.trim()}>+ Criar etiqueta</button>
+        </div>
         <div className="crm-etiquetas-administrar">
           <p className="ajuda">Alterar cor ou excluir definitivamente do catálogo.</p>
           {catalogo.map(t=><div className="crm-etiqueta-linha" key={t.nome}>

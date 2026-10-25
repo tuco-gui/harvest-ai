@@ -6,7 +6,15 @@ export type EntidadeCampos = typeof ENTIDADES_CAMPOS[number];
 export const TIPOS_CAMPOS = ['texto','numero','data','selecao','booleano'] as const;
 export type TipoCampo = typeof TIPOS_CAMPOS[number];
 export type CampoDef = { id: number; entidade: EntidadeCampos; chave: string; rotulo: string;
-  tipo: TipoCampo; opcoes: string[]; obrigatorio: boolean; ativo: boolean };
+  tipo: TipoCampo; opcoes: string[]; obrigatorio: boolean; ativo: boolean; grupo: string };
+/** Grupos são nomes de apresentação e nunca alteram as chaves/valores já gravados. */
+export function normalizarGrupoCampo(v: unknown): string | null {
+  if (v === undefined || v === null || v === '') return 'Principal';
+  if (typeof v !== 'string') return null;
+  const grupo = v.trim().replace(/\s+/g, ' ');
+  if (grupo.length < 2 || grupo.length > 60 || /[<>\r\n]/.test(grupo)) return null;
+  return grupo;
+}
 export function cadastroValido(t: unknown): t is EntidadeCadastro {
   return typeof t === 'string' && ENTIDADES_CRM.includes(t as EntidadeCadastro);
 }
@@ -15,6 +23,7 @@ export function entidadeCampoValida(t: unknown): t is EntidadeCampos {
 }
 export function validarDefCampo(b: any): string | null {
   if (!entidadeCampoValida(b?.entidade)) return 'Entidade inválida.';
+  if (!normalizarGrupoCampo(b?.grupo)) return 'Grupo deve ter de 2 a 60 caracteres.';
   if (typeof b.chave !== 'string' || !/^[a-z][a-z0-9_]{1,39}$/.test(b.chave))
     return 'Chave inválida. Use letras minúsculas, números e _.';
   if (typeof b.rotulo !== 'string' || b.rotulo.trim().length < 2 || b.rotulo.trim().length > 80)

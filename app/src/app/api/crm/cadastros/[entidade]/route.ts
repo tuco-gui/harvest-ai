@@ -49,7 +49,7 @@ async function validarESanitizar(admin:ReturnType<typeof supabaseAdmin>,contaId:
   }
   if(NOMES[entidade]){
     const {data:defs,error}=await admin.from('crm_campos_personalizados')
-      .select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo')
+      .select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo,grupo')
       .eq('conta_id',contaId).eq('entidade',NOMES[entidade]);
     if(error)return {erro:'Falha ao validar campos personalizados.'} as const;
     const extras=validarValoresPersonalizados(b.campos_extras??{},(defs??[]) as CampoDef[]);

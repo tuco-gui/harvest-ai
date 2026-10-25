@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect,useState } from 'react';
 import { ENTIDADES_CAMPOS,TIPOS_CAMPOS,type CampoDef,type EntidadeCampos,
-  validarDefCampo } from '@/lib/crmCadastros';
+  validarDefCampo, normalizarGrupoCampo } from '@/lib/crmCadastros';
 const NOMES:Record<EntidadeCampos,string>={
  contato:'Contatos',oportunidade:'Oportunidades',empresa:'Empresas',
 };
@@ -15,7 +15,7 @@ export default function GestaoCamposCRM(){
  const [erro,setErro]=useState('');
  const [aviso,setAviso]=useState('');
  const [ocupado,setOcupado]=useState(false);
- const [form,setForm]=useState({chave:'',rotulo:'',tipo:'texto',opcoes:'',obrigatorio:false});
+ const [form,setForm]=useState({chave:'',rotulo:'',tipo:'texto',opcoes:'',obrigatorio:false,grupo:'Principal'});
  useEffect(()=>{
   const ctl=new AbortController();
   fetch('/api/crm/campos-personalizados?entidade='+entidade,{signal:ctl.signal})
@@ -26,7 +26,7 @@ export default function GestaoCamposCRM(){
  },[entidade]);
  async function criar(e:React.FormEvent){
   e.preventDefault();
-  const body={entidade,chave:form.chave,rotulo:form.rotulo,tipo:form.tipo,
+  const body={entidade,chave:form.chave,rotulo:form.rotulo,tipo:form.tipo,grupo:form.grupo,
     opcoes:form.opcoes.split(',').map(x=>x.trim()).filter(Boolean),obrigatorio:form.obrigatorio};
   if(body.tipo!=='selecao')body.opcoes=[];
   const erroValidacao=validarDefCampo(body);
@@ -36,7 +36,7 @@ export default function GestaoCamposCRM(){
    const r=await fetch('/api/crm/campos-personalizados',{method:'POST',
      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
    const d=await r.json();if(!r.ok)throw Error(d.erro||'Erro ao criar');
-   setCampos(a=>[...a,d.campo]);setForm({chave:'',rotulo:'',tipo:'texto',opcoes:'',obrigatorio:false});
+   setCampos(a=>[...a,d.campo]);setForm({chave:'',rotulo:'',tipo:'texto',opcoes:'',obrigatorio:false,grupo:'Principal'});
    setAviso('Campo criado. Registros novos podem utilizá-lo.');
   }catch(err){setErro(err instanceof Error?err.message:'Falha ao criar');}
   finally{setOcupado(false)}
@@ -53,6 +53,23 @@ export default function GestaoCamposCRM(){
   }catch(err){setErro(err instanceof Error?err.message:'Falha ao alterar');}
   finally{setOcupado(false)}
  }
+ async function moverGrupo(c:CampoDef){
+  const solicitado=window.prompt('Novo grupo para '+c.rotulo, c.grupo || 'Principal');
+  if(solicitado===null)return;
+  const grupo=normalizarGrupoCampo(solicitado);
+  if(!grupo){setErro('Grupo deve ter entre 2 e 60 caracteres.');return;}
+  if(grupo===c.grupo)return;
+  setOcupado(true);setErro('');setAviso('');
+  try{
+   const r=await fetch('/api/crm/campos-personalizados',{method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:c.id,entidade:c.entidade,grupo})});
+   const d=await r.json();if(!r.ok)throw Error(d.erro||'Não foi possível mudar o grupo.');
+   setCampos(a=>a.map(x=>x.id===c.id?d.campo:x));
+   setAviso('Campo reorganizado sem apagar os valores existentes.');
+  }catch(e){setErro(e instanceof Error?e.message:'Erro na alteração.');}
+  finally{setOcupado(false);}
+ }
  return <main className="pagina pagina-larga crm-cadastros">
   <nav className="crm-cadastros-nav"><Link href="/crm">CRM</Link><Link href="/crm/cadastros/empresas">Empresas</Link>
    <Link href="/crm/cadastros/contatos">Contatos</Link><Link href="/crm/cadastros/produtos">Produtos</Link></nav>
@@ -68,10 +85,11 @@ export default function GestaoCamposCRM(){
   {aviso&&<p className="ajuda" role="status">{aviso}</p>}
   <section className="crm-cadastros-grade">
    {campos.map(c=><article key={c.id} className="crm-cadastro-card">
-     <strong>{c.rotulo}</strong><p>Chave: {c.chave} · {TIPOS[c.tipo]} · {c.obrigatorio?'Obrigatório':'Opcional'}</p>
+     <strong>{c.rotulo}</strong><p>Grupo: {c.grupo || 'Principal'} · Chave: {c.chave} · {TIPOS[c.tipo]} · {c.obrigatorio?'Obrigatório':'Opcional'}</p>
      <p>{c.ativo?'Ativo':'Inativo'}{c.opcoes.length?' · '+c.opcoes.join(', '):''}</p>
      <button type="button" disabled={ocupado} onClick={()=>void alterar(c)}>
        {c.ativo?'Desativar campo':'Reativar campo'}</button>
+     <button type="button" disabled={ocupado} onClick={()=>void moverGrupo(c)}>Alterar grupo</button>
    </article>)}
    {!campos.length&&<p className="ajuda">Ainda não há campos personalizados nesta categoria.</p>}
   </section>
@@ -81,6 +99,8 @@ export default function GestaoCamposCRM(){
       value={form.chave} onChange={e=>setForm(x=>({...x,chave:e.target.value.toLowerCase()}))}/></label>
     <label>Nome de exibição * <input required value={form.rotulo} maxLength={80}
       placeholder="Ex.: Segmento de mercado" onChange={e=>setForm(x=>({...x,rotulo:e.target.value}))}/></label>
+    <label>Grupo / aba<input required maxLength={60} value={form.grupo}
+      placeholder="Ex.: Ambiente ou Produção" onChange={e=>setForm(x=>({...x,grupo:e.target.value}))}/></label>
     <label>Tipo de campo <select value={form.tipo} onChange={e=>setForm(x=>({...x,tipo:e.target.value}))}>
       {TIPOS_CAMPOS.map(t=><option key={t} value={t}>{TIPOS[t]}</option>)}
     </select></label>

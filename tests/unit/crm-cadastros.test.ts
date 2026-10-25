@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {cadastroValido,entidadeCampoValida,validarDefCampo,
- validarValoresPersonalizados,validarCadastro,type CampoDef} from '../../app/src/lib/crmCadastros.ts';
+ validarValoresPersonalizados,validarCadastro,normalizarGrupoCampo,type CampoDef} from '../../app/src/lib/crmCadastros.ts';
 import {modulosDaConta} from '../../app/src/lib/autorizacao.ts';
 assert(cadastroValido('empresas'));
 assert(cadastroValido('contatos'));
@@ -9,8 +9,12 @@ assert(!cadastroValido('perfis'));
 assert(entidadeCampoValida('oportunidade'));
 assert(!entidadeCampoValida('__proto__'));
 const campo:CampoDef={id:1,entidade:'contato',chave:'segmento',rotulo:'Segmento',
- tipo:'selecao',opcoes:['Varejo','Serviços'],obrigatorio:true,ativo:true};
+ tipo:'selecao',opcoes:['Varejo','Serviços'],obrigatorio:true,ativo:true,grupo:'Tipo Produto'};
 assert.equal(validarDefCampo({...campo}),null);
+assert.equal(normalizarGrupoCampo(undefined),'Principal');
+assert.equal(normalizarGrupoCampo('  Ambiente  '),'Ambiente');
+assert.equal(normalizarGrupoCampo('<script>'),null);
+assert(validarDefCampo({...campo,grupo:'<script>'}));
 assert(validarDefCampo({...campo,chave:'DROP TABLE'}));
 assert(validarDefCampo({...campo,tipo:'selecao',opcoes:[]}));
 assert(validarDefCampo({...campo,entidade:'users'}));
