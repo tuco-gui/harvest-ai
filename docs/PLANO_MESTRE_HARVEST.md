@@ -291,3 +291,22 @@ Branch `feature/campanhas-leads-crud`, commit `88375ab`, push feito (Vercel stag
 Ver detalhamento completo em RELATORIO_ENTREGAS.md. Produção não alterada.
 Pendente: QA autenticado em staging; depois disso, promoção fica sujeita a autorização
 explícita (não incluída nesta instrução).
+
+---
+
+## Adendo de decisão — 2026-10-24: piloto DeskcommCRM, sem migração de produção
+
+**Autorização do responsável:** criar nova base Harvest proprietária com agentes replicáveis por empresa (atendimento, BDR, vendas, suporte e financeiro), armazenamento de conhecimento e integração simples de WhatsApp. Nenhuma exclusão, substituição, exposição de credenciais ou fusão direta com `main`.
+
+**Estado verificado em 2026-10-24:**
+- `main` em `f1457ed633781c13455519c34785e4d24b2ac879` antes desta entrega; código de produção não alterado por este piloto.
+- Serviço institucional Docker Swarm identificado como `harvest_harvest` e instâncias Twenty, Chatwoot, WAHA, Evolution e Supabase presentes; seu funcionamento integrado não é assumido só pela presença dos serviços.
+- O DeskcommCRM MIT foi fixado por SHA `40db34708049e52304d159b7a6f1829bfde23358` na branch `feature/harvest-deskcomm-pilot-20261024` como submódulo `vendor/deskcommcrm`.
+- Guia de implantação e pré-flight seguros em `piloto/deskcomm/`.
+- O histórico operacional das Entregas 01–22 foi restaurado da branch `docs/remote-agent-onboarding` **sem reescrita de nenhuma entrega**. Este adendo é posterior; decisões anteriores permanecem registro válido da época.
+
+**Mudança proposta, ainda não efetivada:** se o piloto provar agentes, base de conhecimento, WhatsApp, CRM, segurança multi-tenant, campanhas e rollback, o Deskcomm passa a núcleo interno do Harvest. Enquanto isso, a produção continua em ADR-007: Harvest + Twenty + Chatwoot + WAHA/Evolution. Não rodar as migrations Deskcomm sobre o banco Harvest.
+
+**Critério final:** os testes E2E do ambiente próprio precisam passar antes de promover, com autorização específica. Ver `docs/decisoes/ADR-010-harvest-deskcomm-piloto.md` e `docs/brain-sync/2026-10-24-harvest-deskcomm.md`.
+
+**Brain/Wiki:** esta documentação operacional é espelho parcial público, não nova fonte institucional. O Vault do Mac em `/Users/gui_t/Figueira_Marketing/brain` não estava acessível diretamente nesta execução; sua cópia ainda aguarda sincronização no local, sem substituir a Wiki existente.
