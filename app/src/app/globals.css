@@ -937,3 +937,12 @@ a:hover{color:var(--ink)}
 .crm-canais-capacidades>div{padding:12px;border:1px solid var(--rule);border-radius:6px;display:flex;flex-direction:column;gap:6px}
 .crm-canais-capacidades strong{font-size:12px}
 .crm-canais-capacidades span{font-size:11px;color:var(--ink-3)}
+
+.crm-pipeline-menu{position:relative;align-self:center;min-width:34px}
+.crm-pipeline-menu>summary{display:grid;place-items:center;min-height:34px;cursor:pointer;
+ border:1px solid var(--rule);border-radius:4px;font-size:20px;font-weight:700;color:var(--ink-2)}
+.crm-pipeline-menu>div{position:absolute;z-index:35;top:100%;left:0;min-width:190px;
+ display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--rule);
+ box-shadow:0 5px 20px #0002;border-radius:6px;padding:7px}
+.crm-pipeline-menu a{display:block;padding:9px 12px;font-size:12px;text-decoration:none;color:var(--ink)}
+.crm-pipeline-menu a:hover{background:var(--sunken)}
