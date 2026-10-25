@@ -6,8 +6,15 @@ export default function CamposDinamicosCRM({ definicoes, valores, onChange, disa
  onChange:(novo:Record<string,unknown>)=>void; disabled?:boolean;
 }) {
  function alterar(chave:string,v:unknown){ onChange({...valores,[chave]:v}); }
+ const grupos = new Map<string, CampoDef[]>();
+ for (const campo of definicoes.filter(c=>c.ativo)) {
+  const grupo=campo.grupo || 'Principal';
+  grupos.set(grupo,[...(grupos.get(grupo)||[]),campo]);
+ }
  return <div className="crm-campos-dinamicos">
-  {definicoes.filter(x=>x.ativo).map(c=><label key={c.id}>
+  {[...grupos.entries()].map(([grupo,campos])=><fieldset key={grupo} className="crm-grupo-campos">
+   <legend>{grupo}</legend>
+   {campos.map(c=><label key={c.id}>
    <span>{c.rotulo}{c.obrigatorio?' *':''}</span>
    {c.tipo==='booleano' ? <input type="checkbox" disabled={disabled}
      checked={valores[c.chave]===true} onChange={e=>alterar(c.chave,e.target.checked)}/>
@@ -23,5 +30,6 @@ export default function CamposDinamicosCRM({ definicoes, valores, onChange, disa
       onChange={e=>alterar(c.chave,c.tipo==='numero'?
         (e.target.value===''?null:Number(e.target.value)):e.target.value)}/>}
   </label>)}
+  </fieldset>)}
  </div>;
 }
