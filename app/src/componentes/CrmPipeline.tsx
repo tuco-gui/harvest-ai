@@ -10,6 +10,7 @@ import type { Oportunidade } from '@/lib/twenty';
 import LinhaDoTempoCrm from '@/componentes/LinhaDoTempoCrm';
 import CamposOportunidadeCRM from '@/componentes/CamposOportunidadeCRM';
 import GerenciadorEtiquetasCRM from '@/componentes/GerenciadorEtiquetasCRM';
+import SeletorEtiquetasCRM from '@/componentes/SeletorEtiquetasCRM';
 
 type Owner = { id: string; nome: string };
 type Campanha = { id: number; nome: string };
@@ -53,6 +54,9 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
+  const [filtroAberto, setFiltroAberto] = useState(false);
+  const [tagsFiltro, setTagsFiltro] = useState<string[]>([]);
+  const [tagsOperador, setTagsOperador] = useState<'ou'|'e'>('ou');
   const [ownerFiltro, setOwnerFiltro] = useState('');
   const [campanhaFiltro, setCampanhaFiltro] = useState('');
   const [mostrarEncerrados, setMostrarEncerrados] = useState(false);
@@ -131,25 +135,34 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const encerradosIds = useMemo(() => new Set(estagiosEncerrados.map((e) => e.id)), [estagiosEncerrados]);
   const normalizar = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_');
   const encerradosNorm = useMemo(() => new Set([...encerradosIds].map(normalizar)), [encerradosIds]);
-  const visiveis = useMemo(() => ops.filter((op) => {
+  const opsDoFunil = useMemo(() => ops.filter(op => !funilId ||
+    op.funil_id === funilId ||
+    (op.funil_id == null && funilId === funis[0]?.id)), [ops, funilId, funis]);
+  const contagemTags = useMemo(() => Object.fromEntries(
+    [...new Set(opsDoFunil.flatMap(op=>op.tags??[]))].map(tag=>[
+      tag,opsDoFunil.filter(op=>(op.tags??[]).includes(tag)).length,
+    ]),
+  ), [opsDoFunil]);
+  const visiveis = useMemo(() => opsDoFunil.filter((op) => {
     const texto = `${op.empresa} ${op.contato} ${op.telefone ?? ''} ${(op.tags ?? []).join(' ')}`.toLowerCase();
     const opEst = normalizar(op.estagio);
     return (!busca || texto.includes(busca.toLowerCase()))
       && (!ownerFiltro || op.owner_id === ownerFiltro)
       && (!campanhaFiltro || String(op.campanha_id ?? '') === campanhaFiltro)
+      && (!tagsFiltro.length || (tagsOperador==='e' ? tagsFiltro.every(tag=>(op.tags??[]).includes(tag)) : tagsFiltro.some(tag=>(op.tags??[]).includes(tag))))
       && (mostrarEncerrados ? encerradosNorm.has(opEst) : !encerradosNorm.has(opEst));
-  }), [ops, busca, ownerFiltro, campanhaFiltro, mostrarEncerrados, encerradosNorm]);
+  }), [opsDoFunil, busca, ownerFiltro, campanhaFiltro, mostrarEncerrados, encerradosNorm, tagsFiltro, tagsOperador]);
 
   const metricas = useMemo(() => {
-    const abertos = ops.filter((o) => !encerradosNorm.has(normalizar(o.estagio)) && normalizar(o.estagio) !== 'ganho');
+    const abertos = opsDoFunil.filter((o) => !encerradosNorm.has(normalizar(o.estagio)) && normalizar(o.estagio) !== 'ganho');
     return {
       abertas: abertos.length,
       valorAberto: abertos.reduce((s, o) => s + Number(o.valor || 0), 0),
       ponderado: abertos.reduce((s, o) => s + Number(o.valor || 0) * Number(o.probabilidade || 0) / 100, 0),
-      ganhos: ops.filter((o) => normalizar(o.estagio) === 'ganho').length,
-      respostas: ops.filter((o) => ['respondeu', 'qualificando', 'reuniao', 'proposta', 'ganho'].includes(normalizar(o.estagio))).length,
+      ganhos: opsDoFunil.filter((o) => normalizar(o.estagio) === 'ganho').length,
+      respostas: opsDoFunil.filter((o) => ['respondeu', 'qualificando', 'reuniao', 'proposta', 'ganho'].includes(normalizar(o.estagio))).length,
     };
-  }, [ops, encerradosNorm]);
+  }, [opsDoFunil, encerradosNorm]);
 
   const estagios = mostrarEncerrados ? estagiosEncerrados : estagiosPipeline;
   const agrupar = (estagio: string) => visiveis.filter((o) => normalizar(o.estagio) === estagio);
@@ -197,7 +210,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         ...nova, campanha_id: nova.campanha_id ? Number(nova.campanha_id) : null,
         owner_id: nova.owner_id || null, valor: Number(nova.valor) || 0,
         probabilidade: Number(nova.probabilidade) || 5,
-        tags: nova.tags,
+        tags: nova.tags, funil_id: funilId,
         previsao_fechamento: nova.previsao_fechamento || null,
       }),
     });
@@ -359,6 +372,9 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           </select>
         )}
         <div className="crm-busca"><span>⌕</span><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar empresa, contato, telefone ou etiqueta" /></div>
+         {avancado && <button type="button" aria-expanded={filtroAberto} onClick={()=>setFiltroAberto(x=>!x)}>
+           Buscar e filtrar {tagsFiltro.length ? '('+tagsFiltro.length+' tags)' : ''}
+         </button>}
         <select value={ownerFiltro} onChange={(e) => setOwnerFiltro(e.target.value)}><option value="">Todos os responsáveis</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
         <select value={campanhaFiltro} onChange={(e) => setCampanhaFiltro(e.target.value)}><option value="">Todas as campanhas</option>{campanhas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
         <div className="crm-view-toggle">
@@ -369,7 +385,20 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         {podeEditar && <button className="btn-primario crm-nova" type="button" onClick={() => { setNovaAberta(true); setErro(null); }}>+ Nova oportunidade</button>}
       </div>
 
-      {erro && <div className="crm-aviso" role="alert">{erro}<button type="button" onClick={() => setErro(null)}>×</button></div>}
+      {avancado && filtroAberto && <section className="crm-pipeline-filtro-tags">
+         <div className="crm-pipeline-filtro-topo"><strong>Tags</strong><button type="button"
+           onClick={()=>setFiltroAberto(false)}>Fechar filtros</button></div>
+         <GerenciadorEtiquetasCRM selecionadas={tagsFiltro} onChange={setTagsFiltro}
+           contexto="negócio" limite={20} contagens={contagemTags}/>
+         <label>Exibir negócios com
+           <select value={tagsOperador} onChange={e=>setTagsOperador(e.target.value as 'ou'|'e')}>
+             <option value="ou">Qualquer tag selecionada (OU)</option>
+             <option value="e">Todas as tags selecionadas (E)</option>
+           </select>
+         </label>
+         <button type="button" onClick={()=>setTagsFiltro([])}>Limpar filtro de tags</button>
+       </section>}
+       {erro && <div className="crm-aviso" role="alert">{erro}<button type="button" onClick={() => setErro(null)}>×</button></div>}
 
       {visualizacao === 'kanban' ? (
       <div className={`crm-kanban ${mostrarEncerrados ? 'crm-kanban-encerrados' : ''}`}>
@@ -439,7 +468,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           <label>Valor<input type="number" min="0" step="0.01" value={nova.valor} onChange={(e) => setNova({ ...nova, valor: e.target.value })} /></label>
           <label>Probabilidade<input type="number" min="0" max="100" value={nova.probabilidade} onChange={(e) => setNova({ ...nova, probabilidade: e.target.value })} /></label>
           <label>Previsão de fechamento<input type="date" value={nova.previsao_fechamento} onChange={(e) => setNova({ ...nova, previsao_fechamento: e.target.value })} /></label>
-          {avancado ? <div className="campo-largo"><GerenciadorEtiquetasCRM contexto="negócio" limite={20} selecionadas={nova.tags} onChange={tags => setNova({ ...nova, tags })}/></div>
+          {avancado ? <div className="campo-largo"><SeletorEtiquetasCRM limite={20} selecionadas={nova.tags} onChange={tags => setNova({ ...nova, tags })}/></div>
              : <label className="campo-largo">Etiquetas<input value={nova.tags.join(', ')} onChange={e => setNova({ ...nova, tags: e.target.value.split(',').map(v => v.trim()).filter(Boolean) })}/></label>}
           <label className="campo-largo">Próxima ação<textarea value={nova.proxima_acao} onChange={(e) => setNova({ ...nova, proxima_acao: e.target.value })} /></label>
           <div className="crm-form-acoes campo-largo"><button type="button" onClick={() => setNovaAberta(false)}>Cancelar</button><button className="btn-primario" disabled={salvando}>{salvando ? 'Criando…' : 'Criar oportunidade'}</button></div>
@@ -465,7 +494,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             <label>Probabilidade<input type="number" min="0" max="100" value={ficha.probabilidade} onChange={(e) => setFicha({ ...ficha, probabilidade: Number(e.target.value) })} /></label>
             <label>Previsão<input type="date" value={ficha.previsao_fechamento ?? ''} onChange={(e) => setFicha({ ...ficha, previsao_fechamento: e.target.value || null })} /></label>
             <label className="campo-largo">Campanha/origem<select value={ficha.campanha_id ?? ''} onChange={(e) => setFicha({ ...ficha, campanha_id: e.target.value ? Number(e.target.value) : null })}><option value="">Sem campanha</option>{campanhas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-            {avancado ? <div className="campo-largo"><GerenciadorEtiquetasCRM contexto="negócio" limite={20} selecionadas={ficha.tags ?? []} onChange={tags => setFicha({ ...ficha, tags })}/></div>
+            {avancado ? <div className="campo-largo"><SeletorEtiquetasCRM limite={20} selecionadas={ficha.tags ?? []} onChange={tags => setFicha({ ...ficha, tags })}/></div>
              : <label className="campo-largo">Etiquetas<input value={(ficha.tags ?? []).join(', ')} onChange={e => setFicha({ ...ficha, tags: e.target.value.split(',').map(v => v.trim()).filter(Boolean) })}/></label>}
             <label className="campo-largo">Próxima ação<textarea value={ficha.proxima_acao ?? ''} onChange={(e) => setFicha({ ...ficha, proxima_acao: e.target.value })} /></label>
             {encerradosIds.has(ficha.estagio) && <label className="campo-largo">Motivo do encerramento<textarea value={ficha.motivo_perda ?? ''} onChange={(e) => setFicha({ ...ficha, motivo_perda: e.target.value })} /></label>}
