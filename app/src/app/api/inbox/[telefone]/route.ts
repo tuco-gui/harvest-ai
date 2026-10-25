@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { normalizarTelefone } from '@/lib/telefone';
+import { perfilTemModulo } from '@/lib/autorizacao';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ telefone: string }> }) {
   const { telefone: rawTel } = await params;
@@ -10,6 +11,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ telefon
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return NextResponse.json({ erro: 'Sem conta.' }, { status: 400 });
   const admin = supabaseAdmin();
+  if (perfil.papel === 'operador' && await perfilTemModulo(admin, perfil, 'crm_avancado')) {
+    const { data: atendimento, error } = await admin.from('crm_atendimentos')
+      .select('responsavel_id').eq('conta_id', perfil.conta_id)
+      .eq('telefone', telefone).maybeSingle();
+    if (error) return NextResponse.json({ erro: 'Falha ao validar atribuição.' }, { status: 503 });
+    if (atendimento?.responsavel_id !== perfil.id) {
+      return NextResponse.json({ erro: 'Sem acesso a esta conversa.' }, { status: 403 });
+    }
+  }
 
   // Inbound messages
   const { data: entradas } = await admin
