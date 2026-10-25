@@ -808,3 +808,41 @@ a:hover{color:var(--ink)}
  .crm-atendimento-detalhe{min-height:460px}
  .crm-atendimento-mensagens{max-height:350px}
 }
+
+
+/* Catálogo de etiquetas do CRM, multisseleção e seleção de cores. */
+.crm-gestao-etiquetas{min-width:0;font-size:12px}
+.crm-gestao-etiquetas-cabecalho{display:flex;gap:10px;justify-content:space-between;align-items:center;margin:0 0 10px}
+.crm-gestao-etiquetas-cabecalho>button,.crm-etiquetas-limpar,.crm-btn-auditoria{font-size:11px;text-decoration:underline;text-underline-offset:2px;color:var(--ink-2);cursor:pointer}
+.crm-etiquetas-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+.crm-tag-chip{display:inline-flex;align-items:center;gap:7px;padding:5px 8px;border:1px solid var(--rule);border-radius:20px;background:var(--surface);font-size:11px}
+.crm-tag-chip button{font-size:15px;line-height:14px;cursor:pointer}
+.crm-tag-ponto{width:10px;height:10px;display:inline-block;border-radius:50%;flex:none}
+.crm-etiquetas-opcoes{border:1px solid var(--rule);border-radius:6px;padding:10px;display:flex;flex-wrap:wrap;gap:8px}
+.crm-etiquetas-opcoes legend{font-size:10px;color:var(--ink-3);padding:0 6px}
+.crm-etiquetas-opcoes label{display:inline-flex!important;align-items:center!important;flex-direction:row!important;gap:6px!important;padding:7px 9px;background:var(--sunken);border-radius:5px;cursor:pointer;font-weight:500!important}
+.crm-etiquetas-opcoes input{width:14px!important;height:14px!important;accent-color:var(--red)}
+.crm-etiquetas-limpar{margin:8px 0}
+.crm-etiquetas-gerenciar{border-top:1px solid var(--rule);margin-top:10px;padding-top:12px;display:flex;flex-direction:column;gap:12px}
+.crm-etiquetas-gerenciar form{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.crm-etiquetas-gerenciar label{display:flex;flex-direction:column;gap:5px;width:100%}
+.crm-etiquetas-gerenciar input{width:100%;height:35px;border:1px solid var(--rule);padding:0 9px;background:var(--sunken);border-radius:5px;font-size:12px}
+.crm-etiquetas-gerenciar form>button{border:1px solid var(--rule-2);border-radius:5px;padding:8px 12px;font-weight:700}
+.crm-etiquetas-paleta{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.crm-etiquetas-paleta button:not(.sem-cor){width:27px;height:27px;border:3px solid transparent;border-radius:50%}
+.crm-etiquetas-paleta button[aria-pressed=true]{outline:2px solid var(--ink);outline-offset:2px}
+.crm-etiquetas-paleta .sem-cor{font-size:11px;padding:4px 8px}
+.crm-etiqueta-linha{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--rule);flex-wrap:wrap}
+.crm-etiqueta-linha strong{flex:1;min-width:110px;font-size:12px}
+.crm-etiqueta-linha select{max-width:130px}
+.crm-etiqueta-linha>button{font-size:11px;color:var(--red);padding:5px 8px;border:1px solid var(--rule);border-radius:5px}
+.crm-atendimento-prioridade{font-size:10px;font-weight:700}
+.crm-atendimento-prioridade.urgente,.crm-sla-vencido{color:var(--red);font-weight:800}
+.crm-atendimento-prioridade.alta{color:#B45309}
+.crm-atendimento-sla-indicador{display:flex;flex-wrap:wrap;align-items:center;gap:7px 15px;margin:12px 0;font-size:12px;border-top:1px solid var(--rule);padding-top:10px}
+.crm-atendimento-sla-indicador small{flex-basis:100%;font-size:10px;color:var(--ink-3)}
+.crm-btn-auditoria{display:block;margin:10px 0}
+.crm-auditoria-eventos{list-style:none;margin:0;padding:0;max-height:180px;overflow:auto}
+.crm-auditoria-eventos li{display:flex;flex-wrap:wrap;gap:6px 10px;padding:7px 0;border-top:1px solid var(--rule);font-size:10px}
+.crm-auditoria-eventos li>span{overflow-wrap:anywhere;max-width:100%}
+.crm-auditoria-eventos time{color:var(--ink-3)}

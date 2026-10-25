@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Perfil } from './supabase/server';
 import { isAdmin } from './crmControleAcesso.ts';
 import { normalizarTelefone } from './telefone.ts';
+import { prioridadeValida, prazoTriagem, type Prioridade } from './crmEtiquetas.ts';
 
 export const STATUS_ATENDIMENTO = ['aberto', 'pendente', 'resolvido'] as const;
 export type StatusAtendimento = typeof STATUS_ATENDIMENTO[number];
@@ -11,6 +12,9 @@ export type MetaAtendimento = {
   responsavel_id: string | null;
   etiquetas: string[];
   atualizado_em: string | null;
+  prioridade: Prioridade;
+  prazo_triagem_em: string | null;
+  resolvido_em: string | null;
 };
 export type ConversaAtendimento = MetaAtendimento & {
   nome: string | null;
@@ -29,14 +33,15 @@ export function telefoneAtendimento(value: unknown): string | null {
 export function validarAlteracaoAtendimento(
   dados: unknown,
   admin: boolean,
-): { status: StatusAtendimento; etiquetas: string[]; responsavel_id: string | null } | { erro: string } {
+): { status: StatusAtendimento; etiquetas: string[]; prioridade: Prioridade; responsavel_id: string | null } | { erro: string } {
   if (!dados || typeof dados !== 'object' || Array.isArray(dados)) return { erro: 'Dados inválidos.' };
   const b = dados as Record<string, unknown>;
   if (!STATUS_ATENDIMENTO.includes(b.status as StatusAtendimento)) return { erro: 'Status inválido.' };
+  if (!prioridadeValida(b.prioridade)) return { erro: 'Prioridade inválida.' };
   if (!Array.isArray(b.etiquetas) || b.etiquetas.length > 8
     || b.etiquetas.some(t => typeof t !== 'string' || !t.trim() || t.trim().length > 28
       || /[<>\r\n]/.test(t))) return { erro: 'Informe até oito etiquetas válidas (máx. 28 caracteres).' };
-  const etiquetas = [...new Set((b.etiquetas as string[]).map(x => x.trim()))];
+  const etiquetas = [...new Set((b.etiquetas as string[]).map(x => x.trim().toLocaleLowerCase('pt-BR')))];
   if (b.responsavel_id !== undefined && b.responsavel_id !== null
     && (typeof b.responsavel_id !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(b.responsavel_id))) {
@@ -47,7 +52,8 @@ export function validarAlteracaoAtendimento(
   }
   return {
     status: b.status as StatusAtendimento,
-    etiquetas, responsavel_id: (b.responsavel_id as string | null) ?? null,
+    etiquetas, prioridade: b.prioridade as Prioridade,
+    responsavel_id: (b.responsavel_id as string | null) ?? null,
   };
 }
 
@@ -96,6 +102,7 @@ export function montarConversas(
       if (m.recebido_em > atual.ultimaRecebida) {
         atual.ultimaMensagem = m.mensagem ?? '';
         atual.ultimaRecebida = m.recebido_em;
+        atual.prazo_triagem_em = prazoTriagem(m.recebido_em, atual.prioridade);
         if (m.nome_contato) atual.nome = m.nome_contato;
         if (m.lead_id) atual.leadId = m.lead_id;
       }
@@ -108,6 +115,9 @@ export function montarConversas(
         status: meta?.status ?? 'aberto', etiquetas: meta?.etiquetas ?? [],
         responsavel_id: meta?.responsavel_id ?? null,
         atualizado_em: meta?.atualizado_em ?? null,
+        prioridade: meta?.prioridade ?? 'normal',
+        prazo_triagem_em: prazoTriagem(m.recebido_em, meta?.prioridade ?? 'normal'),
+        resolvido_em: meta?.resolvido_em ?? null,
       });
     }
   }

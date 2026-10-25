@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import GerenciadorEtiquetasCRM from '@/componentes/GerenciadorEtiquetasCRM';
+import { estadoSla, NOMES_PRIORIDADE, PRIORIDADES, type Prioridade } from '@/lib/crmEtiquetas';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { STATUS_ATENDIMENTO, type ConversaAtendimento,
   type StatusAtendimento } from '@/lib/crmAtendimentos';
@@ -31,7 +33,10 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
   const [aviso, setAviso] = useState('');
   const [status, setStatus] = useState<StatusAtendimento>('aberto');
   const [responsavel, setResponsavel] = useState('');
-  const [etiquetas, setEtiquetas] = useState('');
+  const [etiquetas, setEtiquetas] = useState<string[]>([]);
+  const [prioridade, setPrioridade] = useState<Prioridade>('normal');
+  const [auditoria, setAuditoria] = useState<Array<{ id:number;tipo:string;anterior:Record<string,unknown>;novo:Record<string,unknown>;criado_em:string }>>([]);
+  const [mostrarAuditoria, setMostrarAuditoria] = useState(false);
 
   const carregar = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -84,10 +89,21 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
 
   const selecionada = conversas.find(c => c.telefone === telefone);
   useEffect(() => {
+    if (!telefone || !mostrarAuditoria) return;
+    let cancelado = false;
+    fetch('/api/crm/atendimentos/'+encodeURIComponent(telefone)+'/auditoria')
+      .then(async r=>{const d=await r.json();if(!r.ok) throw Error(d.erro||'Falha na auditoria');return d;})
+      .then(d=>{if(!cancelado)setAuditoria(d.eventos??[]);})
+      .catch(e=>{if(!cancelado)setErro(e.message);});
+    return ()=>{cancelado=true};
+  },[telefone,mostrarAuditoria,selecionada?.atualizado_em]);
+
+  useEffect(() => {
     if (!selecionada || salvando) return;
     setStatus(selecionada.status);
     setResponsavel(selecionada.responsavel_id ?? '');
-    setEtiquetas(selecionada.etiquetas.join(', '));
+    setEtiquetas(selecionada.etiquetas);
+    setPrioridade(selecionada.prioridade);
   }, [telefone, selecionada?.atualizado_em]);
 
   const filtradas = useMemo(() => {
@@ -105,9 +121,9 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     if (!selecionada || salvando) return;
     setSalvando(true); setErro(''); setAviso('');
     try {
-      const tags = etiquetas.split(',').map(x => x.trim()).filter(Boolean);
+      const tags = etiquetas;
       const body: Record<string, unknown> = {
-        telefone: selecionada.telefone, status, etiquetas: tags,
+        telefone: selecionada.telefone, status, etiquetas: tags, prioridade,
       };
       if (podeAtribuir) body.responsavel_id = responsavel || null;
       const r = await fetch('/api/crm/atendimentos', {
@@ -126,6 +142,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     } finally { setSalvando(false); }
   }
 
+  const contagemSlaVencido = conversas.filter(c=>estadoSla(c.prazo_triagem_em,c.status)==='vencido').length;
   const nomeAtendente = (id: string | null) =>
     atendentes.find(a => a.id === id)?.nome ?? (id ? 'Atendente atribuído' : 'Sem responsável');
   const data = (iso: string) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
@@ -144,7 +161,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
       <aside className="crm-atendimentos-lista">
         <div className="crm-atendimentos-resumo">
           <strong>{conversas.filter(c => c.status !== 'resolvido').length} em andamento</strong>
-          <span>{conversas.filter(c => c.status === 'resolvido').length} resolvidos</span>
+          <span>{conversas.filter(c => c.status === 'resolvido').length} resolvidos · {contagemSlaVencido} SLA vencido(s)</span>
         </div>
         <input aria-label="Buscar conversas" placeholder="Buscar por nome, telefone ou etiqueta"
           value={busca} onChange={e => setBusca(e.target.value)}/>
@@ -170,6 +187,8 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             <span className="crm-atendimento-contato-meta">
               <span className={'crm-atendimento-status ' + c.status}>{STATUS[c.status]}</span>
               <span>{nomeAtendente(c.responsavel_id)}</span>
+              <span className={'crm-atendimento-prioridade '+c.prioridade}>{NOMES_PRIORIDADE[c.prioridade]}</span>
+              {estadoSla(c.prazo_triagem_em,c.status)==='vencido'&&<span className="crm-sla-vencido">SLA vencido</span>}
             </span>
           </button>)}
         </div>
@@ -214,12 +233,37 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
                   {nomeAtendente(selecionada.responsavel_id)}
                 </div>}
               </label>
-              <label className="crm-atendimento-etiquetas">Etiquetas (separadas por vírgula)
-                <input value={etiquetas} maxLength={240}
-                  placeholder="Ex.: novo lead, proposta, urgente"
-                  onChange={e => setEtiquetas(e.target.value)}/>
+              <label>Prioridade
+                <select value={prioridade} onChange={e=>setPrioridade(e.target.value as Prioridade)}>
+                  {PRIORIDADES.map(p=><option key={p} value={p}>{NOMES_PRIORIDADE[p]}</option>)}
+                </select>
               </label>
+              <div className="crm-atendimento-etiquetas">
+                <GerenciadorEtiquetasCRM selecionadas={etiquetas} onChange={setEtiquetas} desabilitado={salvando}/>
+              </div>
             </div>
+            <div className="crm-atendimento-sla-indicador">
+              <strong>SLA de triagem</strong>
+              <span>{selecionada.prazo_triagem_em
+                ? new Date(selecionada.prazo_triagem_em).toLocaleString('pt-BR')
+                : 'Sem prazo'}</span>
+              <span>{estadoSla(selecionada.prazo_triagem_em,selecionada.status)==='vencido'
+                ? 'Prazo vencido' : estadoSla(selecionada.prazo_triagem_em,selecionada.status)==='em_risco'
+                  ? 'Prazo próximo' : selecionada.status==='resolvido'?'Resolvido':'No prazo'}</span>
+              <small>Meta de triagem calculada desde a última mensagem recebida. Não mede tempo real de resposta.</small>
+            </div>
+            <button type="button" className="crm-btn-auditoria" aria-expanded={mostrarAuditoria}
+              onClick={()=>setMostrarAuditoria(x=>!x)}>
+              {mostrarAuditoria?'Ocultar histórico das alterações':'Ver transferências e alterações'}
+            </button>
+            {mostrarAuditoria&&<ol className="crm-auditoria-eventos">
+              {auditoria.map(a=><li key={a.id}><strong>{a.tipo}</strong>
+                <time>{data(a.criado_em)}</time>
+                <span>De: {JSON.stringify(a.anterior)}</span>
+                <span>Para: {JSON.stringify(a.novo)}</span>
+              </li>)}
+              {!auditoria.length&&<li>Nenhuma alteração registrada ainda.</li>}
+            </ol>}
             {erro && <p role="alert" className="crm-aviso">{erro}</p>}
             {aviso && <p role="status" className="ajuda">{aviso}</p>}
             <div className="crm-atendimento-acoes">
