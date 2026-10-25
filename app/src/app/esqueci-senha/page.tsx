@@ -36,9 +36,9 @@ export default function EsqueciSenha() {
       <main className="entrada">
         <div className="cartao">
           <span className="marca">HARVEST<em>.</em>AI</span>
-          <p className="sub">Código enviado</p>
+          <p className="sub">Solicitação recebida</p>
           <p className="ajuda" style={{ marginTop: 0 }}>
-            Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos para ele.
+            Se o e-mail estiver cadastrado e o serviço de e-mail estiver disponível, você receberá um código de 6 dígitos.
             Abra o e-mail, copie o código e informe aqui para definir a nova senha.
           </p>
           <button className="entrar" onClick={() => router.push('/verificar-codigo')}>
