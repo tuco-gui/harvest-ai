@@ -27,7 +27,7 @@ export default async function PaginaCrm() {
       .eq('conta_id', perfil.conta_id).order('criado_em', { ascending: false }).limit(100),
     carregarCanais(admin, perfil.conta_id),
     // Buscar todos os funis ativos da conta
-    admin.from('funis').select('id, nome').eq('conta_id', perfil.conta_id).eq('ativo', true)
+    admin.from('funis').select('id, nome, canal_padrao_id').eq('conta_id', perfil.conta_id).eq('ativo', true)
       .order('criado_em'),
   ]);
 
