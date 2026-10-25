@@ -31,6 +31,7 @@ export async function POST(req: Request) {
 
   const {
     lead, indice = 0, campanhaId, canalId = null, canalIds = null, modoEnvio = null,
+    herdarCanalFunil = false,
     overrideOptOut = false, motivoOverride = '',
   } = await req.json().catch(() => ({}) as any);
   if (!lead?.telefone) {
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
     modo,
     canalSolicitadoId:canalId === null||canalId === '' ? null : Number(canalId),
     canaisSolicitadosIds:Array.isArray(canalIds) ? canalIds : null,
-    canaisCampanhaIds:Array.isArray(campanha?.canal_ids) ? campanha.canal_ids : null,
+    canaisCampanhaIds:herdarCanalFunil===true?null:Array.isArray(campanha?.canal_ids) ? campanha.canal_ids : null,
     canalFunilId:funilCanal?.canal_padrao_id??null,
     indice:Number(indice)||0,
   });
