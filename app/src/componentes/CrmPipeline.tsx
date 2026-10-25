@@ -58,6 +58,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [filtroAberto, setFiltroAberto] = useState(false);
   const [tagsFiltro, setTagsFiltro] = useState<string[]>([]);
   const [tagsOperador, setTagsOperador] = useState<'ou'|'e'>('ou');
+  const [coresEtiquetas, setCoresEtiquetas] = useState<Record<string,string|null>>({});
   const [ownerFiltro, setOwnerFiltro] = useState('');
   const [campanhaFiltro, setCampanhaFiltro] = useState('');
   const [mostrarEncerrados, setMostrarEncerrados] = useState(false);
@@ -81,6 +82,16 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   } | null>(null);
   const [motivoOverride, setMotivoOverride] = useState('');
 
+  useEffect(() => {
+    if(!avancado)return;
+    const ctl=new AbortController();
+    fetch('/api/crm/etiquetas',{signal:ctl.signal,cache:'no-store'})
+      .then(r=>r.json()).then(d=>{
+        if(!ctl.signal.aborted && Array.isArray(d.etiquetas))
+          setCoresEtiquetas(Object.fromEntries(d.etiquetas.map((t:{nome:string;cor:string|null})=>[t.nome,t.cor])));
+      }).catch(()=>{});
+    return ()=>ctl.abort();
+  },[avancado]);
   // Carregar estágios quando o funil muda
   useEffect(() => {
     if (!funilId || funilId === funilIdInicial) { setEstagiosDb(estagiosFunil); return; }
@@ -170,6 +181,10 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const agrupar = (estagio: string) => visiveis.filter((o) => normalizar(o.estagio) === estagio);
   const nomeOwner = (id: string | null) => owners.find((o) => o.id === id)?.nome ?? 'Sem responsável';
   const nomeCampanha = (id: number | null) => campanhas.find((c) => c.id === id)?.nome ?? null;
+  const estiloEtiqueta = (nome:string) => {
+    const cor=coresEtiquetas[nome];
+    return cor ? {borderColor:cor,color:cor,backgroundColor:cor+'14'} : undefined;
+  };
   const valorFmt = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const dataFmt = (v: string | null | undefined) => v ? new Date(v).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
   async function json(r: Response) { return r.json().catch(() => ({})); }
@@ -443,7 +458,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
                 <div className="crm-cartao-topo"><strong>{op.empresa || op.contato || 'Sem nome'}</strong><span>{op.probabilidade ?? 0}%</span></div>
                 {op.contato && op.empresa && <p>{op.contato}</p>}<div className="crm-cartao-valor">{valorFmt(op.valor)}</div>
                 {nomeCampanha(op.campanha_id) && <span className="crm-tag">{nomeCampanha(op.campanha_id)}</span>}
-                {(op.tags ?? []).slice(0, 2).map((tag) => <span className="crm-tag" key={tag}>{tag}</span>)}
+                {(op.tags ?? []).slice(0, 2).map((tag) => <span className="crm-tag" key={tag} style={estiloEtiqueta(tag)}>{tag}</span>)}
                 <footer><span>{nomeOwner(op.owner_id)}</span>{op.proxima_acao && <time title={op.proxima_acao}>Próxima ação</time>}</footer>
               </li>)}
               {!itens.length && <li className="crm-coluna-vazia">Nenhuma oportunidade</li>}
@@ -464,7 +479,9 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
               const estCor = estagios.find((e) => e.id === normalizar(op.estagio))?.cor || '#8b8b8b';
               return (
               <tr key={op.id} onClick={() => void abrirFicha(op)} style={{ cursor: 'pointer' }}>
-                <td><strong>{op.empresa || 'Sem nome'}</strong></td>
+                <td><strong>{op.empresa || 'Sem nome'}</strong>
+                  {avancado && (op.tags??[]).slice(0,3).map(tag=>
+                    <span className="crm-tag" style={estiloEtiqueta(tag)} key={tag}>{tag}</span>)}</td>
                 <td>{op.contato || '—'}</td>
                 <td><span className="crm-estagio-badge" style={{ background: `${estCor}18`, color: estCor, border: `1px solid ${estCor}33` }}>{op.estagio}</span></td>
                 <td>{valorFmt(op.valor)}</td>
