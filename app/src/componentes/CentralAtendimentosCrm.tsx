@@ -13,6 +13,8 @@ type Msg = { id: string; direcao: 'entrada' | 'saida'; texto: string; data: stri
 type Detalhe = {
   telefone: string; timeline: Msg[]; nome: string | null;
   oportunidade: { id: number; estagio: string; funil_id:number|null;canal_padrao_id:number|null } | null;
+  canaisObservados:number[];canalSugeridoId:number|null;
+  funilSugeridoId:number|null;canalAmbiguo:boolean;
 };
 const STATUS: Record<StatusAtendimento, string> = {
   aberto: 'Aberto', pendente: 'Aguardando', resolvido: 'Resolvido',
@@ -28,6 +30,8 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
   const [busca, setBusca] = useState('');
   const [canaisWhatsApp, setCanaisWhatsApp] = useState<Array<{id:number;nome:string;provider:string}>>([]);
   const [canalSelecionado, setCanalSelecionado] = useState('');
+  const [canalFiltro,setCanalFiltro] = useState<number|null>(null);
+  const [nomesCanais,setNomesCanais] = useState<Array<{id:number;nome:string;provider:string;status:string}>>([]);
   const [textoResposta, setTextoResposta] = useState('');
   const [enviandoResposta, setEnviandoResposta] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('todos');
@@ -80,7 +84,8 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     }
     const ctrl = new AbortController();
     setCarregandoDetalhe(true);
-    fetch(`/api/crm/atendimentos/${encodeURIComponent(telefone)}`, {
+    fetch('/api/crm/atendimentos/'+encodeURIComponent(telefone)+
+      (canalFiltro!==null?'?canal_id='+canalFiltro:''), {
       cache: 'no-store', signal: ctrl.signal,
     }).then(async r => {
       const d = await r.json();
@@ -90,7 +95,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
       .catch(e => { if (!ctrl.signal.aborted) { setDetalhe(null); setErro(e.message); } })
       .finally(() => { if (!ctrl.signal.aborted) setCarregandoDetalhe(false); });
     return () => ctrl.abort();
-  }, [telefone]); // Seleção muda somente ao trocar de conversa.
+  }, [telefone,canalFiltro]); // Troca de canal filtra somente a conversa visualizada.
 
   useEffect(() => {
     const ctl=new AbortController();
@@ -99,20 +104,25 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
       const ativos=(d.canais??[]).filter((c:any)=>
         c.ativo && c.status==='conectado' && ['waha','evolution'].includes(c.provider));
       setCanaisWhatsApp(ativos.map((c:any)=>({id:c.id,nome:c.nome,provider:c.provider})));
+      setNomesCanais((d.canais??[]).map((c:{id:number;nome:string;provider:string;status:string})=>({id:c.id,nome:c.nome,provider:c.provider,status:c.status})));
       if(ativos[0])setCanalSelecionado(String(ativos[0].id));
     }).catch(()=>{});
     return ()=>ctl.abort();
   },[]);
   useEffect(()=>{
     if(!detalhe)return;
-    const escolhido=detalhe.oportunidade?.canal_padrao_id;
+    if(detalhe.canalAmbiguo && canalFiltro===null) {
+      setCanalSelecionado('');return;
+    }
+    const escolhido=canalFiltro??detalhe.oportunidade?.canal_padrao_id??detalhe.canalSugeridoId;
     if(escolhido!=null) {
       const cadastrado=canaisWhatsApp.find(c=>c.id===escolhido);
       setCanalSelecionado(cadastrado?String(cadastrado.id):'');
     } else {
       setCanalSelecionado(String(canaisWhatsApp[0]?.id??''));
     }
-  },[detalhe?.oportunidade?.id,detalhe?.oportunidade?.canal_padrao_id,canaisWhatsApp]);
+  },[detalhe?.oportunidade?.id,detalhe?.oportunidade?.canal_padrao_id,detalhe?.canalSugeridoId,
+     detalhe?.canalAmbiguo,canalFiltro,canaisWhatsApp]);
   const selecionada = conversas.find(c => c.telefone === telefone);
   useEffect(() => {
     if (!telefone || !mostrarAuditoria) return;
@@ -172,11 +182,23 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     if(!selecionada || !podeAtribuir)return;
     setSalvando(true);setErro('');setAviso('');
     try{
+      if(detalhe?.canalAmbiguo && canalFiltro===null)
+        throw Error('Selecione o canal correto antes de criar um negócio.');
+      let nomeEtapa='novo';
+      if(detalhe?.funilSugeridoId!=null) {
+        const rEtapas=await fetch('/api/funis/'+detalhe.funilSugeridoId+'/estagios');
+        if(!rEtapas.ok)throw Error('Não foi possível conferir as etapas do funil.');
+        const etapas=await rEtapas.json();
+        const primeira=(etapas.estagios??[]).filter((e:{grupo:string})=>e.grupo==='pipeline')
+          .sort((a:{ordem:number},b:{ordem:number})=>a.ordem-b.ordem)[0];
+        if(!primeira)throw Error('O funil escolhido não possui uma etapa de entrada.');
+        nomeEtapa=primeira.nome;
+      }
       const r=await fetch('/api/crm/oportunidades',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({empresa:selecionada.nome||selecionada.telefone,
           contato:selecionada.nome||'',telefone:selecionada.telefone,
-          origem:'inbox',estagio:'novo'}),
+          origem:'inbox',estagio:nomeEtapa,funil_id:detalhe?.funilSugeridoId??null}),
       });
       const d=await r.json();if(!r.ok)throw Error(d.erro||'Não foi possível criar o negócio.');
       const rr=await fetch('/api/crm/atendimentos/'+encodeURIComponent(selecionada.telefone),
@@ -243,7 +265,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
           {!carregando && !filtradas.length && <p className="crm-atendimentos-vazio">Nenhuma conversa neste filtro.</p>}
           {filtradas.map(c => <button type="button" key={c.telefone}
             className={c.telefone === telefone ? 'crm-atendimento-contato selecionado' : 'crm-atendimento-contato'}
-            onClick={() => { setTelefone(c.telefone); setAviso(''); setErro(''); }} >
+            onClick={() => { setCanalFiltro(null);setTelefone(c.telefone); setAviso(''); setErro(''); }} >
             <span className="crm-atendimento-contato-topo">
               <strong>{c.nome || c.telefone}</strong><time>{data(c.ultimaRecebida)}</time>
             </span>
@@ -251,6 +273,11 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             <span className="crm-atendimento-contato-meta">
               <span className={'crm-atendimento-status ' + c.status}>{STATUS[c.status]}</span>
               <span>{nomeAtendente(c.responsavel_id)}</span>
+              {c.canaisObservados.length>0 && <span>
+                {c.canaisObservados.length===1
+                  ? nomesCanais.find(n=>n.id===c.canaisObservados[0])?.nome??'Canal identificado'
+                  : c.canaisObservados.length+' canais distintos'}
+              </span>
               <span className={'crm-atendimento-prioridade '+c.prioridade}>{NOMES_PRIORIDADE[c.prioridade]}</span>
               {estadoSla(c.prazo_triagem_em,c.status)==='vencido'&&<span className="crm-sla-vencido">SLA vencido</span>}
             </span>
@@ -267,6 +294,15 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             <div>
               <strong>{selecionada.nome || selecionada.telefone}</strong>
               <span>{selecionada.telefone}</span>
+              {detalhe?.canaisObservados?.length>0 && <label className="crm-inbox-seletor-canal">
+                Conversa por canal
+                <select value={canalFiltro??''} onChange={e=>setCanalFiltro(e.target.value?Number(e.target.value):null)}>
+                  <option value="">Histórico geral do telefone</option>
+                  {detalhe.canaisObservados.map(id=><option key={id} value={id}>
+                    {nomesCanais.find(n=>n.id===id)?.nome??'Canal '+id}
+                  </option>)}
+                </select>
+              </label>}
             </div>
             <div className="crm-atendimento-links">
               {detalhe?.oportunidade && <Link href={'/crm?oportunidade=' + detalhe.oportunidade.id}>Abrir negócio</Link>}
@@ -282,12 +318,20 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
               {detalhe && !detalhe.timeline.length && <p>Nenhuma mensagem disponível.</p>}
             </div>}
           <div className="crm-inbox-compositor">
+             {detalhe?.canalAmbiguo && canalFiltro===null && <p className="crm-aviso" role="alert">
+               Este contato escreveu para mais de um número. Escolha o canal acima para visualizar
+               e responder sem misturar as conversas. Status e atribuição do atendimento
+               ainda são compartilhados por telefone nesta versão.
+             </p>}
+             {detalhe?.funilSugeridoId!=null && <p className="ajuda">
+               Canal associado ao funil #{detalhe.funilSugeridoId}. Novo negócio será criado nele.
+             </p>}
              {detalhe?.oportunidade?.canal_padrao_id!=null && !canaisWhatsApp.some(
                c=>c.id===detalhe.oportunidade?.canal_padrao_id) && (
                <p className="crm-aviso" role="status">O canal deste funil não está conectado.
                  Selecione outro manualmente para responder; não haverá troca automática.</p>
              )}
-             {detalhe?.oportunidade && canaisWhatsApp.length>0 ? (
+             {detalhe?.oportunidade && canaisWhatsApp.length>0 && !(detalhe.canalAmbiguo&&canalFiltro===null) ? (
                <form onSubmit={responder}>
                  <label>Responder pelo WhatsApp (WAHA/Evolution)
                    <textarea maxLength={4096} value={textoResposta}
@@ -307,7 +351,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
                ? 'Conecte um canal WAHA/Evolution da workspace para responder pelo WhatsApp.'
                : 'Vincule esta conversa a um negócio para habilitar resposta no WhatsApp existente.'}</p>}
              {!detalhe?.oportunidade && podeAtribuir && <button type="button"
-               disabled={salvando} onClick={()=>void criarNegocioDaConversa()}>
+               disabled={salvando||(detalhe?.canalAmbiguo===true&&canalFiltro===null)} onClick={()=>void criarNegocioDaConversa()}>
                Criar negócio a partir da conversa
              </button>}
            </div>
