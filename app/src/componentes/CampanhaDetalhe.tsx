@@ -272,6 +272,7 @@ export default function CampanhaDetalhe({
           lead: l, indice: i, campanhaId: campanha.id,
           canalId, canalIds: modoEnvio === 'herdar' ? [] : modoEnvio === 'rodizio' ? Array.from(canaisRodizio) : canalFixoId == null ? [] : [canalFixoId],
           modoEnvio: modoEnvio==='herdar'?'fixo':modoEnvio,
+          herdarCanalFunil:modoEnvio==='herdar',
         }),
       }).catch(() => null);
       // eslint-disable-next-line no-await-in-loop
