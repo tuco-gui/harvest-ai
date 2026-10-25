@@ -88,7 +88,7 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
       'Nenhuma ação externa foi executada.',
       '',
       ...historicoAtual.map(t => (t.papel === 'cliente' ? 'Cliente: ' : 'Agente: ') + t.texto),
-    ].join('\\n\\n');
+    ].join('\n\n');
     try {
       await navigator.clipboard.writeText(texto);
       setAviso('Conversa copiada para encaminhamento humano. Nenhum envio foi realizado.');
