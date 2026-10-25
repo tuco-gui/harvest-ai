@@ -846,3 +846,47 @@ a:hover{color:var(--ink)}
 .crm-auditoria-eventos li{display:flex;flex-wrap:wrap;gap:6px 10px;padding:7px 0;border-top:1px solid var(--rule);font-size:10px}
 .crm-auditoria-eventos li>span{overflow-wrap:anywhere;max-width:100%}
 .crm-auditoria-eventos time{color:var(--ink-3)}
+
+/* Catálogos e campos CRM com identidade própria Harvest. */
+.crm-cadastros{max-width:1250px;padding-bottom:65px}
+.crm-cadastros-nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 23px;font-size:12px}
+.crm-cadastros-nav a{color:var(--ink-2);text-decoration:none;padding:6px 0;border-bottom:1px solid var(--rule)}
+.crm-cadastros-nav a:hover{color:var(--red);border-color:var(--red)}
+.crm-cadastros-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;border:1px solid var(--rule);border-radius:9px;padding:20px;background:var(--surface);margin:0 0 20px}
+.crm-cadastros-form h2,.crm-cadastro-extras,.crm-cadastros-botoes{grid-column:1/-1}
+.crm-cadastros-form h2{font-size:17px;margin:0}
+.crm-cadastros-form>label,.crm-campos-dinamicos label,.crm-campos-entidade{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600}
+.crm-cadastros-form input:not([type=checkbox]),.crm-cadastros-form select,
+.crm-campos-dinamicos input:not([type=checkbox]),.crm-campos-dinamicos select,
+.crm-campos-entidade select,.crm-cadastros-filtros input{width:100%;min-width:0;border:1px solid var(--rule);border-radius:5px;background:var(--sunken);color:var(--ink);font-size:13px;padding:9px 11px}
+.crm-cadastros-form .crm-checkbox{display:flex;flex-direction:row;align-items:center}
+.crm-cadastros-form input[type=checkbox]{width:16px;height:16px;accent-color:var(--red)}
+.crm-cadastros-botoes{display:flex;gap:12px;align-items:center}
+.crm-cadastros-botoes button{border:1px solid var(--rule);border-radius:5px;padding:10px 16px}
+.crm-cadastros-filtros{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.crm-cadastros-filtros input{max-width:390px}
+.crm-cadastros-filtros span{color:var(--ink-3);font-size:11px}
+.crm-cadastros-filtros button{font-size:12px;border:1px solid var(--rule);border-radius:5px;padding:9px 12px;margin-left:auto}
+.crm-cadastros-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:12px;margin:0 0 18px}
+.crm-cadastro-card{border:1px solid var(--rule);border-radius:8px;padding:16px;min-width:0;background:var(--surface);display:flex;flex-direction:column;gap:9px}
+.crm-cadastro-card strong{font-size:14px}
+.crm-cadastro-card p{font-size:12px;color:var(--ink-3);overflow-wrap:anywhere}
+.crm-cadastro-card button{font-size:12px;text-align:left;text-decoration:underline;color:var(--ink);margin-top:auto;padding-top:10px}
+.crm-cadastro-extras{border-top:1px solid var(--rule);padding-top:15px}
+.crm-cadastro-extras h3,.crm-oportunidade-extras h3{font-size:15px;margin-bottom:12px}
+.crm-cadastro-extras>a,.crm-oportunidade-itens>a{font-size:12px;color:var(--ink);text-decoration:underline}
+.crm-campos-dinamicos{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px;margin:10px 0}
+.crm-campos-dinamicos input[type=checkbox]{align-self:flex-start;width:16px;height:16px;accent-color:var(--red)}
+.crm-campos-entidade{max-width:360px;margin-bottom:20px}
+.crm-oportunidade-extras{flex:1;min-height:0;overflow:auto;padding:18px}
+.crm-oportunidade-extras form{display:flex;flex-direction:column;gap:14px}
+.crm-oportunidade-extras form>label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600}
+.crm-oportunidade-extras select,.crm-oportunidade-extras input{max-width:100%;border:1px solid var(--rule);border-radius:5px;background:var(--surface);color:var(--ink);padding:9px;font-size:12px}
+.crm-oportunidade-extras form>.btn-primario{align-self:flex-start}
+.crm-oportunidade-itens{padding:16px 0;margin-top:19px;border-top:1px solid var(--rule)}
+.crm-oportunidade-itens>div{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:9px 0;font-size:12px;border-bottom:1px solid var(--rule)}
+.crm-oportunidade-itens>div button{border:1px solid var(--rule);border-radius:5px;padding:7px 11px}
+.crm-oportunidade-add-produto select{flex:1;min-width:0}
+.crm-oportunidade-add-produto input{width:85px}
+@media(max-width:700px){.crm-cadastros-form{grid-template-columns:1fr}
+ .crm-cadastros-form h2,.crm-cadastro-extras,.crm-cadastros-botoes{grid-column:1}}

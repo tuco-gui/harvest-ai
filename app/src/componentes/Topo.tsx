@@ -37,6 +37,10 @@ const ICONES: Record<string, React.ReactNode> = {
   '/agentes': <span aria-hidden="true">IA</span>,
   '/crm/contatos': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>,
   '/crm/atendimentos': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18v13H8l-5 4V4z"/><path d="M7 9h10M7 13h7"/></svg>,
+  '/crm/cadastros/empresas': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h6"/></svg>,
+  '/crm/cadastros/contatos': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg>,
+  '/crm/cadastros/produtos': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 7 12 2l9 5v10l-9 5-9-5zM3 7l9 5 9-5M12 12v10"/></svg>,
+  '/crm/campos-personalizados': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4h16v16H4zM8 9h8M8 14h5"/></svg>,
   '/crm/tarefas': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8 11 2.2 2.2L16 8"/></svg>,
   '/funis': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>,
   '/configuracoes': <svg width={S} height={S} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
@@ -189,6 +193,10 @@ export default function Topo(p: Props) {
             {temCrm && link('/crm', 'CRM')}
             {temCrm && p.modulos.includes('crm_avancado') && link('/crm/atendimentos', 'Atendimentos')}
             {temCrm && p.modulos.includes('crm_avancado') && link('/crm/contatos', 'Contatos')}
+            {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/cadastros/empresas', 'Empresas')}
+            {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/cadastros/contatos', 'Contatos cadastrados')}
+            {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/cadastros/produtos', 'Produtos')}
+            {temCrm && p.modulos.includes('crm_avancado') && p.papel !== 'operador' && link('/crm/campos-personalizados', 'Campos CRM')}
             {temCrm && p.modulos.includes('crm_avancado') && link('/crm/tarefas', 'Tarefas CRM')}
             {temAgentes && link('/agentes', 'Agentes de IA')}
             {temCrm && p.papel !== 'operador' && link('/funis', 'Funis')}
