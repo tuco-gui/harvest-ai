@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { crmBackend } from '@/lib/twenty';
 import { perfilTemModulo } from '@/lib/autorizacao';
-import { estagioValido, probabilidadeEstagio } from '@/lib/crmStages';
+import { estagioValido, probabilidadeEstagio, chaveEstagio } from '@/lib/crmStages';
 import { podeAcessarOportunidade, isAdmin } from '@/lib/crmControleAcesso';
 
 /**
@@ -108,11 +108,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (b.telefone !== undefined) patch.telefone = b.telefone ? String(b.telefone).trim() : null;
   if (b.email !== undefined) patch.email = b.email ? String(b.email).trim() : null;
   if (b.estagio !== undefined) {
-    if (!estagioValido(String(b.estagio))) {
-      return NextResponse.json({ erro: 'Estágio inválido.' }, { status: 400 });
+    const solicitado = String(b.estagio);
+    const { data: opAtual } = await supabaseAdmin().from('oportunidades')
+      .select('funil_id').eq('conta_id',perfil.conta_id).eq('id',opId).maybeSingle();
+    const funilAtual = opAtual?.funil_id ?? null;
+    const { data: etapas } = funilAtual
+      ? await supabaseAdmin().from('funil_estagios')
+        .select('id,nome,probabilidade').eq('funil_id',funilAtual).limit(100)
+      : { data: [] };
+    const etapaDb=(etapas??[]).find(e=>chaveEstagio(e.nome)===chaveEstagio(solicitado));
+    if (!estagioValido(solicitado) && !etapaDb) {
+      return NextResponse.json({ erro:'Etapa não pertence ao funil desta oportunidade.' }, { status:400 });
     }
-    patch.estagio = b.estagio;
-    if (b.probabilidade === undefined) patch.probabilidade = probabilidadeEstagio(String(b.estagio));
+    patch.estagio = solicitado;
+    if (etapaDb) patch.funil_estagio_id=etapaDb.id;
+    if (b.probabilidade === undefined) patch.probabilidade =
+      etapaDb ? Number(etapaDb.probabilidade) : probabilidadeEstagio(solicitado);
   }
   if (b.owner_id !== undefined) {
     if (!isAdmin(perfil.papel)) {
