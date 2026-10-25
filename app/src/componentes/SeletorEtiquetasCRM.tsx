@@ -50,3 +50,4 @@ export default function SeletorEtiquetasCRM({ selecionadas, onChange, limite = 2
     </details>
     {erro && <span role="alert" className="crm-aviso">{erro}</span>}
   </div>;
+}
