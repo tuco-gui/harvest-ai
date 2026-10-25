@@ -41,3 +41,14 @@ O Brain local do Mac não foi editado diretamente; esta nota é um handoff aditi
 - Docker Swarm atualizado sem staging, imagem `ghcr.io/tuco-gui/harvest-ai:latest@sha256:3968e0da4d7e7fdac807e824f653a60c33f969cc872fead134061f327b8c1d0b`; serviço running, sem erro.
 - Smoke test anônimo no serviço: `GET /entrar = 200`, `GET /agentes = 307`, `GET /api/agentes = 307` e `GET /api/agentes/testar = 307`. O usuário sem login continua bloqueado; teste autenticado real e saída de LLM permanecem pendentes até configuração da Figueira.
 - Não houve SQL migration nem alteração de campanha, usuário, segredo, integrações ou permissões comerciais.
+
+## Incremento de continuidade — PR #11 (mesmo dia)
+- PR #11 implementou **conversas de múltiplas mensagens** no laboratório, por tipo de agente. O histórico fica somente na memória da interface e contém no máximo dez mensagens anteriores, alternadas e validadas no servidor. Nenhum dado da simulação é persistido em banco.
+- Adicionado botão **Nova conversa** e **Copiar para atendimento humano**. Copiar transcrição não cria chamado nem envia WhatsApp.
+- Configurações recebeu o botão **Salvar somente conexão de IA**, via `POST /api/configuracoes/ia`, que atualiza apenas campos de IA da workspace derivada da sessão (`ia_provedor`, `ia_modelo`, `ia_key` quando preenchido), sem tocar parâmetros de campanha ou WhatsApp. Uma mudança de provedor exige chave correspondente para não reutilizar token incompatível.
+- A mesma conexão de IA continua sendo usada pelos agentes e pelo modo de prospecção. Não há duplicação de segredo, nem migração de banco.
+- Testes e build do PR #11 passaram em GitHub Actions `40193901925`. Merge `17b8c14346f89eeddda006a1a13807d1521820f0`.
+- Publicação da imagem `40194019580` foi aprovada; serviço Swarm atualizado apenas na produção para `ghcr.io/tuco-gui/harvest-ai:latest@sha256:9391d944dc080f27e7ebdefdb76dff3049f47fddb06ded6d52d2b88a449fb660`, tarefa **running**, sem erro.
+- Smoke de rotas sem sessão dentro do container: `GET /entrar = 200`; `GET /agentes = 307`, `GET /api/agentes = 307`, `GET /api/agentes/testar = 307`; `POST /api/configuracoes/ia = 307`, isto é, sem autenticação os novos recursos não ficam acessíveis.
+- **Pendência funcional:** não houve teste real autenticado de geração com LLM na Figueira, porque a workspace ainda não possui chave/provedor de IA. Configurar a conexão em `Configurações > Inteligência Artificial` e testar no laboratório. Não buscar nem copiar segredos de workspaces de clientes.
+- Não houve staging, alteração de campanhas, disparo de mensagens ou ativação automática de agentes. O Brain local do Mac continua não sincronizado diretamente.
