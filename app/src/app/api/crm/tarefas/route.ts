@@ -100,3 +100,76 @@ export async function PATCH(req: Request) {
   if (error || !data) return NextResponse.json({ erro: 'Não foi possível atualizar a tarefa.' }, { status: 500 });
   return NextResponse.json({ tarefa: data });
 }
+
+
+/**
+ * Editar campos da tarefa sem trocar seu negócio. A identidade e a permissão
+ * do responsável são verificadas na oportunidade, no banco, a cada operação.
+ */
+export async function PUT(req: Request) {
+  const ctx = await sessaoCrmAvancado();
+  if ('resposta' in ctx) return ctx.resposta;
+  const { perfil, admin } = ctx;
+  const b = await req.json().catch(() => null);
+  const id = Number(b?.id);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return NextResponse.json({ erro: 'Tarefa inválida.' }, { status: 400 });
+  }
+  const falha = validarNovaTarefa(b?.titulo, b?.vence_em, b?.descricao);
+  if (falha) return NextResponse.json({ erro: falha }, { status: 400 });
+
+  const { data: tarefa } = await admin.from('crm_atividades')
+    .select('id,oportunidade_id').eq('conta_id', perfil.conta_id)
+    .eq('tipo', 'tarefa').eq('id', id).maybeSingle();
+  if (!tarefa) return NextResponse.json({ erro: 'Tarefa não encontrada.' }, { status: 404 });
+
+  let opQuery = admin.from('oportunidades').select('id').eq('conta_id', perfil.conta_id)
+    .eq('id', tarefa.oportunidade_id);
+  if (!isAdmin(perfil.papel)) opQuery = opQuery.eq('owner_id', perfil.id);
+  const { data: op } = await opQuery.maybeSingle();
+  if (!op) return NextResponse.json({ erro: 'Sem permissão sobre a oportunidade.' }, { status: 403 });
+
+  const { data, error } = await admin.from('crm_atividades').update({
+    titulo: b.titulo.trim(),
+    descricao: typeof b.descricao === 'string' ? b.descricao.trim() || null : null,
+    vence_em: b.vence_em ? new Date(b.vence_em).toISOString() : null,
+  }).eq('id', tarefa.id).eq('conta_id', perfil.conta_id)
+    .eq('oportunidade_id', op.id).eq('tipo', 'tarefa')
+    .select('id,titulo,descricao,vence_em').maybeSingle();
+
+  if (error || !data) {
+    return NextResponse.json({ erro: 'Não foi possível editar a tarefa.' }, { status: 500 });
+  }
+  return NextResponse.json({ tarefa: data });
+}
+
+/** Exclusão explícita, sem afetar a oportunidade ou demais atividades. */
+export async function DELETE(req: Request) {
+  const ctx = await sessaoCrmAvancado();
+  if ('resposta' in ctx) return ctx.resposta;
+  const { perfil, admin } = ctx;
+  const b = await req.json().catch(() => null);
+  const id = Number(b?.id);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return NextResponse.json({ erro: 'Tarefa inválida.' }, { status: 400 });
+  }
+  const { data: tarefa } = await admin.from('crm_atividades')
+    .select('id,oportunidade_id').eq('conta_id', perfil.conta_id)
+    .eq('tipo', 'tarefa').eq('id', id).maybeSingle();
+  if (!tarefa) return NextResponse.json({ erro: 'Tarefa não encontrada.' }, { status: 404 });
+
+  let opQuery = admin.from('oportunidades').select('id').eq('conta_id', perfil.conta_id)
+    .eq('id', tarefa.oportunidade_id);
+  if (!isAdmin(perfil.papel)) opQuery = opQuery.eq('owner_id', perfil.id);
+  const { data: op } = await opQuery.maybeSingle();
+  if (!op) return NextResponse.json({ erro: 'Sem permissão sobre a oportunidade.' }, { status: 403 });
+
+  const { data, error } = await admin.from('crm_atividades').delete()
+    .eq('id', tarefa.id).eq('conta_id', perfil.conta_id)
+    .eq('oportunidade_id', op.id).eq('tipo', 'tarefa')
+    .select('id').maybeSingle();
+  if (error || !data) {
+    return NextResponse.json({ erro: 'Não foi possível excluir a tarefa.' }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, excluida: id });
+}

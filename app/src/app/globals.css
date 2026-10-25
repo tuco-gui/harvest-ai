@@ -739,3 +739,15 @@ a:hover{color:var(--ink)}
  .crm-timeline-toolbar{align-items:flex-start}
  .crm-timeline-filtros button{font-size:11px}
 }
+
+
+/* Ações individuais na central de tarefas do CRM avançado. */
+.crm-tarefa-acoes{display:flex;gap:6px;align-items:center;flex:none}
+.crm-tarefa-acoes button{font-size:11px;font-weight:600;border:1px solid var(--rule);border-radius:5px;background:var(--surface);padding:7px 10px;color:var(--ink-2);cursor:pointer}
+.crm-tarefa-acoes button:hover{border-color:var(--red);color:var(--red)}
+.crm-tarefa-acoes button:disabled{opacity:.5;cursor:not-allowed}
+.crm-tarefas-form select:disabled{opacity:.7;cursor:default}
+@media(max-width:760px){
+ .crm-tarefa-item{flex-wrap:wrap}
+ .crm-tarefa-acoes{margin-left:31px}
+}
