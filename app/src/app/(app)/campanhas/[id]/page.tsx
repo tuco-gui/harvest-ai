@@ -14,6 +14,10 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
   const admin = supabaseAdmin();
   const { data: campanha } = await admin.from('prospecta_campanhas').select('*').eq('id', id).single();
 
+  const {data: funilCanal} = campanha?.funil_id
+    ? await admin.from('funis').select('canal_padrao_id')
+      .eq('id',campanha.funil_id).eq('conta_id',campanha.conta_id).maybeSingle()
+    : {data:null};
   // Super admin acessa a campanha de qualquer cliente sem precisar "trabalhar
   // nessa conta" antes; admin/operador só a da própria conta ativa.
   const podeVer = campanha && (perfil.papel === 'super_admin' || campanha.conta_id === perfil.conta_id);
@@ -129,6 +133,7 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
   return (
     <CampanhaDetalhe
       campanha={campanha}
+      canalPadraoFunilId={funilCanal?.canal_padrao_id??null}
       leads={leads}
       intervaloMin={envio?.intervalo_min ?? 30}
       intervaloMax={envio?.intervalo_max ?? 60}
