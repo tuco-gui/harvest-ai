@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { enviarEmail } from '@/lib/email';
+import { smtpConfigurado } from '@/lib/smtpCredenciais';
 import { gerarCodigoRecuperacao, textoCodigoRecuperacao, baseUrlApp } from '@/lib/recuperacao';
 
 /**
@@ -21,27 +22,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: 'Informe um e-mail válido.' }, { status: 400 });
   }
 
-  const admin = supabaseAdmin();
-  const res = await gerarCodigoRecuperacao(admin, email);
-
-  // Link do e-mail usa a base URL do ambiente (NEXT_PUBLIC_APP_URL). Sem ela,
-  // não montamos link nenhum — fail-closed (não apontamos para produção). O
-  // fluxo público continua 200 genérico para não vazar nada; o erro técnico
-  // fica só no log interno (sem segredo).
+  // Pré-validação global e neutra ao e-mail: erro 503 não enumera usuários.
+  // Não gere códigos que não poderão ser entregues.
   const baseUrl = baseUrlApp();
-  if ('codigo' in res) {
-    if (baseUrl) {
-      await enviarEmail(
-        email,
-        'Redefinir sua senha no Harvest AI',
-        textoCodigoRecuperacao(res.codigo, baseUrl),
-      );
-    } else {
-      console.error('[esqueci-senha] NEXT_PUBLIC_APP_URL ausente: não foi possível enviar o e-mail de recuperação.');
+  if (!baseUrl || !(await smtpConfigurado())) {
+    console.error('[esqueci-senha] Recuperação indisponível: URL ou transporte SMTP não configurado no runtime.');
+    return NextResponse.json(
+      { erro: 'A recuperação por e-mail está temporariamente indisponível. Contate o suporte.' },
+      { status: 503 },
+    );
+  }
+
+  const admin = supabaseAdmin();
+  const resultado = await gerarCodigoRecuperacao(admin, email);
+  if ('codigo' in resultado) {
+    const enviado = await enviarEmail(
+      email,
+      'Redefinir sua senha no Harvest AI',
+      textoCodigoRecuperacao(resultado.codigo, baseUrl),
+    );
+    if (!enviado) {
+      // Não revelar ao chamador se o usuário existe ou se houve falha
+      // de envio para aquele endereço. Operação registra só fato genérico.
+      console.error('[esqueci-senha] Falha na entrega de código de recuperação.');
     }
   }
-  // Se deu erro (usuário inexistente, e-mail não confirmado etc.), caímos no
-  // 200 genérico abaixo sem enviar nada.
 
   // ponytail: sem rate-limit aqui. O Supabase já limita a (re)geração de OTP
   // por e-mail, mas um atacante ainda pode fazer "OTP bombing" de um e-mail
@@ -49,6 +54,6 @@ export async function POST(req: Request) {
   // chamar gerarCodigoRecuperacao — fora de escopo desta entrega.
   return NextResponse.json({
     ok: true,
-    mensagem: 'Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos para ele.',
+    mensagem: 'Se o e-mail estiver cadastrado e a entrega estiver disponível, você receberá um código de 6 dígitos.',
   });
 }
