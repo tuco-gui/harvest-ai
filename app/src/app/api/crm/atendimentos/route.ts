@@ -25,7 +25,7 @@ export async function GET() {
   // Nenhuma mensagem é copiada. Dados da Inbox são consultados na origem.
   const [eventos, meta] = await Promise.all([
     admin.from('inbound_eventos')
-      .select('telefone,nome_contato,mensagem,recebido_em,lead_id')
+      .select('telefone,nome_contato,mensagem,recebido_em,lead_id,canal_id,funil_id')
       .eq('conta_id', perfil.conta_id).order('recebido_em', { ascending: false }).limit(500),
     admin.from('crm_atendimentos')
       .select('telefone,status,responsavel_id,etiquetas,atualizado_em,prioridade,prazo_triagem_em,resolvido_em')
