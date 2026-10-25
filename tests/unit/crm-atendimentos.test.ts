@@ -36,15 +36,15 @@ assert(operadorPodeVerConversa(admin, null));
 assert.equal(telefoneAtendimento(' (14) 99999-1111 '), '5514999991111');
 assert.equal(telefoneAtendimento('1234'), null);
 assert.equal(telefoneAtendimento('5514999991111123'), null);
-assert('erro' in validarAlteracaoAtendimento({ status: 'resolvido', etiquetas: [],
+assert('erro' in validarAlteracaoAtendimento({ status: 'resolvido', prioridade: 'normal', etiquetas: [],
   responsavel_id: 'um-outro-usuario' }, true));
-assert('erro' in validarAlteracaoAtendimento({ status: 'aberto', etiquetas: [],
+assert('erro' in validarAlteracaoAtendimento({ status: 'aberto', prioridade: 'normal', etiquetas: [],
   responsavel_id: null }, false), 'operador não transfere');
-assert('erro' in validarAlteracaoAtendimento({ status: 'fechado', etiquetas: [] }, true));
-assert('erro' in validarAlteracaoAtendimento({ status: 'aberto', etiquetas: ['<script>'] }, true));
-assert('erro' in validarAlteracaoAtendimento({ status: 'aberto',
+assert('erro' in validarAlteracaoAtendimento({ status: 'fechado', prioridade: 'normal', etiquetas: [] }, true));
+assert('erro' in validarAlteracaoAtendimento({ status: 'aberto', prioridade: 'normal', etiquetas: ['<script>'] }, true));
+assert('erro' in validarAlteracaoAtendimento({ status: 'aberto', prioridade: 'normal',
   etiquetas: Array(9).fill('a') }, true));
-const v = validarAlteracaoAtendimento({ status: 'resolvido', etiquetas: ['  urgente ', 'urgente'] }, false);
+const v = validarAlteracaoAtendimento({ status: 'resolvido', prioridade: 'normal', etiquetas: ['  urgente ', 'urgente'] }, false);
 assert(!('erro' in v));
 if (!('erro' in v)) assert.deepEqual(v.etiquetas, ['urgente']);
 assert(!modulosDaConta(['crm'], 'super_admin').has('crm_avancado'));
