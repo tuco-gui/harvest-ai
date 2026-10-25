@@ -119,6 +119,6 @@ export function promptsDoLaboratorio(
       '',
       'Nova mensagem do cliente. Redija apenas a próxima resposta do agente:',
       entrada,
-    ].join('\\n'),
+    ].join('\n'),
   };
 }
