@@ -22,7 +22,7 @@ export default function CampanhaEditar({
   campanha, leadsIniciais, intervaloMin, intervaloMax, canais, funis = [], estagiosDoFunil = [],
 }: {
   campanha: Campanha; leadsIniciais: LeadResumo[]; intervaloMin: number; intervaloMax: number; canais: Canal[];
-  funis?: { id: number; nome: string }[];
+  funis?: { id: number; nome: string; canal_padrao_id?: number|null }[];
   estagiosDoFunil?: { id: number; nome: string; ordem: number; grupo: string; probabilidade: number }[];
 }) {
   const canaisConectados = canais.filter((c) => c.ativo && c.status === 'conectado');
@@ -36,6 +36,7 @@ export default function CampanhaEditar({
   const [modoEnvio, setModoEnvio] = useState<'fixo' | 'rodizio'>(
     (campanha.modo_envio_numero as 'fixo' | 'rodizio') ?? (canaisConectados.length > 1 ? 'rodizio' : 'fixo'),
   );
+  const [herdarCanalFunil, setHerdarCanalFunil] = useState(Boolean(campanha.funil_id && !(campanha.canal_ids?.length)));
   const [canalIds, setCanalIds] = useState<Set<number>>(new Set(
     (campanha.canal_ids ?? []).filter((id) => canaisConectados.some((c) => c.id === id)),
   ));
@@ -117,7 +118,7 @@ export default function CampanhaEditar({
   }
 
   async function salvar() {
-    if (!canalIds.size) {
+    if (!herdarCanalFunil && !canalIds.size) {
       setAviso('Selecione ao menos um canal conectado.');
       return;
     }
@@ -140,8 +141,8 @@ export default function CampanhaEditar({
         nome: nome.trim() || campanha.nome,
         funil_id: funilId,
         estagio_inicial: estagioInicial,
-        modoEnvio,
-        canalIds: Array.from(canalIds),
+        modoEnvio: herdarCanalFunil ? 'fixo' : modoEnvio,
+        canalIds: herdarCanalFunil ? [] : Array.from(canalIds),
         mensagemModo: msgModo === 'padrao' ? null : msgModo,
         mensagens: mensagensDaCampanha,
         contextoIa: msgModo === 'ia' ? msgContextoIa : null,
@@ -251,7 +252,20 @@ export default function CampanhaEditar({
 
       <section className="secao" style={{ marginTop: 20 }}>
         <h3 style={{ fontSize: 14 }}>Número de envio</h3>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        {funilId && <label className="crm-campanha-herdar-canal">
+          <input type="checkbox" checked={herdarCanalFunil}
+            onChange={e=>setHerdarCanalFunil(e.target.checked)}/>
+          Usar automaticamente o canal associado ao funil
+        </label>}
+        {herdarCanalFunil && <p className="ajuda" role="status">
+          {(()=>{
+            const id=funis.find(f=>f.id===funilId)?.canal_padrao_id;
+            const c=canais.find(c=>c.id===id);
+            return c ? c.nome+' · '+c.provider.toUpperCase()+' · '+(c.status==='conectado'?'conectado':'desconectado (envios ficam bloqueados)') :
+              'O funil ainda não tem canal próprio: será usado o padrão da workspace, se conectado.';
+          })()}
+        </p>}
+        {!herdarCanalFunil && <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={modoEnvio} onChange={(e) => {
             const modo = e.target.value as 'fixo' | 'rodizio';
             setModoEnvio(modo);
@@ -262,8 +276,8 @@ export default function CampanhaEditar({
             <option value="rodizio">Rodízio entre canais</option>
           </select>
           {!canaisConectados.length && <span style={{ fontSize: 12, color: 'var(--red)' }}>Nenhum canal conectado em Configurações → WhatsApp</span>}
-        </div>
-        {canaisConectados.length > 0 && (
+        </div>}
+        {!herdarCanalFunil && canaisConectados.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
             {canaisConectados.map((c) => (
               <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
