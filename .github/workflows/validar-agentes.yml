@@ -1,0 +1,40 @@
+name: Validar agentes Harvest
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "sql/033_agentes_workspace.sql"
+      - "sql/034_agentes_figueira_habilitacao.sql"
+      - "tests/unit/agentes.test.ts"
+      - ".github/workflows/validar-agentes.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Verificar o isolamento e os agentes
+        run: node --experimental-strip-types tests/unit/agentes.test.ts
+      - name: Instalar dependencias
+        working-directory: app
+        run: npm ci
+      - name: Validar tipos
+        working-directory: app
+        run: npx tsc --noEmit
+      - name: Build sem usar recursos da VPS
+        working-directory: app
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: npm run build
