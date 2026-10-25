@@ -45,3 +45,9 @@ O Harvest atual, Twenty/Chatwoot, n8n, WAHA/Evolution e bancos de produção con
 
 ## Limites do preparo
 O submódulo, os arquivos e os scripts constituem **fonte versionada e checklist**, não instalação funcional nem prova de teste; não anunciar piloto pronto antes de executar E2E.
+
+## Ponte mínima implementada no Harvest
+
+A branch também contém uma consulta REST **somente leitura** ao Deskcomm, em `GET /api/piloto/deskcomm/saude`. A rota está fechada por padrão; só atende superadmin da conta QA em staging, com um token de leitura de um tenant QA separado. Configuração em `harvest-adapter.env.example`. Não substituir por um token de produção nem informar dados de clientes reais. A chamada de sucesso retorna contagem de agentes; não dispara nenhum WhatsApp.
+
+**Essa ponte não significa instalação do Deskcomm.** Primeiro é obrigatório disponibilizar a nova aplicação isolada com banco/worker e configurar as credenciais no cofre de staging.
