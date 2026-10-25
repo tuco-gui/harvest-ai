@@ -84,6 +84,8 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     }
     const ctrl = new AbortController();
     setCarregandoDetalhe(true);
+    setDetalhe(null);
+    setCanalSelecionado('');
     fetch('/api/crm/atendimentos/'+encodeURIComponent(telefone)+
       (canalFiltro!==null?'?canal_id='+canalFiltro:''), {
       cache: 'no-store', signal: ctrl.signal,
@@ -179,7 +181,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
   }
 
   async function criarNegocioDaConversa(){
-    if(!selecionada || !podeAtribuir)return;
+    if(!selecionada || !podeAtribuir || carregandoDetalhe || !detalhe)return;
     setSalvando(true);setErro('');setAviso('');
     try{
       if(detalhe?.canalAmbiguo && canalFiltro===null)
@@ -211,7 +213,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
 
   async function responder(e:React.FormEvent) {
     e.preventDefault();
-    if(!detalhe?.oportunidade || !textoResposta.trim() || !canalSelecionado || enviandoResposta)return;
+    if(carregandoDetalhe || !detalhe?.oportunidade || !textoResposta.trim() || !canalSelecionado || enviandoResposta)return;
     setEnviandoResposta(true);setErro('');setAviso('');
     try{
       const r=await fetch('/api/crm/oportunidades/'+detalhe.oportunidade.id+'/mensagens',{
@@ -351,7 +353,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
                ? 'Conecte um canal WAHA/Evolution da workspace para responder pelo WhatsApp.'
                : 'Vincule esta conversa a um negócio para habilitar resposta no WhatsApp existente.'}</p>}
              {!detalhe?.oportunidade && podeAtribuir && <button type="button"
-               disabled={salvando||(detalhe?.canalAmbiguo===true&&canalFiltro===null)} onClick={()=>void criarNegocioDaConversa()}>
+               disabled={salvando||carregandoDetalhe||!detalhe||(detalhe?.canalAmbiguo===true&&canalFiltro===null)} onClick={()=>void criarNegocioDaConversa()}>
                Criar negócio a partir da conversa
              </button>}
            </div>
