@@ -8,6 +8,7 @@ on:
       - "sql/033_agentes_workspace.sql"
       - "sql/034_agentes_figueira_habilitacao.sql"
       - "tests/unit/agentes.test.ts"
+      - "tests/unit/conexaoIAWorkspace.test.ts"
       - ".github/workflows/validar-agentes.yml"
 
 permissions:
@@ -26,6 +27,8 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - name: Verificar o isolamento e os agentes
         run: node --experimental-strip-types tests/unit/agentes.test.ts
+      - name: Testar conexao IA compartilhada com Configuracoes
+        run: node --experimental-strip-types tests/unit/conexaoIAWorkspace.test.ts
       - name: Instalar dependencias
         working-directory: app
         run: npm ci
