@@ -9,9 +9,8 @@ import {
   contatoJaAbordado, registrarTentativaContato, type ProviderContato,
 } from '@/lib/historicoContato';
 import { vincularLeadACampanha } from '@/lib/campanhaLeads';
-import {
-  carregarCanais, resolverCanalDisparo, sessaoWahaDoCanal, type CanalWhatsApp,
-} from '@/lib/whatsappCanais';
+import { carregarCanais, sessaoWahaDoCanal, type CanalWhatsApp } from '@/lib/whatsappCanais';
+import { resolverCanalFunil } from '@/lib/canalDoFunil';
 import { envioPermitidoNoAmbiente } from '@/lib/ambienteEnvio';
 
 /**
@@ -94,7 +93,7 @@ export async function POST(req: Request) {
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
     campanhaIdNum !== null
       ? admin.from('prospecta_campanhas')
-          .select('modo_envio_numero, canal_ids, mensagem_modo, mensagens, contexto_ia')
+          .select('modo_envio_numero, canal_ids, funil_id, mensagem_modo, mensagens, contexto_ia')
           .eq('id', campanhaIdNum).eq('conta_id', perfil.conta_id).single()
       : Promise.resolve({ data: null }),
     carregarCanais(admin, perfil.conta_id),
@@ -106,17 +105,21 @@ export async function POST(req: Request) {
       : campanha?.modo_envio_numero === 'rodizio' ? 'rodizio'
       : 'fixo';
 
-  // No rodízio, se a campanha listou canais específicos, restringe a eles.
-  let canaisValidos = canais;
-  const idsRodizio = Array.isArray(canalIds) && canalIds.length
-    ? canalIds.filter((id: unknown) => Number.isInteger(id))
-    : campanha?.canal_ids;
-  if (modo === 'rodizio' && Array.isArray(idsRodizio) && idsRodizio.length) {
-    const ids = new Set(idsRodizio as number[]);
-    canaisValidos = canais.filter((c) => ids.has(c.id));
-  }
-
-  const canal: CanalWhatsApp | null = resolverCanalDisparo(canaisValidos, modo, canalId, Number(indice));
+  // Canal padrão do funil SOMENTE se a campanha realmente pertence à workspace.
+  // Prioridade de envio: explícito > campanha > funil > padrão da conta.
+  // Escolha de canal desconectado/estranho à workspace falha fechada.
+  const {data: funilCanal}=campanha?.funil_id
+    ? await admin.from('funis').select('canal_padrao_id')
+      .eq('conta_id',perfil.conta_id).eq('id',campanha.funil_id).maybeSingle()
+    : {data:null};
+  const canal: CanalWhatsApp | null = resolverCanalFunil(canais,{
+    modo,
+    canalSolicitadoId:canalId === null||canalId === '' ? null : Number(canalId),
+    canaisSolicitadosIds:Array.isArray(canalIds) ? canalIds : null,
+    canaisCampanhaIds:Array.isArray(campanha?.canal_ids) ? campanha.canal_ids : null,
+    canalFunilId:funilCanal?.canal_padrao_id??null,
+    indice:Number(indice)||0,
+  });
   if (!canal) {
     await registrarFalha('Nenhum canal conectado e elegível foi encontrado para esta campanha.');
     return NextResponse.json(
