@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Perfil } from './supabase/server';
-import { isAdmin } from './crmControleAcesso';
-import { normalizarTelefone } from './telefone';
+import { isAdmin } from './crmControleAcesso.ts';
+import { normalizarTelefone } from './telefone.ts';
 
 export const STATUS_ATENDIMENTO = ['aberto', 'pendente', 'resolvido'] as const;
 export type StatusAtendimento = typeof STATUS_ATENDIMENTO[number];
