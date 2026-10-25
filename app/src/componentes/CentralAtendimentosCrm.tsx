@@ -26,6 +26,10 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
   const [telefone, setTelefone] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<Detalhe | null>(null);
   const [busca, setBusca] = useState('');
+  const [canaisWhatsApp, setCanaisWhatsApp] = useState<Array<{id:number;nome:string;provider:string}>>([]);
+  const [canalSelecionado, setCanalSelecionado] = useState('');
+  const [textoResposta, setTextoResposta] = useState('');
+  const [enviandoResposta, setEnviandoResposta] = useState(false);
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [carregando, setCarregando] = useState(true);
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
@@ -88,6 +92,17 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     return () => ctrl.abort();
   }, [telefone]); // Seleção muda somente ao trocar de conversa.
 
+  useEffect(() => {
+    const ctl=new AbortController();
+    fetch('/api/canais',{signal:ctl.signal}).then(r=>r.json()).then(d=>{
+      if(ctl.signal.aborted)return;
+      const ativos=(d.canais??[]).filter((c:any)=>
+        c.ativo && c.status==='conectado' && ['waha','evolution'].includes(c.provider));
+      setCanaisWhatsApp(ativos.map((c:any)=>({id:c.id,nome:c.nome,provider:c.provider})));
+      if(ativos[0])setCanalSelecionado(String(ativos[0].id));
+    }).catch(()=>{});
+    return ()=>ctl.abort();
+  },[]);
   const selecionada = conversas.find(c => c.telefone === telefone);
   useEffect(() => {
     if (!telefone || !mostrarAuditoria) return;
@@ -141,6 +156,25 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível salvar.');
     } finally { setSalvando(false); }
+  }
+
+  async function responder(e:React.FormEvent) {
+    e.preventDefault();
+    if(!detalhe?.oportunidade || !textoResposta.trim() || !canalSelecionado || enviandoResposta)return;
+    setEnviandoResposta(true);setErro('');setAviso('');
+    try{
+      const r=await fetch('/api/crm/oportunidades/'+detalhe.oportunidade.id+'/mensagens',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({texto:textoResposta.trim(),canal_id:Number(canalSelecionado)}),
+      });
+      const d=await r.json();
+      if(!r.ok)throw Error(d.erro||'O envio não foi confirmado.');
+      setTextoResposta('');
+      const rr=await fetch('/api/crm/atendimentos/'+encodeURIComponent(detalhe.telefone),{cache:'no-store'});
+      if(rr.ok)setDetalhe(await rr.json());
+      setAviso('Mensagem enviada pelo canal WhatsApp selecionado.');
+    }catch(e){setErro(e instanceof Error?e.message:'Erro ao enviar.');}
+    finally{setEnviandoResposta(false);}
   }
 
   const contagemSlaVencido = conversas.filter(c=>estadoSla(c.prazo_triagem_em,c.status)==='vencido').length;
@@ -218,7 +252,27 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
               </article>)}
               {detalhe && !detalhe.timeline.length && <p>Nenhuma mensagem disponível.</p>}
             </div>}
-          <div className="crm-atendimento-editor">
+          <div className="crm-inbox-compositor">
+             {detalhe?.oportunidade && canaisWhatsApp.length>0 ? (
+               <form onSubmit={responder}>
+                 <label>Responder pelo WhatsApp (WAHA/Evolution)
+                   <textarea maxLength={4096} value={textoResposta}
+                     onChange={e=>setTextoResposta(e.target.value)}
+                     placeholder="Digite sua resposta…"/>
+                 </label>
+                 <select aria-label="Canal WhatsApp para resposta" value={canalSelecionado}
+                   onChange={e=>setCanalSelecionado(e.target.value)}>
+                   {canaisWhatsApp.map(c=><option key={c.id} value={c.id}>{c.nome} · {c.provider}</option>)}
+                 </select>
+                 <button className="btn-primario" disabled={!textoResposta.trim()||enviandoResposta} type="submit">
+                   {enviandoResposta?'Enviando…':'Enviar resposta'}
+                 </button>
+               </form>
+             ) : <p className="ajuda">{detalhe?.oportunidade
+               ? 'Conecte um canal WAHA/Evolution da workspace para responder pelo WhatsApp.'
+               : 'Vincule esta conversa a um negócio para habilitar resposta no WhatsApp existente.'}</p>}
+           </div>
+           <div className="crm-atendimento-editor">
             <h2>Gerenciar atendimento</h2>
             <div className="crm-atendimento-campos">
               <label>Situação
@@ -267,7 +321,9 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             </ol>}
             {erro && <p role="alert" className="crm-aviso">{erro}</p>}
             {aviso && <p role="status" className="ajuda">{aviso}</p>}
-            {podeAtribuir && <EncaminhamentoChatwootCRM telefone={selecionada.telefone} />}
+            {podeAtribuir && <details><summary>Integração opcional com Chatwoot</summary>
+               <EncaminhamentoChatwootCRM telefone={selecionada.telefone}/>
+             </details>}
             <div className="crm-atendimento-acoes">
               <p className="ajuda">A transferência altera somente o responsável pela conversa. Não movimenta negócios nem envia mensagens.</p>
               <button className="btn-primario" type="button" disabled={salvando} onClick={() => void salvar()}>
