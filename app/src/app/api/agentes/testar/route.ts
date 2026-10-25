@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   const { system, user } = promptsDoLaboratorio(conexao.agente, mensagem, historico.historico);
   try {
     const resposta = await gerarComIA(conexao.llm.provedor, conexao.llm.chave, system, user, conexao.llm.modelo);
-    const limpa = resposta.trim().slice(0, 4000);
+    const limpa = resposta.trim().slice(0, 1500);
     if (!limpa) throw new Error('resposta vazia');
     // Não salva conversas, não envia mensagem e nunca retorna credenciais.
     return NextResponse.json({ resposta: limpa, modo: 'simulacao', enviado: false });
