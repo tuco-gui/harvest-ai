@@ -456,7 +456,10 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       )}
 
       {novaAberta && <div className="crm-overlay" onMouseDown={() => setNovaAberta(false)}><section className="crm-modal-nova" onMouseDown={(e) => e.stopPropagation()}>
-        <header className="drawer-cabecalho"><div><span className="label">CRM</span><h2>Nova oportunidade</h2></div><button type="button" onClick={() => setNovaAberta(false)}>×</button></header>
+        <header className="drawer-cabecalho"><div><span className="label">CRM</span><h2>Nova oportunidade</h2>
+         {avancado && <SeletorEtiquetasCRM limite={20} selecionadas={nova.tags}
+           onChange={tags => setNova({...nova,tags})}/>}</div>
+         <button type="button" onClick={() => setNovaAberta(false)}>×</button></header>
         <form className="crm-form-grid" onSubmit={criarOportunidade}>
           <label className="campo-largo">Empresa<input autoFocus required value={nova.empresa} onChange={(e) => setNova({ ...nova, empresa: e.target.value })} /></label>
           <label>Contato<input value={nova.contato} onChange={(e) => setNova({ ...nova, contato: e.target.value })} /></label>
@@ -468,15 +471,16 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           <label>Valor<input type="number" min="0" step="0.01" value={nova.valor} onChange={(e) => setNova({ ...nova, valor: e.target.value })} /></label>
           <label>Probabilidade<input type="number" min="0" max="100" value={nova.probabilidade} onChange={(e) => setNova({ ...nova, probabilidade: e.target.value })} /></label>
           <label>Previsão de fechamento<input type="date" value={nova.previsao_fechamento} onChange={(e) => setNova({ ...nova, previsao_fechamento: e.target.value })} /></label>
-          {avancado ? <div className="campo-largo"><SeletorEtiquetasCRM limite={20} selecionadas={nova.tags} onChange={tags => setNova({ ...nova, tags })}/></div>
-             : <label className="campo-largo">Etiquetas<input value={nova.tags.join(', ')} onChange={e => setNova({ ...nova, tags: e.target.value.split(',').map(v => v.trim()).filter(Boolean) })}/></label>}
+          {!avancado && <label className="campo-largo">Etiquetas<input value={nova.tags.join(', ')} onChange={e => setNova({ ...nova, tags: e.target.value.split(',').map(v => v.trim()).filter(Boolean) })}/></label>}
           <label className="campo-largo">Próxima ação<textarea value={nova.proxima_acao} onChange={(e) => setNova({ ...nova, proxima_acao: e.target.value })} /></label>
           <div className="crm-form-acoes campo-largo"><button type="button" onClick={() => setNovaAberta(false)}>Cancelar</button><button className="btn-primario" disabled={salvando}>{salvando ? 'Criando…' : 'Criar oportunidade'}</button></div>
         </form>
       </section></div>}
 
       {ficha && <div className="crm-overlay" onMouseDown={() => setFicha(null)}><section className="crm-ficha" onMouseDown={(e) => e.stopPropagation()}>
-        <header className="drawer-cabecalho"><div><span className="label">Oportunidade #{ficha.id}</span><h2>{ficha.empresa || ficha.contato}</h2></div>
+        <header className="drawer-cabecalho"><div><span className="label">Oportunidade #{ficha.id}</span><h2>{ficha.empresa || ficha.contato}</h2>
+         {avancado && <SeletorEtiquetasCRM limite={20} selecionadas={ficha.tags ?? []}
+           onChange={tags => setFicha({...ficha,tags})} desabilitado={!(podeEditar || podeEditarPropria(ficha))}/>}</div>
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             {(podeEditar || podeEditarPropria(ficha)) && <button type="button" className="btn-excluir-inline" disabled={excluindo} onClick={() => void excluirOportunidade(ficha)} title="Excluir oportunidade"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>}
             <button type="button" aria-label="Fechar" onClick={() => setFicha(null)}>×</button>
@@ -494,8 +498,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             <label>Probabilidade<input type="number" min="0" max="100" value={ficha.probabilidade} onChange={(e) => setFicha({ ...ficha, probabilidade: Number(e.target.value) })} /></label>
             <label>Previsão<input type="date" value={ficha.previsao_fechamento ?? ''} onChange={(e) => setFicha({ ...ficha, previsao_fechamento: e.target.value || null })} /></label>
             <label className="campo-largo">Campanha/origem<select value={ficha.campanha_id ?? ''} onChange={(e) => setFicha({ ...ficha, campanha_id: e.target.value ? Number(e.target.value) : null })}><option value="">Sem campanha</option>{campanhas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-            {avancado ? <div className="campo-largo"><SeletorEtiquetasCRM limite={20} selecionadas={ficha.tags ?? []} onChange={tags => setFicha({ ...ficha, tags })}/></div>
-             : <label className="campo-largo">Etiquetas<input value={(ficha.tags ?? []).join(', ')} onChange={e => setFicha({ ...ficha, tags: e.target.value.split(',').map(v => v.trim()).filter(Boolean) })}/></label>}
+            {!avancado && <label className="campo-largo">Etiquetas<input value={(ficha.tags ?? []).join(', ')} onChange={e => setFicha({ ...ficha, tags: e.target.value.split(',').map(v => v.trim()).filter(Boolean) })}/></label>}
             <label className="campo-largo">Próxima ação<textarea value={ficha.proxima_acao ?? ''} onChange={(e) => setFicha({ ...ficha, proxima_acao: e.target.value })} /></label>
             {encerradosIds.has(ficha.estagio) && <label className="campo-largo">Motivo do encerramento<textarea value={ficha.motivo_perda ?? ''} onChange={(e) => setFicha({ ...ficha, motivo_perda: e.target.value })} /></label>}
             <label className="campo-largo">Observações<textarea value={ficha.observacoes ?? ''} onChange={(e) => setFicha({ ...ficha, observacoes: e.target.value })} /></label>
