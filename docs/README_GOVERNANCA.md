@@ -119,3 +119,11 @@ Este documento foi criado em **2026-08-14**, na branch
 repositório e do Brain nessa data. Não é atualizado automaticamente — um
 agente remoto deve sempre cruzar com `git log` e com
 `docs/RELATORIO_ENTREGAS.md` para saber se algo mudou desde então.
+
+---
+
+## Atualização operacional de 2026-10-24 (ADR-010)
+
+A nova hipótese de produto é usar DeskcommCRM MIT como núcleo proprietário do Harvest, após homologação isolada. Até esse aceite, a arquitetura Twenty + Chatwoot + WAHA/Evolution (ADR-007) permanece ativa e **não deve ser desinstalada**. A versão técnica foi registrada em `docs/decisoes/ADR-010-harvest-deskcomm-piloto.md`; o Relatório recebeu a Entrega 23 e o Plano Mestre recebeu adendo datado.
+
+**Atualização do Brain/Wiki:** a fonte canônica continua no Mac, em `/Users/gui_t/Figueira_Marketing/brain`. Uma nota de sincronização está preparada em `docs/brain-sync/2026-10-24-harvest-deskcomm.md`; a leitura do GitHub não autoriza afirmar que o Vault local foi editado. Nunca copiar o Brain integralmente nem alterar instruções institucionais a partir de repositório público. Toda futura entrega deve atualizar o registro operacional e preparar sincronização aditiva, sem apagar histórico nem material de clientes.
