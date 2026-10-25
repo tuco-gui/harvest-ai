@@ -415,7 +415,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         {avancado && <Link className="crm-atalho-tarefas" href="/crm/tarefas">Tarefas e prazos</Link>}
          {avancado && podeEditar && <details className="crm-pipeline-menu">
            <summary title="Opções do pipeline">···</summary>
-           <div><Link href="/funis">Editar pipeline</Link>
+           <div><Link href={funilId?`/funis/${funilId}`:"/funis"}>Editar pipeline e canal</Link>
              <Link href="/crm/campos-personalizados">Personalizar campos</Link></div>
          </details>}
         {funis.length > 0 && (
