@@ -26,7 +26,7 @@ export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}){
  const s=await sessao((await params).id);if('resposta' in s)return s.resposta;
  const [campos,empresas,contatos]=await Promise.all([
   s.admin.from('crm_campos_personalizados')
-    .select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo')
+    .select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo,grupo')
     .eq('conta_id',s.perfil.conta_id).eq('entidade','oportunidade').order('id').limit(100),
   s.admin.from('crm_empresas').select('id,nome')
     .eq('conta_id',s.perfil.conta_id).order('nome').limit(250),
@@ -45,7 +45,7 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
  if(!b||typeof b!=='object'||Array.isArray(b))
   return NextResponse.json({erro:'Dados inválidos.'},{status:400});
  const {data:campos,error}=await s.admin.from('crm_campos_personalizados')
-  .select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo')
+  .select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo,grupo')
   .eq('conta_id',s.perfil.conta_id).eq('entidade','oportunidade');
  if(error)return NextResponse.json({erro:'Falha ao validar definições.'},{status:503});
  const v=validarValoresPersonalizados(b.campos_extras??{},(campos??[]) as CampoDef[]);
