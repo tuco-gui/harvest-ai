@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.crm_vinculos_inbound_negocio (
 );
 -- Isolamento por tenant mesmo diante de inserts administrativos futuros.
 CREATE OR REPLACE FUNCTION public.crm_validar_vinculo_negocio_inbound()
-RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $
+RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
 BEGIN
  IF NOT EXISTS(SELECT 1 FROM public.whatsapp_canais
     WHERE id=NEW.canal_id AND conta_id=NEW.conta_id)
@@ -28,7 +28,7 @@ BEGIN
     USING ERRCODE='23514';
  END IF;
  RETURN NEW;
-END $;
+END $$;
 DROP TRIGGER IF EXISTS crm_validar_vinculo_negocio ON public.crm_vinculos_inbound_negocio;
 CREATE TRIGGER crm_validar_vinculo_negocio BEFORE INSERT OR UPDATE
  ON public.crm_vinculos_inbound_negocio FOR EACH ROW
