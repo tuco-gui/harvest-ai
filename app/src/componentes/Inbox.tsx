@@ -56,7 +56,7 @@ function formatarTel(tel: string) {
   return tel;
 }
 
-export default function Inbox() {
+export default function Inbox({ telefoneInicial }: { telefoneInicial?: string }) {
   const [contatos, setContatos] = useState<Contato[]>([]);
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<Detalhe | null>(null);
@@ -74,6 +74,14 @@ export default function Inbox() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Deep link CRM: só seleciona números presentes na lista da workspace
+  // carregada pelo endpoint atual; não consulta números arbitrários.
+  useEffect(() => {
+    if (!telefoneInicial || selecionado) return;
+    const contato = contatos.find(c => c.telefone.replace(/\\D/g, '') === telefoneInicial.replace(/\\D/g, ''));
+    if (contato) setSelecionado(contato.telefone);
+  }, [contatos, telefoneInicial, selecionado]);
 
   // Poll for new messages
   useEffect(() => {
