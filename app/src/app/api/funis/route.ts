@@ -49,11 +49,21 @@ export async function POST(req: Request) {
   if (!nome) return NextResponse.json({ erro: 'Falta o nome do funil.' }, { status: 400 });
 
   const admin = supabaseAdmin();
-
+  let canalPadraoId:number|null=null;
+  if (b.canal_padrao_id!==undefined && b.canal_padrao_id!==null && b.canal_padrao_id!=='') {
+    const id=Number(b.canal_padrao_id);
+    if(!Number.isSafeInteger(id)||id<=0)
+      return NextResponse.json({erro:'Canal de WhatsApp inválido.'},{status:400});
+    const {data:canal,error:erroCanal}=await admin.from('whatsapp_canais')
+      .select('id').eq('conta_id',perfil.conta_id).eq('id',id).eq('ativo',true).maybeSingle();
+    if(erroCanal||!canal)
+      return NextResponse.json({erro:'Canal não pertence à workspace ou está inativo.'},{status:400});
+    canalPadraoId=id;
+  }
   // Criar funil
   const { data: funil, error: funilErr } = await admin
     .from('funis')
-    .insert({ conta_id: perfil.conta_id, nome })
+    .insert({ conta_id: perfil.conta_id, nome, canal_padrao_id:canalPadraoId })
     .select('id, nome, ativo, criado_em, canal_padrao_id')
     .single();
 
