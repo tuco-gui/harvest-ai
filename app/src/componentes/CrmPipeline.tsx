@@ -39,7 +39,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   papel?: string;
   perfilId?: string;
   estagiosFunil?: { id: number; nome: string; ordem: number; grupo: string; probabilidade: number; cor: string | null }[];
-  funis?: { id: number; nome: string }[];
+  funis?: { id: number; nome: string; canal_padrao_id?: number|null }[];
   funilIdInicial?: number | null;
 }) {
   const podeEditar = papel !== 'operador';
@@ -190,6 +190,11 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   async function json(r: Response) { return r.json().catch(() => ({})); }
 
   async function abrirFicha(op: Oportunidade) {
+    const vinculo=funis.find(f=>f.id===op.funil_id)?.canal_padrao_id;
+    // Ao abrir outro negócio, o seletor volta ao canal daquele funil.
+    // Se estiver desconectado, não troca silenciosamente pelo primeiro canal.
+    if(vinculo!=null) setCanalId(canais.some(c=>c.id===vinculo)?String(vinculo):'');
+    else setCanalId(String(canais[0]?.id??''));
     setFicha(op); setAba('conversa'); setErro(null); setCarregandoContexto(true);
     const [mr, ar, fullR] = await Promise.all([
       fetch(`/api/crm/oportunidades/${op.id}/mensagens`),
@@ -381,6 +386,13 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   return (
     <div className={'crm-shell' + (avancado ? ' crm-kommo' : '')}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        {avancado && funilId && <span className="crm-canal-funil-indicador">
+          Canal do funil: {(()=>{
+            const id=funis.find(f=>f.id===funilId)?.canal_padrao_id;
+            const c=canais.find(c=>c.id===id);
+            return id==null?'Padrão da workspace':c?c.nome+' · '+c.provider.toUpperCase():'Atribuído mas desconectado';
+          })()}
+        </span>}
         {funis.length > 1 && funilId && (
           <span style={{ fontFamily: 'var(--display)', fontWeight: 800, fontSize: 15, letterSpacing: '-.02em', color: 'var(--ink)' }}>
             {funis.find((f) => f.id === funilId)?.nome ?? ''}
