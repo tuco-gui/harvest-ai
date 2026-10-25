@@ -45,7 +45,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Deskcomm TypeScript
         working-directory: vendor/deskcommcrm
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm typecheck
       - name: Deskcomm unit tests
         working-directory: vendor/deskcommcrm
-        run: pnpm test:unit
+        if: always()
+        run: pnpm exec vitest run --maxWorkers=2
