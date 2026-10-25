@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
+import { perfilTemModulo } from '@/lib/autorizacao';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -12,7 +13,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
   const admin = supabaseAdmin();
   const [{ data: funil }, { data: estagios }] = await Promise.all([
-    admin.from('funis').select('id, nome, ativo, criado_em, canal_padrao_id')
+    admin.from('funis').select('id, nome, ativo, criado_em, canal_padrao_id, auto_criar_negocio_inbound')
       .eq('id', id).eq('conta_id', perfil.conta_id).maybeSingle(),
     admin.from('funil_estagios').select('*')
       .eq('funil_id', id).order('ordem'),
@@ -51,6 +52,33 @@ export async function PATCH(req: Request, { params }: Ctx) {
     }
   }
   if (!perfil.conta_id) return NextResponse.json({erro:'Selecione uma workspace.'},{status:400});
+  if(Object.prototype.hasOwnProperty.call(b,'auto_criar_negocio_inbound')) {
+    if(typeof b.auto_criar_negocio_inbound!=='boolean')
+      return NextResponse.json({erro:'Ativação inválida.'},{status:400});
+    const adminAtivacao=supabaseAdmin();
+    if(!(await perfilTemModulo(adminAtivacao,perfil,'crm_avancado')))
+      return NextResponse.json({erro:'Recurso disponível apenas no CRM avançado.'},{status:403});
+    if(b.auto_criar_negocio_inbound===true) {
+      const {data:funilAtual}=await adminAtivacao.from('funis')
+        .select('id,ativo,canal_padrao_id').eq('conta_id',perfil.conta_id).eq('id',id).maybeSingle();
+      if(!funilAtual?.ativo)
+        return NextResponse.json({erro:'Não é possível ativar automação em funil inativo.'},{status:400});
+      const canalId=(dados.canal_padrao_id??funilAtual.canal_padrao_id) as number|null;
+      if(!canalId)
+        return NextResponse.json({erro:'Vincule um canal WhatsApp ao funil antes de ativar.'},{status:400});
+      const {data:canal}=await adminAtivacao.from('whatsapp_canais')
+        .select('id,status').eq('id',canalId).eq('conta_id',perfil.conta_id)
+        .eq('ativo',true).maybeSingle();
+      if(canal?.status!=='conectado')
+        return NextResponse.json({erro:'O canal deve estar conectado.'},{status:400});
+      const {data:compartilhados}=await adminAtivacao.from('funis').select('id')
+        .eq('conta_id',perfil.conta_id).eq('ativo',true)
+        .eq('canal_padrao_id',canalId).limit(3);
+      if((compartilhados??[]).some(f=>f.id!==Number(id)))
+        return NextResponse.json({erro:'Esse canal é compartilhado com outro funil; escolha um número exclusivo.'},{status:409});
+    }
+    dados.auto_criar_negocio_inbound=b.auto_criar_negocio_inbound;
+  }
   dados.atualizado_em = new Date().toISOString();
 
   if (!Object.keys(dados).length) return NextResponse.json({ ok: true });
@@ -59,7 +87,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const { data, error } = await admin
     .from('funis').update(dados)
     .eq('id', id).eq('conta_id', perfil.conta_id)
-    .select('id,canal_padrao_id').maybeSingle();
+    .select('id,canal_padrao_id,auto_criar_negocio_inbound').maybeSingle();
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
   if(!data) return NextResponse.json({erro:'Funil não pertence à workspace.'},{status:404});
   return NextResponse.json({ ok: true, funil:data });

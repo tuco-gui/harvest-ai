@@ -4,6 +4,7 @@ import { classificarMensagem } from './optoutResposta';
 import { suprimirTelefone } from './supressao';
 import { registrarOptOut } from './optout';
 import { emitirEvento } from './eventos';
+import { podeCriarNegocioAutomatico, criarNegocioDoPrimeiroInbound } from './crmNegocioAutomatico';
 
 /**
  * Pipeline de inbound (Fase 3B → P1 refatorado).
@@ -161,6 +162,21 @@ export async function processarEventoInbound(
         status: classificacao === 'negativa' ? 'negativa' : 'recebido',
         origem: 'resposta',
       });
+    }
+  }
+
+  // Opt-in seguro: só a primeira mensagem de texto NÃO negativa de um canal
+  // com exatamente um funil ligado poderá originar um negócio. Sem disparos.
+  if (canalId!==null && funilId!==null && podeCriarNegocioAutomatico({
+    canalId,funilId,classificacao,tipoMensagem:evento.tipoMensagem,
+  })) {
+    try {
+      await criarNegocioDoPrimeiroInbound(admin,{
+        contaId,canalId,funilId,telefone:evento.telefone,nomeContato:evento.nomeContato,
+      });
+    } catch {
+      // Nunca reprocessar a mensagem nem executar disparos por falha comercial.
+      console.error('[inbound] Falha não fatal na criação opt-in de negócio.');
     }
   }
 
