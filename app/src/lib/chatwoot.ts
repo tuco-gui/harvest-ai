@@ -103,6 +103,15 @@ export async function buscarConversa(accountId: number, conversationId: number):
   return json ?? null;
 }
 
+/** Consulta segura, sem criar contato ou modificar dados no Chatwoot. */
+export async function buscarContato(accountId: number, contactId: number): Promise<ChatwootContact | null> {
+  if (!Number.isSafeInteger(accountId) || accountId < 1 ||
+      !Number.isSafeInteger(contactId) || contactId < 1) return null;
+  const json = await request(`/api/v1/accounts/${accountId}/contacts/${contactId}`);
+  const contato = json?.payload ?? json;
+  return contato && Number.isSafeInteger(contato.id) ? contato as ChatwootContact : null;
+}
+
 export async function listarMensagens(accountId: number, conversationId: number): Promise<ChatwootMessage[]> {
   const json = await request(`/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`);
   return json?.payload ?? [];

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import EncaminhamentoChatwootCRM from '@/componentes/EncaminhamentoChatwootCRM';
 import GerenciadorEtiquetasCRM from '@/componentes/GerenciadorEtiquetasCRM';
 import { estadoSla, NOMES_PRIORIDADE, PRIORIDADES, type Prioridade } from '@/lib/crmEtiquetas';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -266,6 +267,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
             </ol>}
             {erro && <p role="alert" className="crm-aviso">{erro}</p>}
             {aviso && <p role="status" className="ajuda">{aviso}</p>}
+            {podeAtribuir && <EncaminhamentoChatwootCRM telefone={selecionada.telefone} />}
             <div className="crm-atendimento-acoes">
               <p className="ajuda">A transferência altera somente o responsável pela conversa. Não movimenta negócios nem envia mensagens.</p>
               <button className="btn-primario" type="button" disabled={salvando} onClick={() => void salvar()}>
