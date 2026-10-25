@@ -32,6 +32,8 @@ export async function processarEventoInbound(
   admin: SupabaseClient,
   evento: EventoInboundNormalizado,
   contaId: string | null,
+  canalId: number | null = null,
+  funilId: number | null = null,
 ): Promise<ResultadoInbound> {
   // Eco do próprio envio do Harvest — não é uma resposta recebida.
   if (evento.fromMe) {
@@ -47,16 +49,15 @@ export async function processarEventoInbound(
   }
 
   // Idempotência: mesma (conta, provider, message_id) não processa duas vezes.
-  const { data: existente } = await admin
-    .from('inbound_eventos')
-    .select('id')
-    .eq('conta_id', contaId)
-    .eq('provider', evento.provider)
-    .eq('message_id_externo', evento.messageIdExterno)
-    .maybeSingle();
-  if (existente) {
-    return { ok: true, duplicado: true, eventoId: existente.id };
-  }
+  const {data:existentes,error:erroBusca}=await admin.from('inbound_eventos')
+    .select('id,canal_id').eq('conta_id',contaId)
+    .eq('provider',evento.provider).eq('message_id_externo',evento.messageIdExterno)
+    .limit(20);
+  if(erroBusca)return {ok:false,erro:'Falha ao verificar duplicidade inbound.'};
+  // Registro histórico sem canal ainda impede duplicar o webhook antigo.
+  // Dois números diferentes podem usar o mesmo ID externo sem colidir.
+  const existente=existentes?.find(e=>e.canal_id===null || e.canal_id===canalId);
+  if(existente)return {ok:true,duplicado:true,eventoId:existente.id};
 
   // Correlação por telefone normalizado + conta.
   const { data: lead } = await admin
@@ -70,14 +71,13 @@ export async function processarEventoInbound(
   const leadId: number | null = lead?.id ?? null;
 
   // Última campanha relevante para este telefone.
-  const { data: ultimoContato } = await admin
-    .from('historico_contato')
-    .select('campanha_id')
-    .eq('conta_id', contaId)
-    .eq('telefone', evento.telefone)
-    .order('criado_em', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let historico = admin.from('historico_contato')
+    .select('campanha_id').eq('conta_id',contaId)
+    .eq('telefone',evento.telefone);
+  // Canal conhecido: nunca atribuir à campanha que usou outro número.
+  if(canalId!==null)historico=historico.eq('canal_id',canalId);
+  const {data:ultimoContato}=await historico
+    .order('criado_em',{ascending:false}).limit(1).maybeSingle();
   const campanhaId: number | null = ultimoContato?.campanha_id ?? null;
 
   // Classificação (P2): resposta / negativa / optout.
@@ -96,6 +96,8 @@ export async function processarEventoInbound(
       nome_contato: evento.nomeContato,
       lead_id: leadId,
       campanha_id: campanhaId,
+      canal_id: canalId,
+      funil_id: funilId,
       payload_bruto: evento.payloadBruto,
       recebido_em: evento.timestamp,
       tipo_evento: classificacao,
@@ -172,24 +174,24 @@ export async function processarEventoInbound(
     if (leadId) {
       const { data: op } = await admin
         .from('oportunidades')
-        .select('id')
+        .select('id,funil_id')
         .eq('conta_id', contaId)
         .eq('lead_id', leadId)
         .order('criado_em', { ascending: false })
         .limit(1)
         .maybeSingle();
-      oportunidadeId = op?.id ?? null;
+      oportunidadeId = op && (funilId===null || op.funil_id===funilId) ? op.id : null;
     }
     if (!oportunidadeId && evento.telefone) {
       const { data: op } = await admin
         .from('oportunidades')
-        .select('id')
+        .select('id,funil_id')
         .eq('conta_id', contaId)
         .eq('telefone', evento.telefone)
         .order('criado_em', { ascending: false })
         .limit(1)
         .maybeSingle();
-      oportunidadeId = op?.id ?? null;
+      oportunidadeId = op && (funilId===null || op.funil_id===funilId) ? op.id : null;
     }
 
     // Mapear classificação para tipo de evento
