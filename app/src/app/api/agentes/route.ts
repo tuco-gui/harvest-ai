@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import { tipoAgenteValido, validarConfiguracaoAgente, CATALOGO_AGENTES, TIPOS_AGENTE } from '@/lib/agentes';
+import { carregarConexaoIA } from '@/lib/conexaoIAWorkspace';
 
 async function contexto() {
   const perfil = await perfilAtual();
@@ -26,7 +27,16 @@ export async function GET() {
       id: null, conta_id: c.perfil.conta_id, tipo, ...CATALOGO_AGENTES[tipo], ativo: false, atualizado_em: null,
     }
   );
-  return NextResponse.json({ agentes });
+  // O resumo da conexao configurada em Configuracoes e seguro para a interface:
+  // retornamos provedor/modelo, NUNCA a chave, e sempre da workspace ativa.
+  try {
+    const { estado } = await carregarConexaoIA(c.admin, c.perfil.conta_id!);
+    return NextResponse.json({ agentes, conexaoIa: estado });
+  } catch {
+    return NextResponse.json({
+      erro: 'Não foi possível consultar a conexão de IA em Configurações.',
+    }, { status: 503 });
+  }
 }
 
 export async function PATCH(req: Request) {

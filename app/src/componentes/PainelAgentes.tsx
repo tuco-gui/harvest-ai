@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import type { EstadoConexaoIA } from '@/lib/conexaoIAWorkspace';
 import {
   CATALOGO_AGENTES, TIPOS_AGENTE, type TipoAgente,
   validarConfiguracaoAgente,
@@ -17,6 +19,7 @@ type AgenteTela = {
 
 export default function PainelAgentes({ editavel }: { editavel: boolean }) {
   const [agentes, setAgentes] = useState<AgenteTela[]>([]);
+  const [conexaoIa, setConexaoIa] = useState<EstadoConexaoIA | null>(null);
   const [tipo, setTipo] = useState<TipoAgente>('recepcao');
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -32,9 +35,11 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
       .then(async r => {
         const j = await r.json();
         if (!r.ok) throw new Error(j.erro ?? 'Não foi possível carregar os agentes.');
-        return j.agentes as AgenteTela[];
+        return j as { agentes: AgenteTela[]; conexaoIa: EstadoConexaoIA };
       })
-      .then(lista => { if (ativo) setAgentes(lista); })
+      .then(j => {
+        if (ativo) { setAgentes(j.agentes); setConexaoIa(j.conexaoIa); }
+      })
       .catch(e => { if (ativo) setErro(e.message); })
       .finally(() => { if (ativo) setCarregando(false); });
     return () => { ativo = false; };
@@ -142,6 +147,27 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
           </section>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <section style={card} aria-label="Conexão de inteligência artificial">
+              <h2 style={{ fontSize: 16, marginBottom: 8 }}>Inteligência Artificial</h2>
+              {conexaoIa?.configurada ? (
+                <p className="ajuda" role="status">
+                  Conexão cadastrada nesta workspace: <strong>{conexaoIa.provedor}</strong>
+                  {conexaoIa.modelo ? ` · Modelo: ${conexaoIa.modelo}` : ' · Modelo padrão do provedor'}.
+                  Os agentes reutilizam esta conexão automaticamente.
+                </p>
+              ) : (
+                <p className="ajuda" role="status">
+                  Nenhuma conexão de IA cadastrada nesta workspace. As configurações dos agentes
+                  podem ser editadas, mas o teste de conversa necessita de uma conexão de IA.
+                </p>
+              )}
+              <Link href="/configuracoes" style={{ display: 'inline-block', marginTop: 10, fontSize: 13 }}>
+                Abrir Configurações · Inteligência Artificial
+              </Link>
+              <p className="ajuda" style={{ marginTop: 9 }}>
+                Não é necessário cadastrar outra chave nos agentes.
+              </p>
+            </section>
             <section style={card} aria-label="Configuração">
               <h2 style={{ fontSize: 16, marginBottom: 14 }}>Configuração</h2>
               <label htmlFor="agente-nome" style={{ display: 'block', marginBottom: 6 }}>Nome do agente</label>
@@ -167,14 +193,14 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
               <h2 style={{ fontSize: 16, marginBottom: 6 }}>Simular conversa</h2>
               <p className="ajuda" style={{ marginBottom: 14 }}>
                 Digite uma mensagem de exemplo, sem senhas nem dados pessoais de clientes.
-                Usa a chave de IA configurada para a workspace.
+                Usa a conexão já cadastrada em Configurações nesta workspace.
               </p>
               <label htmlFor="agente-mensagem" style={{ display: 'block', marginBottom: 6 }}>Mensagem simulada</label>
               <textarea id="agente-mensagem" style={{ ...campo, minHeight: 90, resize: 'vertical' }}
                 value={mensagem} maxLength={1000}
                 placeholder="Olá! Gostaria de entender como vocês podem me ajudar."
                 onChange={e => setMensagem(e.target.value)}/>
-              <button style={{ ...btn, marginTop: 12 }} disabled={testando || !mensagem.trim() || !atual.id}
+              <button style={{ ...btn, marginTop: 12 }} disabled={testando || !mensagem.trim() || !atual.id || !conexaoIa?.configurada}
                 onClick={testar}>{testando ? 'Consultando IA…' : 'Gerar resposta de teste'}</button>
               {!atual.id && <p className="ajuda" style={{ marginTop: 9 }}>Salve o agente antes de testar.</p>}
               {resposta && <div style={{ marginTop: 16, padding: 14, borderLeft: '3px solid var(--red)', background: 'var(--hover)', whiteSpace: 'pre-wrap' }}>
