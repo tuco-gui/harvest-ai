@@ -90,7 +90,7 @@ export default function CadastrosCRM({ entidade }: { entidade:EntidadeCadastro }
   <nav className="crm-cadastros-nav">
     <Link href="/crm">CRM</Link>
     <Link href="/crm/cadastros/empresas">Empresas</Link>
-    <Link href="/crm/cadastros/contatos">Contatos cadastrados</Link>
+    <Link href="/crm/contatos">Contatos</Link>
     <Link href="/crm/cadastros/produtos">Produtos</Link>
     <Link href="/crm/campos-personalizados">Campos personalizados</Link>
   </nav>
@@ -98,7 +98,7 @@ export default function CadastrosCRM({ entidade }: { entidade:EntidadeCadastro }
    <div><p className="label">CRM · CADASTROS</p>
     <h1>{NOMES[entidade]}</h1>
     <p className="ajuda">{entidade==='contatos'
-      ? 'Cadastro independente para vinculação futura aos negócios, sem mesclar contatos anteriores.'
+      ? 'Cadastro único de pessoas. Negócios ainda sem vínculo podem ser revisados abaixo, sem mesclagem automática.'
       : entidade==='produtos'?'Catálogo comercial para propostas e oportunidades.'
       :'Pessoas jurídicas e organizações relacionadas às oportunidades.'}</p>
    </div>
