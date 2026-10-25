@@ -277,7 +277,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
                 {c.canaisObservados.length===1
                   ? nomesCanais.find(n=>n.id===c.canaisObservados[0])?.nome??'Canal identificado'
                   : c.canaisObservados.length+' canais distintos'}
-              </span>
+              </span>}
               <span className={'crm-atendimento-prioridade '+c.prioridade}>{NOMES_PRIORIDADE[c.prioridade]}</span>
               {estadoSla(c.prazo_triagem_em,c.status)==='vencido'&&<span className="crm-sla-vencido">SLA vencido</span>}
             </span>
