@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { contatosDasOportunidades } from '@/lib/crmContatos';
+import type { Oportunidade } from '@/lib/twenty';
 import CamposDinamicosCRM from '@/componentes/CamposDinamicosCRM';
 import type { CampoDef, EntidadeCadastro } from '@/lib/crmCadastros';
 
@@ -33,7 +35,7 @@ const CAMPOS_COMUNS:Record<EntidadeCadastro,Array<{key:string;rotulo:string;tipo
 const ENTIDADE_CAMPO:Record<EntidadeCadastro,string|null>={
  empresas:'empresa',contatos:'contato',produtos:null,
 };
-export default function CadastrosCRM({ entidade }: { entidade:EntidadeCadastro }) {
+export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] }: { entidade:EntidadeCadastro; oportunidadesRelacionadas?: Oportunidade[] }) {
  const [registros,setRegistros]=useState<Registro[]>([]);
  const [empresas,setEmpresas]=useState<Empresa[]>([]);
  const [campos,setCampos]=useState<CampoDef[]>([]);
@@ -67,6 +69,22 @@ export default function CadastrosCRM({ entidade }: { entidade:EntidadeCadastro }
   [r.nome,r.email??'',r.telefone??'',r.sku??'',r.cnpj??'']
    .some(v=>v.toLocaleLowerCase('pt-BR').includes(busca.toLocaleLowerCase('pt-BR'))));
  function mudar(chave:string,val:unknown){setForm(v=>({...v,[chave]:val}));}
+ const pessoasDosNegocios = useMemo(
+   () => entidade==='contatos' ? contatosDasOportunidades(oportunidadesRelacionadas) : [],
+   [entidade,oportunidadesRelacionadas],
+ );
+ const normal = (v:string|null|undefined) => (v||'').trim().toLocaleLowerCase('pt-BR');
+ const pendentes = pessoasDosNegocios.filter(p => !registros.some(r =>
+   normal(r.nome)===normal(p.nome) &&
+   ((p.email && normal(r.email)===normal(p.email)) ||
+    (p.telefone && p.telefone.replace(/\D/g,'')===r.telefone?.replace(/\D/g,'')))));
+ function cadastrarPessoaDoNegocio(p:{nome:string;telefone:string|null;email:string|null}) {
+  setId(null);setForm({...REGISTRO_INICIAL.contatos(),nome:p.nome,
+    telefone:p.telefone??'',email:p.email??''});
+  setAberto(true);setSucesso('');setErro('');
+  window.scrollTo({top:0,behavior:'smooth'});
+ }
+ 
  function novo(){setId(null);setForm(REGISTRO_INICIAL[entidade]());setAberto(true);setSucesso('');setErro('');}
  function editar(r:Registro){
   setId(r.id);setForm({...REGISTRO_INICIAL[entidade](),...r,campos_extras:r.campos_extras??{}});
@@ -155,5 +173,24 @@ export default function CadastrosCRM({ entidade }: { entidade:EntidadeCadastro }
       <button type="button" onClick={()=>editar(x)}>Editar cadastro</button>
     </article>)}
   </section>
+  {entidade==='contatos' && pendentes.length > 0 && <section className="crm-contatos-pendentes">
+   <h2>Contatos identificados em negócios · conferir</h2>
+   <p className="ajuda">São pessoas encontradas nos negócios e ainda não vinculadas com segurança
+    ao cadastro acima. O Harvest não mescla nem altera identidades automaticamente.</p>
+   <div className="crm-cadastros-grade">
+    {pendentes.map(p=><article className="crm-cadastro-card" key={p.chave}>
+      <strong>{p.nome}</strong>
+      <p>{p.telefone || p.email || 'Sem telefone ou e-mail'}</p>
+      <p>{p.negocios.length} negócio(s)</p>
+      {p.negocios.slice(0,3).map(n=><Link key={n.id}
+        href={'/crm?oportunidade='+encodeURIComponent(String(n.id))}>
+          {n.empresa || 'Oportunidade'} · {n.estagio}
+      </Link>)}
+      <button type="button" onClick={()=>cadastrarPessoaDoNegocio(p)}>
+        Cadastrar como contato (sem mesclagem automática)
+      </button>
+    </article>)}
+   </div>
+  </section>}
  </main>;
 }
