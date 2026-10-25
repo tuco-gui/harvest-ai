@@ -27,7 +27,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ telefone
 
   const param=new URL(req.url).searchParams.get('canal_id');
   const canalFiltro=param==null?null:Number(param);
-  if(param!=null && (!Number.isSafeInteger(canalFiltro)||canalFiltro<=0))
+  if(canalFiltro!==null && (!Number.isSafeInteger(canalFiltro)||canalFiltro<=0))
     return NextResponse.json({erro:'Canal inválido.'},{status:400});
   const {data:origens,error:erroOrigens}=await admin.from('inbound_eventos')
     .select('canal_id,funil_id').eq('conta_id',perfil.conta_id).eq('telefone',telefone)
