@@ -264,7 +264,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
               </li>)}
               {!auditoria.length&&<li>Nenhuma alteração registrada ainda.</li>}
             </ol>}
-            {erro && <p role="alert" className="crm-aviso">{erro}</p>
+            {erro && <p role="alert" className="crm-aviso">{erro}</p>}
             {aviso && <p role="status" className="ajuda">{aviso}</p>}
             <div className="crm-atendimento-acoes">
               <p className="ajuda">A transferência altera somente o responsável pela conversa. Não movimenta negócios nem envia mensagens.</p>
