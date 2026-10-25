@@ -139,3 +139,45 @@ export function montarConversas(
   }
   return [...conversas.values()].sort((a, b) => b.ultimaRecebida.localeCompare(a.ultimaRecebida));
 }
+
+/** A chave de atendimento é (workspace, canal, telefone); 0 identifica legado. */
+export function chaveAtendimento(telefone:string,canalId:number|null):string {
+  return telefone+':'+(canalId??0);
+}
+/** Somente 0 (legado) ou IDs numéricos positivos são aceitos do navegador. */
+export function validarCanalAtendimento(valor:unknown):number|null|undefined {
+  if(valor===undefined||valor===null||valor===''||valor===0||valor==='0')return null;
+  const n=typeof valor==='number'||typeof valor==='string'?Number(valor):NaN;
+  return Number.isSafeInteger(n)&&n>0?n:undefined;
+}
+export type MetadadoCanal = MetaAtendimento & {canal_id?:number|null};
+/**
+ * A Inbox antiga agregava tudo por telefone. A nova separa por número de
+ * recepção, preservando eventos legados como grupo 0, sem copiar mensagens.
+ * Permissões usam sempre o responsável do grupo exato.
+ */
+export function montarConversasPorCanal(
+ raw:Parameters<typeof montarConversas>[0],
+ metadados:MetadadoCanal[],
+ perfil:Pick<Perfil,'id'|'papel'>,
+):ConversaAtendimento[] {
+ const grupos=new Map<string,typeof raw>();
+ for(const m of raw) {
+   const tel=telefoneAtendimento(m.telefone);
+   if(!tel)continue;
+   const chave=chaveAtendimento(tel,m.canal_id??null);
+   const atual=grupos.get(chave)??[];
+   atual.push(m);
+   grupos.set(chave,atual);
+ }
+ const resultado:ConversaAtendimento[]=[];
+ for(const rows of grupos.values()) {
+   const tel=telefoneAtendimento(rows[0].telefone)!;
+   const canalId=rows[0].canal_id??null;
+   const meta=metadados.find(m=>m.telefone===tel && (m.canal_id??null)===canalId);
+   const lista=montarConversas(rows,meta?[meta]:[],perfil);
+   if(lista.length)resultado.push({...lista[0],canalId,
+     canaisObservados:canalId===null?[]:[canalId],canalAmbiguo:false});
+ }
+ return resultado.sort((a,b)=>b.ultimaRecebida.localeCompare(a.ultimaRecebida));
+}
