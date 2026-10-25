@@ -61,10 +61,15 @@ Brain local do Mac não foi sincronizado diretamente; este markdown é handoff a
 - Atribuição e titularidade verificadas a cada ação no banco com escopo por `conta_id`/oportunidade e `owner_id` para operadores.
 - Formulário da central de tarefas reutilizado para criação e edição; conversão do fuso horário no `datetime-local`, botões por item.
 - Testes automatizados (incluindo local time) e TypeScript/build aprovados; merge `e2db8d8010ce2016507a2a4d2ae4b80288d328cf`.
-- Imagem CI e atualização da VPS: verificar status e digest antes de dar como publicado. A nova versão não exige SQL.
+- Publicação via GitHub Actions `40200218084` concluída; imagem Swarm `ghcr.io/tuco-gui/harvest-ai:latest@sha256:08169c734454fb7efbf44d3ad6e5e5563d2e0fc8d098dce5cddb436649d643c5` instalada, serviço `running`, sem erro. A nova versão não exige SQL.
 - Recursos continuam restritos à workspace `figueira-marketing` pelo módulo `crm_avancado` e não acionam WAHA, WhatsApp nem LLM.
 
 ### Próximo passo
 - Testes autenticados reais em workspace Figueira Marketing, inclusive contraste com workspace de cliente (não alterar nenhuma conta).
 - Inbox CRM com triagem, tags, atribuição e handoff humano; manter a fonte real de mensagens, opt-outs e controle de papéis.
 - Tarefas com atribuição independente da oportunidade, calendário e alertas, somente após desenho de migração aditiva.
+
+### Verificação final de produção
+- Smoke test interno, sem login: `GET /entrar=200`; `GET /crm=307`; `GET /crm/tarefas=307`; `GET /api/crm/oportunidades/1/timeline=307`; `PUT/DELETE /api/crm/tarefas=307`. Sem sessão, operações são bloqueadas.
+- Auditoria somente leitura no banco: `crm_avancado` habilitado em **1 workspace, Figueira Marketing**, **0 clientes**.
+- **Teste autenticado e funcional real pendente** (abrir timeline, editar tarefa de teste, realizar rollback via UI). Não declarar produção validada ponta a ponta antes desta etapa.
