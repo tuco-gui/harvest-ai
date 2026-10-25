@@ -92,7 +92,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ telefone
   ].sort((a, b) => Date.parse(a.data) - Date.parse(b.data));
   return NextResponse.json({
     telefone, timeline, nome: entradas.data.find(e => e.nome_contato)?.nome_contato ?? null,
-    canaisObservados,canalSugeridoId,funilSugeridoId,canalAmbiguo:false,canal_id:canalId,
+    canaisObservados:canalId===null?[]:[canalId],canalSugeridoId,funilSugeridoId,canalAmbiguo:false,canal_id:canalId,
     atendimento: meta ?? { status: 'aberto', etiquetas: [], responsavel_id: null, atualizado_em: null },
     // Negocios podem ter ownership diferente da conversa. So exibe link
     // se o usuario for o responsavel ou tiver papel de administrador.
