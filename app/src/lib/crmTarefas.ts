@@ -72,3 +72,12 @@ export function validarNovaTarefa(titulo: unknown, venceEm: unknown, descricao: 
   }
   return null;
 }
+
+/** Converte UTC armazenado no banco para valor datetime-local, sem mudar fuso. */
+export function dataLocalParaInput(iso: string | null): string {
+  if (!iso) return '';
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return '';
+  const local = new Date(data.getTime() - data.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
