@@ -12,7 +12,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
   const admin = supabaseAdmin();
   const [{ data: funil }, { data: estagios }] = await Promise.all([
-    admin.from('funis').select('id, nome, ativo, criado_em')
+    admin.from('funis').select('id, nome, ativo, criado_em, canal_padrao_id')
       .eq('id', id).eq('conta_id', perfil.conta_id).maybeSingle(),
     admin.from('funil_estagios').select('*')
       .eq('funil_id', id).order('ordem'),
@@ -35,16 +35,34 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const dados: Record<string, unknown> = {};
   if (typeof b.nome === 'string' && b.nome.trim()) dados.nome = b.nome.trim();
   if (typeof b.ativo === 'boolean') dados.ativo = b.ativo;
+  if (Object.prototype.hasOwnProperty.call(b,'canal_padrao_id')) {
+    if (b.canal_padrao_id === null) dados.canal_padrao_id = null;
+    else {
+      const idCanal = Number(b.canal_padrao_id);
+      if (!Number.isSafeInteger(idCanal) || idCanal <= 0)
+        return NextResponse.json({erro:'Identificador de canal inválido.'},{status:400});
+      const adminCanal = supabaseAdmin();
+      const {data:valido,error:erroCanal} = await adminCanal.from('whatsapp_canais')
+        .select('id,status').eq('id',idCanal)
+        .eq('conta_id',perfil.conta_id).eq('ativo',true).maybeSingle();
+      if (erroCanal || !valido)
+        return NextResponse.json({erro:'Canal não pertence à workspace ou está inativo.'},{status:400});
+      dados.canal_padrao_id = valido.id;
+    }
+  }
+  if (!perfil.conta_id) return NextResponse.json({erro:'Selecione uma workspace.'},{status:400});
   dados.atualizado_em = new Date().toISOString();
 
   if (!Object.keys(dados).length) return NextResponse.json({ ok: true });
 
   const admin = supabaseAdmin();
-  const { error } = await admin
+  const { data, error } = await admin
     .from('funis').update(dados)
-    .eq('id', id).eq('conta_id', perfil.conta_id);
+    .eq('id', id).eq('conta_id', perfil.conta_id)
+    .select('id,canal_padrao_id').maybeSingle();
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  if(!data) return NextResponse.json({erro:'Funil não pertence à workspace.'},{status:404});
+  return NextResponse.json({ ok: true, funil:data });
 }
 
 /** DELETE /api/funis/[id] → soft-delete (ativo=false) */
