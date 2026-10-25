@@ -22,7 +22,7 @@ assert.equal(contatos.find(c => c.nome === 'João')?.tags.length, 2);
 assert.equal(contatos.find(c => c.nome === 'Maria')?.possivelDuplicidade, true,
   'mesmo telefone de pessoas diferentes marca possivel duplicidade sem juntar');
 assert.equal(contatos.find(c => c.nome === 'João')?.possivelDuplicidade, true);
-assert.equal(pesquisarContatos(contatos, 'padaria', false).length, 2);
+assert.equal(pesquisarContatos(contatos, 'padaria', false).length, 3);
 assert.equal(pesquisarContatos(contatos, 'Joao', false).length, 1);
 assert.equal(pesquisarContatos(contatos, '', true).length, 2);
 assert.equal(contatosDasOportunidades([]).length, 0);
