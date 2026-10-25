@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import { isAdmin } from '@/lib/crmControleAcesso';
-import { entidadeCampoValida, validarDefCampo } from '@/lib/crmCadastros';
+import { entidadeCampoValida, validarDefCampo, normalizarGrupoCampo } from '@/lib/crmCadastros';
 
 async function sessao() {
   const perfil=await perfilAtual();
@@ -18,7 +18,7 @@ export async function GET(req:Request){
   const entidade=new URL(req.url).searchParams.get('entidade');
   if(!entidadeCampoValida(entidade))return NextResponse.json({erro:'Entidade inválida.'},{status:400});
   const {data,error}=await s.admin.from('crm_campos_personalizados')
-    .select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo')
+    .select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo,grupo')
     .eq('conta_id',s.perfil.conta_id).eq('entidade',entidade).order('id').limit(100);
   if(error)return NextResponse.json({erro:'Falha ao ler campos.'},{status:503});
   return NextResponse.json({campos:data??[],podeGerenciar:isAdmin(s.perfil.papel)});
@@ -31,7 +31,7 @@ export async function POST(req:Request){
   if(erro)return NextResponse.json({erro},{status:400});
   const {data,error}=await s.admin.from('crm_campos_personalizados').insert({
     conta_id:s.perfil.conta_id,entidade:b.entidade,chave:b.chave,rotulo:b.rotulo.trim(),
-    tipo:b.tipo,opcoes:b.tipo==='selecao'?b.opcoes:[],
+    tipo:b.tipo,opcoes:b.tipo==='selecao'?b.opcoes:[],grupo:normalizarGrupoCampo(b.grupo),
     obrigatorio:b.obrigatorio,ativo:true,
   }).select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo').single();
   if(error)return NextResponse.json({erro:'Falha ao criar campo. Chave já existente?'},{status:500});
@@ -42,13 +42,19 @@ export async function PATCH(req:Request){
   if(!isAdmin(s.perfil.papel))return NextResponse.json({erro:'Somente administrador altera campos.'},{status:403});
   const b=await req.json().catch(()=>null);
   if(!Number.isSafeInteger(b?.id)||!entidadeCampoValida(b?.entidade)||
-      typeof b?.ativo!=='boolean')
+      (typeof b?.ativo!=='boolean' && b?.grupo===undefined))
     return NextResponse.json({erro:'Dados inválidos.'},{status:400});
-  // Não alterar a chave, o tipo ou apagar os valores existentes, evitando
-  // corrupção silenciosa de campos utilizados em contatos/negócios.
+  // Mover um campo entre grupos não altera suas chaves ou valores históricos.
+  const alteracoes: { ativo?: boolean; grupo?: string } = {};
+  if (typeof b.ativo === 'boolean') alteracoes.ativo = b.ativo;
+  if (b.grupo !== undefined) {
+    const grupo = normalizarGrupoCampo(b.grupo);
+    if (!grupo) return NextResponse.json({ erro:'Grupo inválido.' }, { status:400 });
+    alteracoes.grupo = grupo;
+  }
   const {data,error}=await s.admin.from('crm_campos_personalizados')
-    .update({ativo:b.ativo}).eq('id',b.id).eq('conta_id',s.perfil.conta_id)
-    .eq('entidade',b.entidade).select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo').maybeSingle();
+    .update(alteracoes).eq('id',b.id).eq('conta_id',s.perfil.conta_id)
+    .eq('entidade',b.entidade).select('id,entidade,chave,rotulo,tipo,opcoes,obrigatorio,ativo,grupo').maybeSingle();
   if(error||!data)return NextResponse.json({erro:'Não foi possível alterar o campo.'},{status:500});
   return NextResponse.json({campo:data});
 }
