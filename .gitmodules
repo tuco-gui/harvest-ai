@@ -1,0 +1,3 @@
+[submodule "vendor/deskcommcrm"]
+	path = vendor/deskcommcrm
+	url = https://github.com/melgarafael/DeskcommCRM.git

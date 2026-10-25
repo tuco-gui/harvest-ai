@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { CookieOptions } from '@supabase/ssr';
+import { rotaPublicaSemSessao } from '@/lib/rotasPublicas';
 
 type CookieNovo = { name: string; value: string; options?: CookieOptions };
 
@@ -13,7 +14,8 @@ export async function middleware(req: NextRequest) {
   // interceptava a chamada antes de chegar na rota — webhook nunca seria
   // processado, só redirecionado para /entrar. Descoberto no QA de
   // produção da Fase 3B.
-  if (req.nextUrl.pathname.startsWith('/api/webhook/')) {
+  if (req.nextUrl.pathname.startsWith('/api/webhook/') ||
+      req.nextUrl.pathname === '/api/auth/esqueci-senha') {
     return NextResponse.next();
   }
 
@@ -35,9 +37,10 @@ export async function middleware(req: NextRequest) {
   );
 
   const { data: { user } } = await sb.auth.getUser();
-  const ehLogin = req.nextUrl.pathname.startsWith('/entrar');
+  const ehLogin = req.nextUrl.pathname === '/entrar';
+  const ehPublica = rotaPublicaSemSessao(req.nextUrl.pathname);
 
-  if (!user && !ehLogin) {
+  if (!user && !ehPublica) {
     const url = req.nextUrl.clone();
     url.pathname = '/entrar';
     return NextResponse.redirect(url);
