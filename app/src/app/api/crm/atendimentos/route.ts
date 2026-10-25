@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import { isAdmin } from '@/lib/crmControleAcesso';
+import { prazoTriagem } from '@/lib/crmEtiquetas';
 import { montarConversas, operadorPodeVerConversa, responsaveisDaWorkspace,
   telefoneAtendimento, validarAlteracaoAtendimento } from '@/lib/crmAtendimentos';
 
@@ -27,7 +28,7 @@ export async function GET() {
       .select('telefone,nome_contato,mensagem,recebido_em,lead_id')
       .eq('conta_id', perfil.conta_id).order('recebido_em', { ascending: false }).limit(500),
     admin.from('crm_atendimentos')
-      .select('telefone,status,responsavel_id,etiquetas,atualizado_em')
+      .select('telefone,status,responsavel_id,etiquetas,atualizado_em,prioridade,prazo_triagem_em,resolvido_em')
       .eq('conta_id', perfil.conta_id).limit(500),
   ]);
   if (eventos.error || meta.error) {
@@ -68,6 +69,16 @@ export async function PATCH(req: Request) {
   if (!operadorPodeVerConversa(perfil, atual)) {
     return NextResponse.json({ erro: 'Você não está atribuído a este atendimento.' }, { status: 403 });
   }
+  // Exigir etiquetas do catalogo da workspace, sem nomes inventados
+  // nem aceitar cores enviadas pelo navegador.
+  if (valido.etiquetas.length) {
+    const { data: catalogo, error: erroTags } = await admin.from('crm_etiquetas')
+      .select('nome').eq('conta_id', perfil.conta_id).in('nome', valido.etiquetas);
+    if (erroTags) return NextResponse.json({ erro: 'Falha ao validar etiquetas.' }, { status: 503 });
+    if ((catalogo ?? []).length !== valido.etiquetas.length) {
+      return NextResponse.json({ erro: 'Selecione etiquetas existentes no catálogo.' }, { status: 400 });
+    }
+  }
   let responsavelId = atual?.responsavel_id ?? null;
   if (isAdmin(perfil.papel)) {
     responsavelId = valido.responsavel_id;
@@ -79,12 +90,20 @@ export async function PATCH(req: Request) {
       }
     }
   }
+  const { data: recente, error: errRecente } = await admin.from('inbound_eventos')
+    .select('recebido_em').eq('conta_id',perfil.conta_id).eq('telefone',telefone)
+    .order('recebido_em',{ascending:false}).limit(1).maybeSingle();
+  if (errRecente || !recente) return NextResponse.json({ erro: 'Não foi possível calcular o prazo.' }, { status: 503 });
+  const prazo = prazoTriagem(recente.recebido_em, valido.prioridade);
   const { data, error } = await admin.from('crm_atendimentos').upsert({
     conta_id: perfil.conta_id, telefone, status: valido.status,
-    etiquetas: valido.etiquetas, responsavel_id: responsavelId,
+    etiquetas: valido.etiquetas, prioridade: valido.prioridade,
+    prazo_triagem_em: prazo,
+    resolvido_em: valido.status === 'resolvido' ? new Date().toISOString() : null,
+    responsavel_id: responsavelId,
     atualizado_por: perfil.id, atualizado_em: new Date().toISOString(),
   }, { onConflict: 'conta_id,telefone' })
-    .select('telefone,status,etiquetas,responsavel_id,atualizado_em').single();
+    .select('telefone,status,etiquetas,responsavel_id,atualizado_em,prioridade,prazo_triagem_em,resolvido_em').single();
   if (error || !data) return NextResponse.json({ erro: 'Não foi possível salvar o atendimento.' }, { status: 500 });
   return NextResponse.json({ atendimento: data, envioRealizado: false });
 }
