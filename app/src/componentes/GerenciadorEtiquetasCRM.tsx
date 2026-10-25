@@ -6,8 +6,8 @@ import {
 } from '@/lib/crmEtiquetas';
 
 export default function GerenciadorEtiquetasCRM({
-  selecionadas, onChange, desabilitado = false,
-}: { selecionadas: string[]; onChange: (v: string[]) => void; desabilitado?: boolean }) {
+  selecionadas, onChange, desabilitado = false, contexto = 'conversa', limite = 8,
+}: { selecionadas: string[]; onChange: (v: string[]) => void; desabilitado?: boolean; contexto?: 'conversa' | 'negócio'; limite?: number }) {
   const [catalogo, setCatalogo] = useState<EtiquetaCRM[]>([]);
   const [podeGerenciar, setPodeGerenciar] = useState(false);
   const [novoNome, setNovoNome] = useState('');
@@ -32,7 +32,7 @@ export default function GerenciadorEtiquetasCRM({
     if (desabilitado || ocupado) return;
     const nova = selecionadas.includes(nome)
       ? selecionadas.filter(n => n !== nome) : [...selecionadas, nome];
-    if (nova.length > 8) { setErro('Até oito etiquetas por conversa.'); return; }
+    if (nova.length > limite) { setErro(`Até ${limite} etiquetas por ${contexto}.`); return; }
     onChange(nova);
     setErro('');
   }
@@ -51,7 +51,7 @@ export default function GerenciadorEtiquetasCRM({
       if(!r.ok) throw Error(d.erro || 'Não foi possível criar.');
       setCatalogo(antigo => [...antigo.filter(x=>x.nome!==d.etiqueta.nome),d.etiqueta]
         .sort((a,b)=>a.nome.localeCompare(b.nome)));
-      if (selecionadas.length < 8 && !selecionadas.includes(nome)) onChange([...selecionadas,nome]);
+      if (selecionadas.length < limite && !selecionadas.includes(nome)) onChange([...selecionadas,nome]);
       setNovoNome('');setNovaCor(null);setAviso('Etiqueta criada e incluída na seleção.');
     } catch(err) {setErro(err instanceof Error?err.message:'Falha ao criar.');}
     finally {setOcupado(false);}
@@ -92,13 +92,13 @@ export default function GerenciadorEtiquetasCRM({
       <span className="crm-tag-ponto" style={{backgroundColor:cor??'var(--ink-3)'}} aria-hidden="true"/>
       {nome}
       <button type="button" disabled={ocupado||desabilitado}
-        aria-label={'Remover etiqueta '+nome+' desta conversa'} onClick={()=>alternar(nome)}>×</button>
+        aria-label={'Remover etiqueta '+nome+' deste '+contexto} onClick={()=>alternar(nome)}>×</button>
     </span>;
   }
 
   return <div className="crm-gestao-etiquetas">
     <div className="crm-gestao-etiquetas-cabecalho">
-      <strong>Etiquetas ({selecionadas.length}/8)</strong>
+      <strong>Etiquetas ({selecionadas.length}/{limite})</strong>
       <button type="button" onClick={()=>setGerenciando(!gerenciando)}
         aria-expanded={gerenciando}>{gerenciando?'Fechar catálogo':'Gerenciar etiquetas'}</button>
     </div>
@@ -116,7 +116,7 @@ export default function GerenciadorEtiquetasCRM({
     </fieldset>
     {!!selecionadas.length && <button className="crm-etiquetas-limpar" type="button"
       disabled={ocupado||desabilitado} onClick={()=>onChange([])}>
-      Remover todas as etiquetas desta conversa
+      Remover todas as etiquetas deste {contexto}
     </button>}
     {gerenciando && <div className="crm-etiquetas-gerenciar">
       {podeGerenciar ? <>
