@@ -5,7 +5,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AutomacaoEstagio from './AutomacaoEstagio';
 
-type Funil = { id: number; nome: string; ativo: boolean; criado_em: string; canal_padrao_id: number|null };
+type Funil = { id: number; nome: string; ativo: boolean; criado_em: string; canal_padrao_id: number|null; auto_criar_negocio_inbound:boolean };
 type Canal = {id:number;nome:string;numero:string|null;status:string;provider:string;padrao:boolean};
 type Estagio = {
   id: number; funil_id: number; nome: string; ordem: number;
@@ -17,7 +17,7 @@ const CORES_PADRAO = [
   '#d55c2a', '#1A7A4A', '#C4191F', '#555555', '#2196F3',
 ];
 
-export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais }: { funil: Funil; estagios: Estagio[]; canais: Canal[] }) {
+export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais,autoPermitido=false }: { funil: Funil; estagios: Estagio[]; canais: Canal[];autoPermitido?:boolean }) {
   const router = useRouter();
   const [estagios, setEstagios] = useState(estagiosIniciais);
   const [salvando, setSalvando] = useState(false);
@@ -25,6 +25,30 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
   const [canalFunil, setCanalFunil] = useState<number|null>(funil.canal_padrao_id);
   const [salvandoCanal,setSalvandoCanal] = useState(false);
   const [avisoCanal,setAvisoCanal] = useState('');
+  const [autoCriar,setAutoCriar] = useState(funil.auto_criar_negocio_inbound);
+  const [salvandoAutomacao,setSalvandoAutomacao] = useState(false);
+  const [avisoAutomacao,setAvisoAutomacao] = useState('');
+  async function alterarAutomacao(){
+    if(!autoPermitido || salvandoAutomacao)return;
+    const proximo=!autoCriar;
+    if(proximo && !window.confirm(
+      'Ativar criação de negócios no PRIMEIRO contato recebido pelo WhatsApp deste funil? '+
+      'Não envia mensagens. Funciona apenas para canal exclusivo conectado, sem duplicar contatos.'))return;
+    setSalvandoAutomacao(true);setAvisoAutomacao('');
+    try{
+      const r=await fetch('/api/funis/'+funil.id,{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({auto_criar_negocio_inbound:proximo}),
+      });
+      const d=await r.json();
+      if(!r.ok)throw Error(d.erro||'Não foi possível alterar automação.');
+      setAutoCriar(proximo);
+      setAvisoAutomacao(proximo?'Automação ativada para novas conversas elegíveis.':
+        'Criação automática desligada. Negócios existentes foram preservados.');
+      router.refresh();
+    }catch(e){setAvisoAutomacao(e instanceof Error?e.message:'Falha ao salvar automação.');}
+    finally{setSalvandoAutomacao(false);}
+  }
   async function salvarCanalPadrao() {
     if(salvandoCanal)return;
     setSalvandoCanal(true);setAvisoCanal('');
@@ -252,6 +276,20 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
           sem desconectar números de outras workspaces.
         </p>}
       </section>
+      {autoPermitido && <section className="secao crm-funil-canal" aria-label="Criação de negócios por mensagens recebidas">
+        <h3>Quando chegar uma nova conversa</h3>
+        <p className="ajuda">Opcional: criar automaticamente um negócio na primeira etapa
+          deste funil após a primeira mensagem de texto recebida pelo número exclusivo.
+          Não responde, não dispara campanhas, não une contatos e não cria negócios
+          para mensagens antigas, negativas ou de opt-out.</p>
+        <p><strong>Criação automática: {autoCriar?'Ativada':'Desligada'}</strong></p>
+        <button type="button" disabled={salvandoAutomacao || (!autoCriar && (
+          !canalFunil || canais.find(c=>c.id===canalFunil)?.status!=='conectado'))}
+          onClick={()=>void alterarAutomacao()}>
+          {salvandoAutomacao?'Salvando…':autoCriar?'Desativar criação automática':'Ativar criação automática'}
+        </button>
+        {avisoAutomacao&&<p role="status" className="ajuda">{avisoAutomacao}</p>}
+      </section>}
       {/* Pipeline stages — horizontal */}
       <section style={{ marginBottom: 32 }}>
         <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
