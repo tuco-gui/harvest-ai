@@ -30,3 +30,14 @@
 ## Proteção e pendências
 Não usar staging. Não liberar o módulo para as demais empresas até homologação. Pilotagem Deskcomm no PR #7 não foi incorporada a esta versão. Nenhum dado pessoal de cliente foi copiado para testes.
 O Brain local do Mac não foi editado diretamente; esta nota é um handoff aditivo para sincronização posterior no Obsidian. Evitar sobrescrever versões históricas.
+
+## Ajuste posterior: compartilhamento da LLM de Configurações (PR #10)
+- Solicitação do responsável: agentes devem reutilizar a conexão de ferramentas/LLM existente em Configurações, sem duplicar cadastros.
+- A configuração de IA é **por workspace** em `conta_credenciais` (`ia_provedor`, `ia_modelo`, `ia_key`).
+- O laboratório dos agentes consulta esses campos em tempo real via `lib/conexaoIAWorkspace.ts`. A API do painel envia apenas `configurada/provedor/modelo`, nunca a chave.
+- O painel apresenta o estado da conexão, link para Configurações e desativa teste quando não há uma LLM configurada.
+- Verificação SQL de produção: 3 workspaces com chave de IA, e a workspace `figueira-marketing` ainda sem provedor/chave. **Não copiar credenciais de clientes para a agência.**
+- CI do PR #10 validado (testes de provedor, tipo, privacidade, TypeScript e build). Merge `20f961ee0478b80e5f19aa053609185568ef11c4`.
+- Docker Swarm atualizado sem staging, imagem `ghcr.io/tuco-gui/harvest-ai:latest@sha256:3968e0da4d7e7fdac807e824f653a60c33f969cc872fead134061f327b8c1d0b`; serviço running, sem erro.
+- Smoke test anônimo no serviço: `GET /entrar = 200`, `GET /agentes = 307`, `GET /api/agentes = 307` e `GET /api/agentes/testar = 307`. O usuário sem login continua bloqueado; teste autenticado real e saída de LLM permanecem pendentes até configuração da Figueira.
+- Não houve SQL migration nem alteração de campanha, usuário, segredo, integrações ou permissões comerciais.
