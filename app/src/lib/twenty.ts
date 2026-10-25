@@ -23,6 +23,8 @@ export type Oportunidade = {
   id: number | string;
   conta_id: string;
   lead_id: number | null;
+  funil_id?: number | null;
+  funil_estagio_id?: number | null;
   empresa: string;
   contato: string;
   telefone: string | null;
