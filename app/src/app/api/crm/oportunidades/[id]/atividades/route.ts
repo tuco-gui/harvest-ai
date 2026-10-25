@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
+import { podeAcessarOportunidade } from '@/lib/crmControleAcesso';
 
 const TIPOS = new Set(['nota', 'tarefa', 'ligacao', 'reuniao', 'email', 'whatsapp']);
 
 async function contexto(id: number) {
+  if (!Number.isSafeInteger(id) || id < 1) return { erro: NextResponse.json({ erro: 'Oportunidade inválida.' }, { status: 400 }) };
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return { erro: NextResponse.json({ erro: 'Escolha uma conta.' }, { status: 400 }) };
   const admin = supabaseAdmin();
@@ -14,6 +16,8 @@ async function contexto(id: number) {
   const { data: oportunidade } = await admin.from('oportunidades').select('id')
     .eq('id', id).eq('conta_id', perfil.conta_id).maybeSingle();
   if (!oportunidade) return { erro: NextResponse.json({ erro: 'Oportunidade não encontrada.' }, { status: 404 }) };
+  const acesso = await podeAcessarOportunidade(admin, perfil, id);
+  if (!acesso.ok) return { erro: NextResponse.json({ erro: acesso.erro }, { status: 403 }) };
   return { perfil, admin };
 }
 
