@@ -25,3 +25,15 @@ Hotfix separado do piloto Deskcomm, no PR #8, aprovado em testes de rota, TypeSc
 
 ## Sincronização
 Este Markdown é uma nota **para** a Wiki do Obsidian. O Brain canônico `/Users/gui_t/Figueira_Marketing/brain` não está acessível diretamente nesta sessão. Não afirmar que foi sincronizado no Mac. Preservar versões anteriores, sem overwrite.
+
+## Publicação e verificações de produção (mesma rodada)
+- GitHub CI do PR #8 aprovado: 11 asserts de allowlist, TypeScript e build Next.js.
+- Merge de correção `941793723df5d58f9bf22d4fbe5028bb94b532f1`; imagem gerada fora da VPS em CI `40150254479`, conclusão sucesso.
+- Serviço `harvest_harvest` atualizado no Docker Swarm mantendo a configuração e as credenciais anteriores. Imagem efetiva após atualização: `ghcr.io/tuco-gui/harvest-ai:latest@sha256:bcf251764392bf066264b8344614da7b334b65ab4f581327da13160fc83c423b`; tarefa Swarm desejada `running`, estado `running`.
+- Teste via navegador sem sessão, URL real `https://harvest.figueiramarketing.com.br`: `/esqueci-senha`, `/verificar-codigo` e `/entrar` renderizaram sem redirecionamento indevido.
+- Teste de recuperação com domínio reservado de exemplo (`example.invalid`), sem endereço real nem envio: aplicação exibiu `A recuperação por e-mail está temporariamente indisponível. Contate o suporte.`. Isso confirmou indisponibilidade do SMTP com mensagem fiel; **o envio OTP segue não operacional até provisionar SMTP**.
+- Login com senha original do titular **não foi testado** pelo agente; nenhum segredo de autenticação foi solicitado ou alterado.
+- O experimento Deskcomm em outro PR continua separado e não foi promovido à VPS.
+
+## Pendente
+Provisionar identidade de envio SMTP institucional no runtime/cofre e comprovar entrega de um OTP em endereço autorizado, sem copiar senhas por chat ou log. Depois, titular testa seu login e eventual redefinição.
