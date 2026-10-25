@@ -37,8 +37,7 @@ export default function GerenciadorEtiquetasCRM({
     setErro('');
   }
 
-  async function criar(e: React.FormEvent) {
-    e.preventDefault();
+  async function criar() {
     const nome = nomeEtiqueta(novoNome);
     if (!nome) { setErro('Nome deve ter entre 1 e 28 caracteres.'); return; }
     setOcupado(true); setErro(''); setAviso('');
@@ -120,7 +119,7 @@ export default function GerenciadorEtiquetasCRM({
     </button>}
     {gerenciando && <div className="crm-etiquetas-gerenciar">
       {podeGerenciar ? <>
-        <form onSubmit={criar}>
+        <div className="crm-etiqueta-nova">
           <label>Nova etiqueta
             <input value={novoNome} maxLength={28}
               onChange={e=>setNovoNome(e.target.value)} placeholder="Ex.: proposta enviada"/>
@@ -133,8 +132,8 @@ export default function GerenciadorEtiquetasCRM({
               style={{backgroundColor:t.cor}}/>)}
             <button type="button" className="sem-cor" onClick={()=>setNovaCor(null)}>Sem cor</button>
           </div>
-          <button type="submit" disabled={ocupado||!novoNome.trim()}>+ Criar etiqueta</button>
-        </form>
+          <button type="button" onClick={()=>void criar()} disabled={ocupado||!novoNome.trim()}>+ Criar etiqueta</button>
+        </div>
         <div className="crm-etiquetas-administrar">
           <p className="ajuda">Alterar cor ou excluir definitivamente do catálogo.</p>
           {catalogo.map(t=><div className="crm-etiqueta-linha" key={t.nome}>
