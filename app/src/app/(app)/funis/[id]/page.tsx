@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import FunilDetalhe from '@/componentes/FunilDetalhe';
 import { carregarCanais } from '@/lib/whatsappCanais';
+import { perfilTemModulo } from '@/lib/autorizacao';
 
 export default async function Pagina({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,12 +13,13 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
 
   const admin = supabaseAdmin();
 
-  const [{ data: funil }, { data: estagios }, canais] = await Promise.all([
-    admin.from('funis').select('id, nome, ativo, criado_em, canal_padrao_id')
+  const [{ data: funil }, { data: estagios }, canais, avancado] = await Promise.all([
+    admin.from('funis').select('id, nome, ativo, criado_em, canal_padrao_id, auto_criar_negocio_inbound')
       .eq('id', id).eq('conta_id', perfil.conta_id).maybeSingle(),
     admin.from('funil_estagios').select('*')
       .eq('funil_id', id).order('ordem'),
     carregarCanais(admin, perfil.conta_id),
+    perfilTemModulo(admin,perfil,'crm_avancado'),
   ]);
 
   if (!funil) {
@@ -29,5 +31,5 @@ export default async function Pagina({ params }: { params: Promise<{ id: string 
     );
   }
 
-  return <FunilDetalhe funil={funil} estagios={estagios ??[]} canais={canais.filter(c=>c.ativo).map(c=>({id:c.id,nome:c.nome,numero:c.numero,status:c.status,provider:c.provider,padrao:c.padrao}))} />;
+  return <FunilDetalhe funil={funil} estagios={estagios ??[]} autoPermitido={avancado && perfil.papel!=='operador'} canais={canais.filter(c=>c.ativo).map(c=>({id:c.id,nome:c.nome,numero:c.numero,status:c.status,provider:c.provider,padrao:c.padrao}))} />;
 }
