@@ -1989,3 +1989,16 @@ preservação), telefone duplicado, telefone suprimido, tenant isolation, permis
 7. Após testes, obter autorização explícita de publicação/migração e manter rollback pronto.
 
 **Link branch:** https://github.com/tuco-gui/harvest-ai/tree/feature/harvest-deskcomm-pilot-20261024
+
+---
+
+## Entrega 24 — Consulta segura do piloto Deskcomm e verificações CI (2026-10-24)
+
+**Estado:** implementação em branch, desligada; produção, dados, bancos e credenciais intactos.
+
+- Adicionada `app/src/lib/deskcommPiloto.ts` e rota `GET /api/piloto/deskcomm/saude`. Endpoint protegido por sessão de superadmin, conta QA ativa, `NEXT_PUBLIC_AMBIENTE=staging` e flag explícita. Consulta somente a contagem de agentes, via API Deskcomm `GET /api/v1/ai/agents`, sem escrita, prompts, contatos ou mensagens.
+- Configuração em `piloto/deskcomm/harvest-adapter.env.example`, sem valores de segredo. Nenhuma credencial atual foi acessada, trocada ou gravada.
+- Script `scripts/sync-brain-wiki-harvest.sh` criado para sincronização **aditiva** da nota com a Wiki do Vault local quando o Mac estiver disponível, recusando sobrescrever nota preexistente. Não foi executado no Mac.
+- `AGENTS.md` e modelo de PR com obrigações de documentação/preservação adicionados à branch.
+- Pipeline de CI comprova clone do submódulo, SHA MIT e sintaxe dos scripts. Primeira execução do typecheck upstream encontrou OOM no heap padrão de Node de ~4 GB; workflow ajustado para heap ampliado e execução independente dos testes unitários; aguarda resultado da execução atual.
+- Ainda faltam instância isolada Deskcomm, novo Supabase, WhatsApp QA, validação funcional E2E, integração de prospecção e aceite. Não foi publicada nova versão do Harvest.
