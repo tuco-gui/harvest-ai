@@ -679,3 +679,31 @@ a:hover{color:var(--ink)}
  .crm-tarefas-filtros>input{min-width:100px}
  .crm-tarefa-status{display:none}
 }
+
+
+/* CRM Avançado — Contatos: visão operacional integrada ao pipeline. */
+.crm-contatos{max-width:1280px;padding-bottom:60px}
+.crm-contatos .crm-tarefas-kpis div{display:flex;flex-direction:column;align-items:flex-start;background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:17px;min-height:92px}
+.crm-contatos .crm-tarefas-kpis span{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+.crm-contatos .crm-tarefas-kpis strong{font-size:26px;letter-spacing:-.04em}
+.crm-contatos .crm-atalho-tarefas{display:inline-flex;align-items:center;border:1px solid var(--rule-2);padding:10px 14px;border-radius:6px;background:var(--surface);font-size:12px;color:var(--ink);font-weight:700;text-decoration:none}
+.crm-contatos .crm-atalho-tarefas:hover{border-color:var(--red)}
+.crm-contatos-check{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:12px;color:var(--ink-2)}
+.crm-contatos-check input{accent-color:var(--red)}
+.crm-contatos-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr));gap:12px}
+.crm-contato-card{border:1px solid var(--rule);border-radius:8px;background:var(--surface);min-width:0;overflow:hidden}
+.crm-contato-card header{display:flex;align-items:center;gap:11px;padding:16px;border-bottom:1px solid var(--rule)}
+.crm-contato-card header>div{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.crm-contato-card header strong{font-size:14px;color:var(--ink);white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.crm-contato-card header small{font-size:11px;color:var(--ink-3);white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.crm-contato-avatar{background:color-mix(in srgb,var(--red) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--red) 30%,var(--rule));color:var(--red);font-weight:800;font-size:12px;width:38px;height:38px;display:grid;place-items:center;border-radius:50%;flex:none}
+.crm-contato-alerta{color:var(--red);border:1px solid var(--red);border-radius:15px;padding:3px 7px;font-size:10px;font-weight:700}
+.crm-contato-dados{display:flex;flex-direction:column;gap:6px;font-size:12px;padding:13px 16px;min-height:62px;color:var(--ink-3)}
+.crm-contato-dados a{color:var(--ink-2);text-decoration:none;overflow-wrap:anywhere}
+.crm-contato-dados a:hover{text-decoration:underline;color:var(--red)}
+.crm-contato-tags{display:flex;gap:5px;flex-wrap:wrap;padding:0 16px 12px}
+.crm-contato-tags span{border:1px solid var(--rule);border-radius:4px;font-size:10px;color:var(--ink-3);padding:3px 7px}
+.crm-contato-card footer{background:var(--sunken);border-top:1px solid var(--rule);padding:13px 16px;font-size:11px;color:var(--ink-3);display:flex;flex-direction:column;gap:7px}
+.crm-contato-negocios{display:flex;flex-direction:column;gap:5px}
+.crm-contato-negocios a{font-size:12px;color:var(--ink);font-weight:600;text-decoration:none}
+.crm-contato-negocios a:hover{color:var(--red);text-decoration:underline}
