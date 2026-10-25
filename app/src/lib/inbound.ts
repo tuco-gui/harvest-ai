@@ -172,25 +172,17 @@ export async function processarEventoInbound(
     let oportunidadeId: number | null = null;
 
     if (leadId) {
-      const { data: op } = await admin
-        .from('oportunidades')
-        .select('id,funil_id')
-        .eq('conta_id', contaId)
-        .eq('lead_id', leadId)
-        .order('criado_em', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      let busca = admin.from('oportunidades').select('id,funil_id')
+        .eq('conta_id',contaId).eq('lead_id',leadId);
+      if(funilId!==null)busca=busca.eq('funil_id',funilId);
+      const {data:op}=await busca.order('criado_em',{ascending:false}).limit(1).maybeSingle();
       oportunidadeId = op && (funilId===null || op.funil_id===funilId) ? op.id : null;
     }
     if (!oportunidadeId && evento.telefone) {
-      const { data: op } = await admin
-        .from('oportunidades')
-        .select('id,funil_id')
-        .eq('conta_id', contaId)
-        .eq('telefone', evento.telefone)
-        .order('criado_em', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      let busca=admin.from('oportunidades').select('id,funil_id')
+        .eq('conta_id',contaId).eq('telefone',evento.telefone);
+      if(funilId!==null)busca=busca.eq('funil_id',funilId);
+      const {data:op}=await busca.order('criado_em',{ascending:false}).limit(1).maybeSingle();
       oportunidadeId = op && (funilId===null || op.funil_id===funilId) ? op.id : null;
     }
 
