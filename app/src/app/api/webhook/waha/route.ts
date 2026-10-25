@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { normalizarEventoWaha, sessionDoWebhookWaha, type PayloadWebhookWaha } from '@/lib/inboundWaha';
-import { resolverContaWaha } from '@/lib/inboundConta';
+import { resolverDestinoInbound } from '@/lib/inboundDestino';
 import { processarEventoInbound } from '@/lib/inbound';
 import { verificarAssinaturaWaha } from '@/lib/inboundSeguranca';
 
@@ -49,8 +49,8 @@ export async function POST(req: Request) {
   }
 
   const admin = supabaseAdmin();
-  const contaId = await resolverContaWaha(admin, sessionDoWebhookWaha(body));
-  const resultado = await processarEventoInbound(admin, evento, contaId);
+  const destino = await resolverDestinoInbound(admin,'waha',sessionDoWebhookWaha(body));
+  const resultado = await processarEventoInbound(admin,evento,destino.contaId,destino.canalId,destino.funilId);
 
   if (!resultado.ok) {
     const status = resultado.erro === 'conta_nao_resolvida' ? 200 : 500;

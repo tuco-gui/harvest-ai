@@ -22,6 +22,10 @@ export type ConversaAtendimento = MetaAtendimento & {
   ultimaRecebida: string;
   total: number;
   leadId: number | null;
+  canalId: number | null;
+  funilSugeridoId: number | null;
+  canaisObservados: number[];
+  canalAmbiguo: boolean;
 };
 
 export function telefoneAtendimento(value: unknown): string | null {
@@ -85,6 +89,7 @@ export function montarConversas(
   raw: Array<{
     telefone: string; nome_contato: string | null; mensagem: string | null;
     recebido_em: string; lead_id: number | null;
+    canal_id?: number | null; funil_id?: number | null;
   }>,
   metadados: MetaAtendimento[],
   perfil: Pick<Perfil,'id'|'papel'>,
@@ -99,12 +104,21 @@ export function montarConversas(
     const atual = conversas.get(telefone);
     if (atual) {
       atual.total++;
+      if (m.canal_id != null && !atual.canaisObservados.includes(m.canal_id)) {
+        atual.canaisObservados.push(m.canal_id);
+      }
+      atual.canalAmbiguo=atual.canaisObservados.length>1;
+      if(atual.canalAmbiguo){atual.canalId=null;atual.funilSugeridoId=null;}
       if (m.recebido_em > atual.ultimaRecebida) {
         atual.ultimaMensagem = m.mensagem ?? '';
         atual.ultimaRecebida = m.recebido_em;
         atual.prazo_triagem_em = prazoTriagem(m.recebido_em, atual.prioridade);
         if (m.nome_contato) atual.nome = m.nome_contato;
         if (m.lead_id) atual.leadId = m.lead_id;
+        if(!atual.canalAmbiguo) {
+          atual.canalId=m.canal_id??atual.canalId;
+          atual.funilSugeridoId=m.funil_id??atual.funilSugeridoId;
+        }
       }
     } else {
       conversas.set(telefone, {
@@ -112,6 +126,8 @@ export function montarConversas(
         ultimaMensagem: m.mensagem ?? '',
         ultimaRecebida: m.recebido_em,
         total: 1, leadId: m.lead_id ?? null,
+        canalId:m.canal_id??null,funilSugeridoId:m.funil_id??null,
+        canaisObservados:m.canal_id!=null?[m.canal_id]:[],canalAmbiguo:false,
         status: meta?.status ?? 'aberto', etiquetas: meta?.etiquetas ?? [],
         responsavel_id: meta?.responsavel_id ?? null,
         atualizado_em: meta?.atualizado_em ?? null,

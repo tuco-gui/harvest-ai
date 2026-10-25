@@ -16,6 +16,8 @@ on:
       - "tests/unit/crm-etiquetas.test.ts"
       - "tests/unit/canais-unificados.test.ts"
       - "tests/unit/canal-funil.test.ts"
+      - "tests/unit/inbound-canal-funil.test.ts"
+      - "sql/042_inbound_canal_funil.sql"
       - "sql/041_funis_canal_whatsapp.sql"
       - "tests/unit/crm-cadastros.test.ts"
       - "tests/unit/crm-chatwoot-handoff.test.ts"
@@ -62,6 +64,8 @@ jobs:
         run: node --experimental-strip-types tests/unit/canais-unificados.test.ts
       - name: Testar vínculo seguro do canal de cada funil
         run: node --experimental-strip-types tests/unit/canal-funil.test.ts
+      - name: Validar recepção por canal e roteamento não ambíguo
+        run: node --experimental-strip-types tests/unit/inbound-canal-funil.test.ts
       - name: Instalar dependencias
         working-directory: app
         run: npm ci

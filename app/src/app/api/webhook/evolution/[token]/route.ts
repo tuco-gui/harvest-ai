@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { normalizarEventoEvolution, instanciaDoWebhookEvolution, type PayloadWebhookEvolution } from '@/lib/inboundEvolution';
-import { resolverContaEvolution } from '@/lib/inboundConta';
+import { resolverDestinoInbound } from '@/lib/inboundDestino';
 import { processarEventoInbound } from '@/lib/inbound';
 import { verificarTokenEvolution } from '@/lib/inboundSeguranca';
 
@@ -53,8 +53,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   }
 
   const admin = supabaseAdmin();
-  const contaId = await resolverContaEvolution(admin, instanciaDoWebhookEvolution(body));
-  const resultado = await processarEventoInbound(admin, evento, contaId);
+  const destino = await resolverDestinoInbound(admin,'evolution',instanciaDoWebhookEvolution(body));
+  const resultado = await processarEventoInbound(admin,evento,destino.contaId,destino.canalId,destino.funilId);
 
   if (!resultado.ok) {
     const status = resultado.erro === 'conta_nao_resolvida' ? 200 : 500;
