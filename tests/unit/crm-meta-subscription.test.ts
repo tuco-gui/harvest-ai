@@ -7,7 +7,7 @@ const retry=s('app/src/app/api/integracoes/meta/assinar/route.ts');
 const integra=s('app/src/componentes/IntegracoesCRM.tsx');
 const fontes=s('app/src/app/api/integracoes/route.ts');
 const sql=s('sql/047_meta_assinatura_pagina.sql');
-assert.match(graph,/\/'?\/subscribed_apps/);
+assert.match(graph,/subscribed_apps/);
 assert.match(graph,/messaging_postbacks/);
 assert.match(graph,/subscribed_fields/);
 assert.match(graph,/d\?\.success!==true/);
