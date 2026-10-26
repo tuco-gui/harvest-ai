@@ -267,13 +267,17 @@ export default function FunilDetalhe({
           <h3>FONTES DE LEAD</h3>
           <p className="ajuda">Números e canais de entrada deste pipeline.</p>
           <div className="crm-kommo-fontes-lista">
-            {canais.map(c=><div key={c.id} className="crm-kommo-fonte-linha">
+            {canais.map(c=><button type="button" key={c.id}
+              aria-pressed={canalFunil===c.id}
+              className={'crm-kommo-fonte-linha'+(canalFunil===c.id?' selecionada':'')}
+              onClick={()=>{setCanalFunil(c.id);
+                setAvisoCanal('Fonte selecionada. Confirme em Salvar canal do funil.');}}> 
               <span className="crm-kommo-fonte-icone">W</span>
               <div><strong>{c.nome}</strong><small>{c.provider.toUpperCase()}
                 {c.numero?' · '+c.numero:''}</small>
                 <small>{c.id===canalFunil?'Selecionado neste funil · ':''}
                   {c.status==='conectado'?'Conectado':'Desconectado'}</small></div>
-            </div>)}
+            </button>)}
             {!canais.length&&<p className="ajuda">Nenhum canal cadastrado nesta workspace.</p>}
           </div>
           <button className="crm-kommo-adicionar-fonte" type="button"
