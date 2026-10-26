@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {configuracaoMeta,segredoMeta,chaveCriptografia,urlAutorizacaoMeta}
+ from '../../app/src/lib/crmMetaOAuth.ts';
+const src=(path:string)=>readFileSync(path,'utf8');
+const lib=src('app/src/lib/crmMetaOAuth.ts');
+const webhook=src('app/src/app/api/webhook/meta-mensagens/route.ts');
+assert.match(lib,/\/run\/secrets\//);
+assert.match(lib,/harvest_meta_app_secret/);
+assert.match(lib,/harvest_meta_token_key/);
+assert.match(lib,/harvest_meta_webhook_verify_token/);
+assert.match(webhook,/segredoMeta\('webhook'\)/);
+assert.doesNotMatch(webhook,/process\.env\.HARVEST_META_WEBHOOK_VERIFY_TOKEN/);
+process.env.HARVEST_META_APP_ID='2112411986271610';
+process.env.HARVEST_META_APP_SECRET='segredo_somente_para_teste';
+process.env.HARVEST_META_TOKEN_KEY='b'.repeat(64);
+process.env.HARVEST_META_WEBHOOK_VERIFY_TOKEN='token_somente_para_teste';
+assert.equal(segredoMeta('app'),'segredo_somente_para_teste');
+assert.equal(segredoMeta('webhook'),'token_somente_para_teste');
+assert.equal(chaveCriptografia()?.length,32);
+assert.equal(configuracaoMeta('facebook_messenger')?.id,'2112411986271610');
+assert.equal(configuracaoMeta('instagram_dm')?.id,'2112411986271610');
+assert.equal(new URL(urlAutorizacaoMeta('facebook_messenger','state')).searchParams.get('client_id'),'2112411986271610');
+console.log('Meta: App ID existente, suporte a Docker Swarm secrets e fallback staging OK');
