@@ -1149,3 +1149,47 @@ a:hover{color:var(--ink)}
 .widget-webchat-form button:disabled{opacity:.5}
 .widget-webchat-form span{font-size:11px;color:#b51b23}
 .widget-webchat-rodape{text-align:center;color:#888;font-size:9px;padding:4px}
+
+
+/* Configurações → Integrações: fontes no mesmo lugar previsto pelo Kommo. */
+.integracoes-crm{max-width:1100px}
+.integracoes-crm>header{margin:0 0 18px}
+.integracoes-crm>header h2{font-size:20px;margin:0 0 6px}
+.integracoes-crm-layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:0;
+ border:1px solid var(--rule);background:var(--surface);min-height:430px}
+.integracoes-crm-catalogo{display:flex;flex-direction:column;border-right:1px solid var(--rule);
+ padding:8px 0;background:var(--sunken)}
+.integracoes-crm-catalogo button{padding:13px 16px;text-align:left;display:flex;flex-direction:column;
+ gap:4px;align-items:stretch;color:var(--ink);border-left:3px solid transparent}
+.integracoes-crm-catalogo button:hover{background:var(--surface)}
+.integracoes-crm-catalogo button.ativo{background:var(--surface);border-left-color:var(--red)}
+.integracoes-crm-catalogo button strong{font-size:13px}
+.integracoes-crm-catalogo button small{font-size:11px;color:var(--ink-3)}
+.integracoes-crm-detalhe{padding:22px;min-width:0}
+.integracoes-crm-detalhe h3{font-size:15px;margin:0 0 10px}
+.integracoes-crm-conectar{display:flex;align-items:end;gap:12px;flex-wrap:wrap;
+ margin:18px 0 24px;padding:14px;background:var(--sunken);border:1px solid var(--rule)}
+.integracoes-crm-conectar label{display:flex;flex-direction:column;gap:6px;
+ flex:1 1 230px;font-size:12px;font-weight:600}
+.integracoes-crm-conectar select{height:37px;padding:5px 9px;border:1px solid var(--rule);
+ color:var(--ink);background:var(--surface);min-width:0}
+.integracoes-crm-conectar button{white-space:nowrap;min-height:37px;padding:7px 14px}
+.integracoes-crm-conexoes{display:flex;flex-direction:column;gap:8px;margin:10px 0 18px}
+.integracoes-crm-conexao{border:1px solid var(--rule);padding:13px;display:flex;
+ justify-content:space-between;gap:12px;align-items:start}
+.integracoes-crm-conexao>div{display:flex;flex-direction:column;align-items:start;gap:5px}
+.integracoes-crm-conexao strong{font-size:13px}
+.integracoes-crm-conexao small{font-size:11px;color:var(--ink-3)}
+.integracoes-crm-conexao button,.integracoes-crm-conexao a{font-size:11px;
+ padding:8px 10px;border:1px solid var(--rule);font-weight:700;white-space:nowrap}
+.integracoes-crm-conexao a{color:var(--ink);text-decoration:none}
+@media(max-width:760px){
+ .integracoes-crm-layout{grid-template-columns:1fr}
+ .integracoes-crm-catalogo{display:flex;flex-direction:row;overflow-x:auto;
+ border-right:0;border-bottom:1px solid var(--rule)}
+ .integracoes-crm-catalogo button{flex:0 0 155px;padding:11px;
+ border-left:0;border-bottom:3px solid transparent}
+ .integracoes-crm-catalogo button.ativo{border-bottom-color:var(--red)}
+ .integracoes-crm-detalhe{padding:13px}
+ .integracoes-crm-conexao{flex-wrap:wrap}
+}
