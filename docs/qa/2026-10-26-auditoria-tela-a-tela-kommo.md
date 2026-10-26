@@ -26,6 +26,12 @@ Referência de usuário: gravação `Recording 2026-10-25 at 21-15-58.mp4`, 6m03
 6. Exclusão de etapa com negócio vinculado agora retorna 409 e não apaga registros.
 7. Fontes na lateral eram meras linhas não clicáveis; agora são botões com seleção e confirmação explícita para salvar.
 8. Formulário para criar funil no celular não quebrava linha.
+9. Drag-and-drop usava índice da coleção antiga (`estagios[from]`) em vez da ordem renderizada, deslocando etapas erradas em alguns movimentos; corrigido com `ordemVisual`.
+10. IDs locais de novos estágios eram derivados de `Date.now()`, sujeitos a colisão em múltiplas adições rápidas; agora usa contador negativo único.
+11. Salvamento usava `Promise.all` para várias atualizações da mesma fila de estágios. Substituído por exclusões verificadas, criação com confirmação de IDs reais e PATCH em sequência.
+12. Backend misturava pipeline e encerrados no reordenamento (sem filtro de grupo); corrigidos POST, PATCH e DELETE para ordenar cada grupo isoladamente.
+13. Após salvar canal do funil, botão podia continuar como "não salvo" pelo valor antigo nas props; corrigido usando canal persistido.
+14. Teste de regressão agora cobra a ordenação visual, IDs negativos únicos e persistência sequencial.
 
 ## Evidências e limitações
 - Teste de regressão `tests/unit/crm-ux-integridade.test.ts` garante posicionamento e isolamento.
