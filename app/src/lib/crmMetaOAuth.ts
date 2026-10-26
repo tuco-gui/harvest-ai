@@ -1,4 +1,4 @@
-import {createCipheriv,createDecipheriv,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
+import {createCipheriv,createDecipheriv,createHmac,randomBytes,timingSafeEqual,hkdfSync} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 
 export type PlataformaMeta='instagram_dm'|'facebook_messenger';
@@ -19,9 +19,30 @@ export function segredoMeta(nome:'app'|'chave'|'webhook'):string{
  if(nome==='chave')return process.env.HARVEST_META_TOKEN_KEY??'';
  return process.env.HARVEST_META_WEBHOOK_VERIFY_TOKEN??'';
 }
+/** Preferir uma chave Swarm dedicada. Quando ainda não existe, usar HKDF
+ * com domínio separado do App Secret. Este fallback é estável e só funciona
+ * com o segredo presente no servidor; nenhuma chave é enviada ao navegador.
+ * Rotacionar a App Secret exige reautorizar tokens criptografados pelo fallback.
+ */
 export function chaveCriptografia():Buffer|null{
  const chave=segredoMeta('chave');
- return /^[a-f0-9]{64}$/i.test(chave)?Buffer.from(chave,'hex'):null;
+ if(/^[a-f0-9]{64}$/i.test(chave))return Buffer.from(chave,'hex');
+ const master=segredoMeta('app');
+ if(master.length<24)return null;
+ return Buffer.from(hkdfSync('sha256',Buffer.from(master,'utf8'),
+  Buffer.from('harvest-meta-crypto-fallback-v1','utf8'),
+  Buffer.from('tokens-oauth-por-workspace','utf8'),32));
+}
+/** Código de verificação do challenge público da Meta, não App Secret.
+ * A assinatura dos POSTs continua obrigatoriamente HMAC da App Secret.
+ */
+export function tokenVerificacaoMeta():string{
+ const dedicado=segredoMeta('webhook');
+ if(dedicado)return dedicado;
+ const master=segredoMeta('app');
+ if(master.length<24)return '';
+ return createHmac('sha256',master)
+  .update('harvest-meta-webhook-verification-v1','utf8').digest('hex');
 }
 export function cifrarMeta(valor:string):string{
  const chave=chaveCriptografia();
