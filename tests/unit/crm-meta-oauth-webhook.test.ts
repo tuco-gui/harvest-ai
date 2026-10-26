@@ -64,7 +64,7 @@ assert.match(reply,/24\*3600\*1000/);
 assert.match(reply,/idempotencia/);
 assert.match(reply,/status_envio:'pendente'/);
 assert.match(reply,/status_envio:'falhou'/);
-assert.match(fonte,/meta_autorizado:Boolean\(meta_token_cifrado\)/);
+assert.match(fonte,/meta_autorizado:Boolean\(meta_token_cifrado\|\|r.zernio_account_id\)/);
 assert.match(sql,/ALTER TABLE public\.crm_meta_oauth_estados ENABLE ROW LEVEL SECURITY/);
 assert.match(sql,/meta_token_cifrado/);
 console.log('Meta OAuth: HMAC, AES-GCM, workspace, webhook, idempotência e janela de resposta OK');
