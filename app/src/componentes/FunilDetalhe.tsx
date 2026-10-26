@@ -642,7 +642,7 @@ export default function FunilDetalhe({
                   c.situacao==='operacional'?'Conector WhatsApp existente':
                   c.id==='webchat'?'Chat incorporável ao site':
                   'Permissões Meta necessárias'}</small>
-                {c.situacao==='operacional'
+                {c.id==='whatsapp_waha'||c.id==='whatsapp_evolution'
                   ?<Link href="/configuracoes" onClick={()=>setFontesAbertas(false)}>
                     Gerenciar números</Link>
                   :<button type="button" disabled={!autoPermitido||!!salvandoFonte}
