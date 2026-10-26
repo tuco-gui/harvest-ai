@@ -27,23 +27,6 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
  const [aviso,setAviso]=useState('');
  const [copiado,setCopiado]=useState('');
  const [assinando,setAssinando]=useState<string|null>(null);
- const [setupMeta,setSetupMeta]=useState<{
-  app_id:string;webhook_url:string;verify_token:string;
-  oauth_facebook:string;oauth_instagram:string
- }|null>(null);
- const [carregandoSetup,setCarregandoSetup]=useState(false);
- async function revelarSetup(){
-  if(carregandoSetup)return;
-  if(setupMeta){setSetupMeta(null);return;}
-  setCarregandoSetup(true);setErro('');
-  try{
-   const r=await fetch('/api/integracoes/meta/configurar',{cache:'no-store'});
-   const d=await r.json();
-   if(!r.ok)throw Error(d.erro||'Não foi possível consultar dados da Meta.');
-   setSetupMeta(d);
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar configuração.');}
-  finally{setCarregandoSetup(false);}
- }
  const carregar=useCallback(async(signal?:AbortSignal)=>{
   try{
    const r=await fetch('/api/integracoes',{cache:'no-store',signal});
@@ -214,31 +197,6 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
        </div>
       </article>)}
     </div>
-    {dados?.podeGerenciar&&['instagram_dm','facebook_messenger'].includes(tipo)&&
-       <div className="integracoes-crm-setup">
-        <h3>Configuração do aplicativo Meta</h3>
-        <p className="ajuda">Use estas informações no Meta for Developers para
-          vincular o aplicativo da Figueira. Não é necessário criar outro app.</p>
-        <button type="button" onClick={()=>void revelarSetup()} disabled={carregandoSetup}>
-          {carregandoSetup?'Consultando…':setupMeta?'Ocultar configuração':'Mostrar URLs e código de verificação'}
-        </button>
-        {setupMeta&&<div className="integracoes-crm-setup-dados">
-         {([
-          ['App ID',setupMeta.app_id],
-          ['URL do webhook',setupMeta.webhook_url],
-          ['Código de verificação',setupMeta.verify_token],
-          ['Retorno do Facebook',setupMeta.oauth_facebook],
-          ['Retorno do Instagram',setupMeta.oauth_instagram],
-         ] as const).map(([nome,valor])=><label key={nome}>
-          <span>{nome}</span>
-          <input type="text" readOnly value={valor} aria-label={nome}/>
-          <button type="button" onClick={async()=>{
-           try{await navigator.clipboard.writeText(valor);setCopiado(nome);}
-           catch{setErro('Não foi possível copiar a informação.');}
-          }}>{copiado===nome?'Copiado':'Copiar'}</button>
-         </label>)}
-        </div>}
-       </div>}
     <p className="ajuda">Instagram e Messenger exigem permissões e assinatura de mensagens
      aprovadas pela Meta. Ter acesso a várias páginas no Business Manager não as conecta
      automaticamente; selecione e autorize a conta de cada cliente.</p>
