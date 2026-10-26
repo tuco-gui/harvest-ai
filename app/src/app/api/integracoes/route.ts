@@ -24,7 +24,7 @@ export async function GET(){
  const [funis,fontes,numeros]=await Promise.all([
   admin.from('funis').select('id,nome,ativo,canal_padrao_id').eq('conta_id',perfil.conta_id)
    .order('nome').limit(200),
-  admin.from('crm_fontes_funil').select('id,funil_id,tipo,nome,status,dominio,identificador_externo,meta_token_cifrado,token_publico,criado_em')
+  admin.from('crm_fontes_funil').select('id,funil_id,tipo,nome,status,dominio,identificador_externo,meta_token_cifrado,meta_assinatura_status,meta_assinatura_em,token_publico,criado_em')
    .eq('conta_id',perfil.conta_id).order('criado_em',{ascending:false}).limit(200),
   admin.from('whatsapp_canais').select('id,nome,provider,numero,status,ativo')
    .eq('conta_id',perfil.conta_id).order('id').limit(200),

@@ -5,7 +5,8 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 
 type Tipo='instagram_dm'|'facebook_messenger'|'whatsapp_cloud_api'|'webchat';
 type Fonte={id:string;funil_id:number;tipo:Tipo;nome:string;status:string;
- autorizado:boolean;identificador_externo:string|null;dominio:string|null;token_publico?:string};
+ autorizado:boolean;identificador_externo:string|null;dominio:string|null;token_publico?:string;
+ meta_assinatura_status?:'pendente'|'inscrita'|'falha';meta_assinatura_em?:string|null;};
 type Funil={id:number;nome:string;ativo:boolean;canal_padrao_id:number|null};
 type Numero={id:number;nome:string;numero:string|null;provider:string;status:string;ativo:boolean};
 type Dados={fontes:Fonte[];funis:Funil[];numeros:Numero[];podeGerenciar:boolean;
@@ -25,6 +26,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
  const [erro,setErro]=useState('');
  const [aviso,setAviso]=useState('');
  const [copiado,setCopiado]=useState('');
+ const [assinando,setAssinando]=useState<string|null>(null);
  const carregar=useCallback(async(signal?:AbortSignal)=>{
   try{
    const r=await fetch('/api/integracoes',{cache:'no-store',signal});
@@ -61,8 +63,8 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   return '<iframe title="Atendimento" src="'+origem+'/webchat/'+token+
    '" style="position:fixed;right:18px;bottom:18px;width:360px;max-width:calc(100vw - 28px);height:530px;max-height:85vh;border:0;border-radius:12px;z-index:99999" loading="lazy"></iframe>';
  }
- async function autorizar(fonteId:string){
-  const popup=window.open('','harvest-meta-oauth','popup,width=650,height=740');
+ async function autorizar(fonteId:string,janelaExistente?:Window|null){
+  const popup=janelaExistente??window.open('','harvest-meta-oauth','popup,width=650,height=740');
   if(!popup){setErro('Permita a janela pop-up para autorizar a Meta.');return;}
   setOcupado(true);setErro('');
   try{
@@ -77,6 +79,11 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
  }
  async function cadastrar(){
   if(!funilId||ocupado)return;
+  // A janela deve abrir diretamente no gesto do clique do cliente.
+  // Aguardar cadastro/fetch antes de window.open faz navegadores bloquearem OAuth.
+  const precisaMeta=tipo==='instagram_dm'||tipo==='facebook_messenger';
+  const popup=precisaMeta?window.open('','harvest-meta-oauth','popup,width=650,height=740'):null;
+  if(precisaMeta&&!popup){setErro('Permita janelas pop-up para conectar sua conta Meta.');return;}
   setOcupado(true);setErro('');setAviso('');
   try{
    const r=await fetch('/api/integracoes',{method:'POST',
@@ -85,12 +92,26 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
    if(!r.ok||!d.fonte)throw Error(d.erro||'Não foi possível cadastrar o canal.');
    await carregar();
    if(tipo==='instagram_dm'||tipo==='facebook_messenger'){
-    await autorizar(d.fonte.id);
+    await autorizar(d.fonte.id,popup);
    }else{
     setAviso('Fonte adicionada a este funil. Você pode gerenciá-la logo abaixo.');
    }
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao adicionar integração.');}
+  }catch(e){popup?.close();setErro(e instanceof Error?e.message:'Falha ao adicionar integração.');}
   finally{setOcupado(false);}
+ }
+ async function retentarAssinatura(fonteId:string){
+  if(assinando)return;
+  setAssinando(fonteId);setErro('');setAviso('');
+  try{
+   const r=await fetch('/api/integracoes/meta/assinar',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({fonte_id:fonteId})});
+   const d=await r.json();
+   if(!r.ok)throw Error(d.erro||'Não foi possível assinar mensagens.');
+   await carregar();
+   setAviso('Assinatura solicitada e confirmada pela Meta. Aguarde uma mensagem de teste para validar a Inbox.');
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao assinar a Page.');}
+  finally{setAssinando(null);}
  }
  const ativo=TIPOS.find(x=>x.id===tipo);
  const conexoes=dados?.fontes.filter(f=>f.tipo===tipo)??[];
@@ -149,11 +170,21 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
           c.status==='pausado'?'Pausado':c.autorizado?
           'Conta autorizada; aguardando confirmação do webhook':'Não autorizado'}</small>
         {c.identificador_externo&&<small>Conta Meta: {c.identificador_externo}</small>}
+        {c.tipo==='facebook_messenger'&&c.autorizado&&
+          <small>Webhook da página: {c.meta_assinatura_status==='inscrita'?
+           'Inscrição confirmada':c.meta_assinatura_status==='falha'?
+           'Inscrição recusada (verificar permissões)':'Inscrição ainda não confirmada'}</small>}
        </div>
        <div>
         {(c.tipo==='instagram_dm'||c.tipo==='facebook_messenger')&&dados?.podeGerenciar&&
          <button type="button" disabled={ocupado} onClick={()=>void autorizar(c.id)}>
            {c.autorizado?'Reautorizar':'Autorizar conta'}
+         </button>}
+        {c.tipo==='facebook_messenger'&&c.autorizado&&dados?.podeGerenciar&&
+         c.status!=='pausado'&&c.meta_assinatura_status!=='inscrita'&&
+         <button type="button" disabled={!!assinando||ocupado}
+          onClick={()=>void retentarAssinatura(c.id)}>
+           {assinando===c.id?'Inscrevendo…':'Ativar webhook Messenger'}
          </button>}
         {c.tipo==='webchat'&&c.token_publico&&
          <button type="button" onClick={async()=>{

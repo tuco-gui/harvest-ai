@@ -36,7 +36,8 @@ export async function GET(req:Request,{params}:Ctx){
     identificador_externo:conta.id,nome:'Instagram · @'+conta.nome,
     meta_token_cifrado:cifrarMeta(token.token),
     meta_expira_em:token.expiraEm,meta_escopos:token.escopos,
-    status:'aguardando_autorizacao',atualizado_em:new Date().toISOString(),
+    status:'aguardando_autorizacao',meta_assinatura_status:'pendente',meta_assinatura_em:null,
+    atualizado_em:new Date().toISOString(),
    }).eq('id',estado.fonte_id).eq('conta_id',perfil.conta_id)
     .eq('funil_id',estado.funil_id).eq('tipo',tipo).neq('status','pausado')
     .select('id').maybeSingle();

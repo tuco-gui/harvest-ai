@@ -37,7 +37,7 @@ async function contexto(id:string){
 export async function GET(_req:Request,{params}:Ctx){
  const c=await contexto((await params).id);if('erro'in c)return c.erro;
  const {data,error}=await c.admin.from('crm_fontes_funil')
-  .select('id,funil_id,tipo,nome,identificador_externo,dominio,status,token_publico,meta_token_cifrado,criado_em')
+  .select('id,funil_id,tipo,nome,identificador_externo,dominio,status,token_publico,meta_token_cifrado,meta_assinatura_status,criado_em')
   .eq('conta_id',c.perfil.conta_id).eq('funil_id',c.funil.id)
   .order('criado_em',{ascending:true}).limit(100);
  if(error)return NextResponse.json({erro:'Falha ao listar fontes.'},{status:503});

@@ -2,6 +2,7 @@ import {NextResponse} from 'next/server';
 import {perfilAtual,supabaseAdmin} from '@/lib/supabase/server';
 import {decifrarMeta,cifrarMeta} from '@/lib/crmMetaOAuth';
 import {isAdmin} from '@/lib/crmControleAcesso';
+import {assinarMensagensMessenger} from '@/lib/crmMetaAssinaturas';
 
 function ir(resultado:'ok'|'erro'){return NextResponse.redirect(
  'https://harvest.figueiramarketing.com.br/meta/oauth/concluido?resultado='+resultado,303);}
@@ -28,11 +29,27 @@ export async function POST(req:Request){
    meta_token_cifrado:cifrarMeta(pagina.token),
    meta_escopos:['pages_messaging','pages_manage_metadata'],
    meta_expira_em:null,status:'aguardando_autorizacao',
+   meta_assinatura_status:'pendente',meta_assinatura_em:null,
    atualizado_em:new Date().toISOString(),
   }).eq('id',oauth.fonte_id).eq('conta_id',perfil.conta_id)
    .eq('funil_id',oauth.funil_id).eq('tipo','facebook_messenger')
    .neq('status','pausado').select('id').maybeSingle();
   if(error||!fonte)return ir('erro');
+  // A autorização OAuth não inscreve automaticamente a Page na entrega
+  // de mensagens; confirmar a inscrição, ou permitir nova tentativa manual.
+  let assinatura:'inscrita'|'falha'='falha';
+  try{
+   await assinarMensagensMessenger(pagina.id,pagina.token);
+   assinatura='inscrita';
+  }catch{
+   // Não desfazer o consentimento já concedido e não registrar segredo/token.
+  }
+  const {error:errAssinatura}=await admin.from('crm_fontes_funil').update({
+   meta_assinatura_status:assinatura,
+   meta_assinatura_em:assinatura==='inscrita'?new Date().toISOString():null,
+  }).eq('id',fonte.id).eq('conta_id',perfil.conta_id)
+   .eq('funil_id',oauth.funil_id);
+  if(errAssinatura)return ir('erro');
   await admin.from('crm_meta_oauth_estados').update({
    estado:'concluido',opcoes_cifradas:null,consumido_em:new Date().toISOString(),
   }).eq('id',state).eq('perfil_id',perfil.id).eq('estado','escolher_pagina')
