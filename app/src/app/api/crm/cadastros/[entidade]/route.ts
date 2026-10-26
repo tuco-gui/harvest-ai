@@ -93,3 +93,22 @@ export async function PATCH(req:Request,{params}:{params:Promise<{entidade:strin
   if(error||!data)return NextResponse.json({erro:'Falha ao atualizar registro.'},{status:500});
   return NextResponse.json({registro:data});
 }
+
+/** Excluir do catálogo sem apagar o histórico dos negócios.
+ * Mantém a linha para propostas anteriores e permite reativar depois.
+ */
+export async function DELETE(req:Request,{params}:{params:Promise<{entidade:string}>}) {
+ const c=await contexto((await params).entidade);
+ if('resposta' in c)return c.resposta;
+ if(c.entidade!=='produtos')return NextResponse.json({erro:'Exclusão indisponível neste cadastro.'},{status:405});
+ const body=await req.json().catch(()=>null);
+ const id=Number(body?.id);
+ if(!Number.isSafeInteger(id)||id<1)return NextResponse.json({erro:'Produto inválido.'},{status:400});
+ const {data,error}=await c.admin.from('crm_produtos')
+  .update({ativo:false,atualizado_em:new Date().toISOString()})
+  .eq('conta_id',c.perfil.conta_id).eq('id',id).eq('ativo',true)
+  .select('id,ativo').maybeSingle();
+ if(error)return NextResponse.json({erro:'Falha ao retirar produto do catálogo.'},{status:503});
+ if(!data)return NextResponse.json({erro:'Produto não encontrado ou já inativo.'},{status:404});
+ return NextResponse.json({produto:data});
+}
