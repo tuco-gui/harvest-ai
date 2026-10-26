@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AutomacaoEstagio from './AutomacaoEstagio';
 import { CANAIS_HARVEST } from '@/lib/canaisUnificados';
@@ -29,6 +29,11 @@ export default function FunilDetalhe({
   const [estagios, setEstagios] = useState(estagiosIniciais);
   const [salvando, setSalvando] = useState(false);
   const [sujo, setSujo] = useState(false);
+  // Ao salvar no editor embutido, o CRM carrega as IDs reais dos estágios
+  // recém-criados; atualizar a ficha sem sobrescrever edições não salvas.
+  useEffect(()=>{
+    if(!sujo)setEstagios(estagiosIniciais);
+  },[estagiosIniciais,sujo]);
   const [canalFunil, setCanalFunil] = useState<number|null>(funil.canal_padrao_id);
   const [canalPersistido,setCanalPersistido]=useState<number|null>(funil.canal_padrao_id);
   const [salvandoCanal,setSalvandoCanal] = useState(false);
@@ -182,48 +187,62 @@ export default function FunilDetalhe({
 
   // --- Persistir ---
   async function salvarTudo() {
+    if(salvando)return;
+    if(!estagios.length||!estagios.some(e=>e.grupo==='pipeline')){
+      alert('O pipeline precisa de pelo menos uma etapa.');return;
+    }
+    if(estagios.some(e=>!e.nome.trim())){
+      alert('Preencha o nome de todas as etapas antes de salvar.');return;
+    }
     setSalvando(true);
-    try {
-      const promises: Promise<Response>[] = [];
-      for (const e of estagios) {
-        if (e.id > 0) {
-          promises.push(
-            fetch(`/api/funis/${funil.id}/estagios/${e.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nome: e.nome, cor: e.cor, ordem: e.ordem, probabilidade: e.probabilidade, grupo: e.grupo }),
-            })
-          );
-        } else {
-          promises.push(
-            fetch(`/api/funis/${funil.id}/estagios`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nome: e.nome, cor: e.cor, probabilidade: e.probabilidade, grupo: e.grupo }),
-            })
-          );
-        }
+    const requisitar=async (url:string,init:RequestInit)=>{
+      const resposta=await fetch(url,init);
+      const dados=await resposta.json().catch(()=>({}));
+      if(!resposta.ok)throw Error(dados.erro||'A operação no funil não foi concluída.');
+      return dados;
+    };
+    try{
+      const base='/api/funis/'+funil.id+'/estagios';
+      const removidos=estagiosIniciais.filter(e=>e.id>0&&!estagios.some(x=>x.id===e.id));
+      // Exclusões bloqueadas pelo servidor se a etapa contém negócios.
+      // São processadas antes dos demais campos para não editar parcialmente
+      // o pipeline caso alguma exclusão importante não seja permitida.
+      for(const e of removidos)await requisitar(base+'/'+e.id,{method:'DELETE'});
+      const criados=new Map<number,number>();
+      const desejados=[...estagios].sort((a,b)=>{
+        const ga=a.grupo==='pipeline'?0:1, gb=b.grupo==='pipeline'?0:1;
+        return ga-gb||a.ordem-b.ordem;
+      });
+      for(const e of desejados.filter(e=>e.id<0)){
+        const d=await requisitar(base,{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({nome:e.nome.trim(),cor:e.cor,probabilidade:e.probabilidade,
+            grupo:e.grupo,ordem:e.ordem}),
+        });
+        if(!Number.isSafeInteger(d.estagio?.id)||d.estagio.id<=0)
+          throw Error('O servidor não confirmou o ID da nova etapa.');
+        criados.set(e.id,d.estagio.id);
       }
-
-      const deletados = estagiosIniciais.filter((orig) => !estagios.some((e) => e.id === orig.id));
-      for (const d of deletados) {
-        promises.push(
-          fetch(`/api/funis/${funil.id}/estagios/${d.id}`, { method: 'DELETE' })
-        );
+      // PATCH sequencial: o endpoint recalcula as ordens por grupo.
+      // Promise.all causava disputas entre patches simultâneos no mesmo funil.
+      for(const e of desejados){
+        const id=e.id>0?e.id:criados.get(e.id);
+        if(!id)throw Error('Etapa sem ID confirmado pelo servidor.');
+        await requisitar(base+'/'+id,{
+          method:'PATCH',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({nome:e.nome.trim(),cor:e.cor,ordem:e.ordem,
+            probabilidade:e.probabilidade,grupo:e.grupo}),
+        });
       }
-
-      const results = await Promise.all(promises);
-      const ok = results.every((r) => r.ok);
-      if (ok) {
-        setSujo(false);
-        router.refresh();
-        aoSalvar?.();
-      } else {
-        alert('Alguns estágios não foram salvos.');
-      }
-    } catch {
-      alert('Sem conexão.');
-    } finally {
+      setSujo(false);
+      router.refresh();
+      aoSalvar?.();
+    }catch(err){
+      // Operações anteriores podem ter sido persistidas; não afirmar rollback.
+      alert((err instanceof Error?err.message:'Falha ao salvar alterações.')+
+        ' Confira as etapas antes de tentar novamente. Nenhuma mensagem foi enviada.');
+      aoSalvar?.();
+    }finally{
       setSalvando(false);
     }
   }
