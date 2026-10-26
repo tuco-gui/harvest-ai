@@ -63,8 +63,8 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   return '<iframe title="Atendimento" src="'+origem+'/webchat/'+token+
    '" style="position:fixed;right:18px;bottom:18px;width:360px;max-width:calc(100vw - 28px);height:530px;max-height:85vh;border:0;border-radius:12px;z-index:99999" loading="lazy"></iframe>';
  }
- async function autorizar(fonteId:string){
-  const popup=window.open('','harvest-meta-oauth','popup,width=650,height=740');
+ async function autorizar(fonteId:string,janelaExistente?:Window|null){
+  const popup=janelaExistente??window.open('','harvest-meta-oauth','popup,width=650,height=740');
   if(!popup){setErro('Permita a janela pop-up para autorizar a Meta.');return;}
   setOcupado(true);setErro('');
   try{
@@ -79,6 +79,11 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
  }
  async function cadastrar(){
   if(!funilId||ocupado)return;
+  // A janela deve abrir diretamente no gesto do clique do cliente.
+  // Aguardar cadastro/fetch antes de window.open faz navegadores bloquearem OAuth.
+  const precisaMeta=tipo==='instagram_dm'||tipo==='facebook_messenger';
+  const popup=precisaMeta?window.open('','harvest-meta-oauth','popup,width=650,height=740'):null;
+  if(precisaMeta&&!popup){setErro('Permita janelas pop-up para conectar sua conta Meta.');return;}
   setOcupado(true);setErro('');setAviso('');
   try{
    const r=await fetch('/api/integracoes',{method:'POST',
@@ -87,11 +92,11 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
    if(!r.ok||!d.fonte)throw Error(d.erro||'Não foi possível cadastrar o canal.');
    await carregar();
    if(tipo==='instagram_dm'||tipo==='facebook_messenger'){
-    await autorizar(d.fonte.id);
+    await autorizar(d.fonte.id,popup);
    }else{
     setAviso('Fonte adicionada a este funil. Você pode gerenciá-la logo abaixo.');
    }
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao adicionar integração.');}
+  }catch(e){popup?.close();setErro(e instanceof Error?e.message:'Falha ao adicionar integração.');}
   finally{setOcupado(false);}
  }
  async function retentarAssinatura(fonteId:string){
