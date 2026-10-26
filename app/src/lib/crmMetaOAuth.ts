@@ -1,11 +1,26 @@
 import {createCipheriv,createDecipheriv,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 
 export type PlataformaMeta='instagram_dm'|'facebook_messenger';
 export const ORIGEM_HARVEST='https://harvest.figueiramarketing.com.br';
 export const VERSAO_META='v26.0';
 
+/** Segredos Swarm ficam em /run/secrets, fora de env pública, imagem e Git.
+ * Variáveis de ambiente legadas são mantidas só para staging.
+ */
+export function segredoMeta(nome:'app'|'chave'|'webhook'):string{
+ const nomes={app:'harvest_meta_app_secret',
+  chave:'harvest_meta_token_key',webhook:'harvest_meta_webhook_verify_token'};
+ try{
+  const valor=readFileSync('/run/secrets/'+nomes[nome],'utf8').trim();
+  if(valor)return valor;
+ }catch{/* Segredo ainda não anexado à tarefa Swarm. */}
+ if(nome==='app')return process.env.HARVEST_META_APP_SECRET??'';
+ if(nome==='chave')return process.env.HARVEST_META_TOKEN_KEY??'';
+ return process.env.HARVEST_META_WEBHOOK_VERIFY_TOKEN??'';
+}
 export function chaveCriptografia():Buffer|null{
- const chave=process.env.HARVEST_META_TOKEN_KEY??'';
+ const chave=segredoMeta('chave');
  return /^[a-f0-9]{64}$/i.test(chave)?Buffer.from(chave,'hex'):null;
 }
 export function cifrarMeta(valor:string):string{
@@ -30,7 +45,7 @@ export function configuracaoMeta(tipo:PlataformaMeta):{id:string;secret:string}|
  // Um só aplicativo Meta serve às workspaces. Um ID de produto Instagram
  // opcional pode ser configurado somente se o produto assim exigir.
  const id=tipo==='instagram_dm'?(process.env.HARVEST_INSTAGRAM_APP_ID||process.env.HARVEST_META_APP_ID):process.env.HARVEST_META_APP_ID;
-  const secret=tipo==='instagram_dm'?(process.env.HARVEST_INSTAGRAM_APP_SECRET||process.env.HARVEST_META_APP_SECRET):process.env.HARVEST_META_APP_SECRET;
+  const secret=tipo==='instagram_dm'?(process.env.HARVEST_INSTAGRAM_APP_SECRET||segredoMeta('app')):segredoMeta('app');
  if(!id?.trim()||!secret?.trim()||!chaveCriptografia())return null;
  return {id:id.trim(),secret:secret.trim()};
 }
