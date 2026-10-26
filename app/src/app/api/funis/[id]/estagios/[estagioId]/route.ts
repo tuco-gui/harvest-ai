@@ -98,6 +98,17 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     return NextResponse.json({ erro: 'Não é possível remover o último estágio do pipeline.' }, { status: 400 });
   }
 
+  // Nunca eliminar uma etapa com negócios associados por engano ao editar
+  // o pipeline em lote. A transferência deve ser explícita antes da exclusão.
+  const {count:emUso,error:erroUso}=await admin.from('oportunidades')
+    .select('id',{count:'exact',head:true})
+    .eq('conta_id',perfil.conta_id??'')
+    .eq('funil_id',id).eq('funil_estagio_id',estagioId);
+  if(erroUso)return NextResponse.json({erro:'Falha ao validar uso do estágio.'},{status:503});
+  if((emUso??0)>0)return NextResponse.json({
+    erro:'Esta etapa possui '+emUso+' negócio(s). Mova-os antes de excluir.',
+  },{status:409});
+
   const { error } = await admin
     .from('funil_estagios').delete()
     .eq('id', estagioId);
