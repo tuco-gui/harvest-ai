@@ -442,7 +442,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         embutido aoVoltar={()=>setEditorFunil(null)}
         aoSalvar={()=>void atualizarDadosEditor()}
       /> : <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+      <div className="crm-legado-topo" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         {avancado && funilId && <span className="crm-canal-funil-indicador">
           Canal do funil: {(()=>{
             const id=funis.find(f=>f.id===funilId)?.canal_padrao_id;
