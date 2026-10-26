@@ -133,10 +133,10 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
        {(dados?.funis??[]).filter(f=>f.ativo).map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
       </select>
      </label>
-     <button type="button" className="btn-primario" disabled={!dados?.podeGerenciar||!funilId||ocupado}
+     <button type="button" className="btn-primario" disabled={!dados?.podeGerenciar||!funilId||ocupado||tipo==='whatsapp_cloud_api'||(!metaOk&&['instagram_dm','facebook_messenger'].includes(tipo))}
        onClick={()=>void cadastrar()}>
        {ocupado?'Conectando…':tipo==='webchat'?'Criar webchat':
-        tipo==='whatsapp_cloud_api'?'Configurar WhatsApp oficial':'Conectar com a Meta'}
+        tipo==='whatsapp_cloud_api'?'WhatsApp oficial: integração pendente':'Conectar com a Meta'}
      </button>
     </div>
     <h3>Contas e fontes desta workspace</h3>
