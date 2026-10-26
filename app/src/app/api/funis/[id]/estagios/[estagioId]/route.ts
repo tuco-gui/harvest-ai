@@ -13,6 +13,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
 
   const admin = supabaseAdmin();
+  // Segurança: validar o funil na workspace ativa antes de consultar
+  // ou modificar qualquer etapa por ID (inclusive super_admin).
+  const {data:funil}=await admin.from('funis').select('id')
+    .eq('id',id).eq('conta_id',perfil.conta_id??'').maybeSingle();
+  if(!funil)return NextResponse.json({erro:'Funil não encontrado nesta workspace.'},{status:404});
 
   // Verificar que o estágio pertence ao funil da conta
   const { data: estagio } = await admin
@@ -71,6 +76,11 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   }
 
   const admin = supabaseAdmin();
+  // Segurança: validar o funil na workspace ativa antes de consultar
+  // ou modificar qualquer etapa por ID (inclusive super_admin).
+  const {data:funil}=await admin.from('funis').select('id')
+    .eq('id',id).eq('conta_id',perfil.conta_id??'').maybeSingle();
+  if(!funil)return NextResponse.json({erro:'Funil não encontrado nesta workspace.'},{status:404});
 
   // Verificar que o estágio pertence ao funil da conta
   const { data: estagio } = await admin
