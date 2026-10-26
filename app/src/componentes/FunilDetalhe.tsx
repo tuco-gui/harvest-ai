@@ -639,8 +639,8 @@ export default function FunilDetalhe({
                 <strong>{c.nome}</strong>
                 <small>{c.id==='google_business_reviews'?
                   'Avaliações do Google; não é canal de chat':
-                  c.situacao==='operacional'?'Conector WhatsApp existente':
                   c.id==='webchat'?'Chat incorporável ao site':
+                  c.situacao==='operacional'?'Conector WhatsApp existente':
                   'Permissões Meta necessárias'}</small>
                 {c.id==='whatsapp_waha'||c.id==='whatsapp_evolution'
                   ?<Link href="/configuracoes" onClick={()=>setFontesAbertas(false)}>
