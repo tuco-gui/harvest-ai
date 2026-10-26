@@ -30,6 +30,7 @@ export default function FunilDetalhe({
   const [salvando, setSalvando] = useState(false);
   const [sujo, setSujo] = useState(false);
   const [canalFunil, setCanalFunil] = useState<number|null>(funil.canal_padrao_id);
+  const [canalPersistido,setCanalPersistido]=useState<number|null>(funil.canal_padrao_id);
   const [salvandoCanal,setSalvandoCanal] = useState(false);
   const [avisoCanal,setAvisoCanal] = useState('');
   const [fontesAbertas,setFontesAbertas]=useState(false);
@@ -68,8 +69,10 @@ export default function FunilDetalhe({
       });
       const d=await resposta.json();
       if(!resposta.ok)throw Error(d.erro||'Não consegui salvar o canal.');
+      setCanalPersistido(canalFunil);
       setAvisoCanal('Canal deste funil salvo. Campanhas com seleção manual não foram alteradas.');
       router.refresh();
+      aoSalvar?.();
     } catch(e) {
       setAvisoCanal(e instanceof Error?e.message:'Falha ao salvar vínculo.');
     } finally {setSalvandoCanal(false);}
@@ -295,7 +298,7 @@ export default function FunilDetalhe({
             </select>
           </label>
           <button type="button" className="btn-primario"
-            disabled={salvandoCanal || canalFunil===funil.canal_padrao_id}
+            disabled={salvandoCanal || canalFunil===canalPersistido}
             onClick={()=>void salvarCanalPadrao()}>
               {salvandoCanal?'Salvando…':'Salvar canal do funil'}
           </button>
