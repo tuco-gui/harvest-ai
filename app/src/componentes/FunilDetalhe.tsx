@@ -50,17 +50,6 @@ export default function FunilDetalhe({
   const [dominioSite,setDominioSite]=useState('');
   const [fonteCopiada,setFonteCopiada]=useState('');
   const [iniciandoOAuth,setIniciandoOAuth]=useState<string|null>(null);
-  useEffect(()=>{
-    const receber=(evento:MessageEvent)=>{
-      if(evento.origin!==window.location.origin||evento.data?.tipo!=='harvest-meta-oauth')return;
-      void carregarFontes();
-      if(evento.data?.resultado==='erro')
-        setErroFontes('A autorização Meta não foi concluída. Confira permissões e app review.');
-      else setErroFontes('');
-    };
-    window.addEventListener('message',receber);
-    return()=>window.removeEventListener('message',receber);
-  },[carregarFontes]);
   async function conectarMeta(id:string){
     if(iniciandoOAuth)return;
     const popup=window.open('','harvest-meta-oauth','popup,width=650,height=740');
@@ -90,6 +79,18 @@ export default function FunilDetalhe({
     finally{setCarregandoFontes(false);}
   },[funil.id,autoPermitido]);
   useEffect(()=>{void carregarFontes();},[carregarFontes]);
+  useEffect(()=>{
+    const receber=(evento:MessageEvent)=>{
+      if(evento.origin!==window.location.origin||evento.data?.tipo!=='harvest-meta-oauth')return;
+      void carregarFontes();
+      if(evento.data?.resultado==='erro')
+        setErroFontes('A autorização Meta não foi concluída. Confira permissões e app review.');
+      else setErroFontes('');
+    };
+    window.addEventListener('message',receber);
+    return()=>window.removeEventListener('message',receber);
+  },[carregarFontes]);
+
   async function adicionarFonte(tipo:string){
     if(salvandoFonte)return;
     setSalvandoFonte(tipo);setErroFontes('');
