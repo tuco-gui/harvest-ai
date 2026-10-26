@@ -16,8 +16,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     .from('funis').select('id')
     .eq('id', id).eq('conta_id', perfil.conta_id ?? '').maybeSingle();
 
-  // Super admin pode acessar qualquer funil
-  if (!funil && perfil.papel !== 'super_admin') {
+  // Até super_admin deve respeitar a workspace ATIVA da sessão.
+  if (!funil) {
     return NextResponse.json({ erro: 'Funil não encontrado.' }, { status: 404 });
   }
 
@@ -44,7 +44,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const { data: funil } = await admin
     .from('funis').select('id')
     .eq('id', id).eq('conta_id', perfil.conta_id ?? '').maybeSingle();
-  if (!funil && perfil.papel !== 'super_admin') {
+  if (!funil) {
     return NextResponse.json({ erro: 'Funil não encontrado.' }, { status: 404 });
   }
 
