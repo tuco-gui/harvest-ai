@@ -8,7 +8,7 @@ export const CANAIS_HARVEST = [
   { id:'whatsapp_cloud_api', nome:'WhatsApp · API oficial Meta', situacao:'planejado', entrada:false, saida:false },
   { id:'instagram_dm', nome:'Instagram · Direct', situacao:'planejado', entrada:false, saida:false },
   { id:'facebook_messenger', nome:'Facebook · Messenger', situacao:'planejado', entrada:false, saida:false },
-  { id:'webchat', nome:'Webchat · site', situacao:'planejado', entrada:false, saida:false },
+  { id:'webchat', nome:'Webchat · site', situacao:'operacional', entrada:true, saida:true },
   { id:'google_business_reviews', nome:'Google Perfil da Empresa · avaliações', situacao:'planejado', entrada:false, saida:false },
   { id:'google_business_messages', nome:'Google Business Messages · chat descontinuado', situacao:'indisponivel', entrada:false, saida:false },
 ] as const;

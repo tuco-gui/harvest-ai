@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import EncaminhamentoChatwootCRM from '@/componentes/EncaminhamentoChatwootCRM';
+import ConversaExternaDetalheCRM from '@/componentes/ConversaExternaDetalheCRM';
 import SeletorEtiquetasCRM from '@/componentes/SeletorEtiquetasCRM';
 import { estadoSla, NOMES_PRIORIDADE, PRIORIDADES, type Prioridade } from '@/lib/crmEtiquetas';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -9,6 +10,10 @@ import { STATUS_ATENDIMENTO, type ConversaAtendimento,
   type StatusAtendimento } from '@/lib/crmAtendimentos';
 
 type Atendente = { id: string; nome: string };
+type ConversaExternaLista={
+ id:string;nome:string|null;visitante_id:string;status:string;responsavel_id:string|null;
+ atualizado_em:string;fonte:{id:string;tipo:string;nome:string;status:string;funil_id:number}|null;
+};
 type Msg = { id: string; direcao: 'entrada' | 'saida'; texto: string; data: string; status: string | null };
 type Detalhe = {
   telefone: string; timeline: Msg[]; nome: string | null;
@@ -23,6 +28,8 @@ type Filtro = 'todos' | StatusAtendimento | 'sem_atendente' | 'meus';
 
 export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneInicial?: string }) {
   const [conversas, setConversas] = useState<ConversaAtendimento[]>([]);
+  const [externas,setExternas]=useState<ConversaExternaLista[]>([]);
+  const [conversaExternaId,setConversaExternaId]=useState<string|null>(null);
   const [atendentes, setAtendentes] = useState<Atendente[]>([]);
   const [podeAtribuir, setPodeAtribuir] = useState(false);
   const [telefone, setTelefone] = useState<string | null>(null);
@@ -64,6 +71,19 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     }
   }, []);
 
+  const carregarExternas=useCallback(async(signal?:AbortSignal)=>{
+    try{
+      const r=await fetch('/api/crm/conversas-externas',{cache:'no-store',signal});
+      const d=await r.json();
+      if(r.ok&&!signal?.aborted)setExternas(d.conversas??[]);
+    }catch{/* Não interrompe o WhatsApp por falha de outro canal. */}
+  },[]);
+  useEffect(()=>{
+    const ctl=new AbortController();
+    void carregarExternas(ctl.signal);
+    const tempo=setInterval(()=>void carregarExternas(ctl.signal),30000);
+    return()=>{ctl.abort();clearInterval(tempo);};
+  },[carregarExternas]);
   useEffect(() => {
     const ctrl = new AbortController();
     void carregar(ctrl.signal);
@@ -156,6 +176,16 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     });
   }, [conversas, busca, filtro]);
 
+  const externasFiltradas=useMemo(()=>{
+    const termo=busca.trim().toLocaleLowerCase('pt-BR');
+    return externas.filter(c=>{
+      if(filtro==='sem_atendente'&&c.responsavel_id)return false;
+      if(['aberto','pendente','resolvido'].includes(filtro)&&c.status!==filtro)return false;
+      if(termo&&![c.nome??'',c.visitante_id,c.fonte?.nome??'',c.fonte?.tipo??'']
+        .some(v=>v.toLocaleLowerCase('pt-BR').includes(termo)))return false;
+      return true;
+    });
+  },[externas,busca,filtro]);
   async function salvar() {
     if (!selecionada || salvando) return;
     setSalvando(true); setErro(''); setAviso('');
@@ -249,8 +279,8 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
     <div className="crm-atendimentos-corpo">
       <aside className="crm-atendimentos-lista">
         <div className="crm-atendimentos-resumo">
-          <strong>{conversas.filter(c => c.status !== 'resolvido').length} em andamento</strong>
-          <span>{conversas.filter(c => c.status === 'resolvido').length} resolvidos · {contagemSlaVencido} SLA vencido(s)</span>
+          <strong>{conversas.filter(c => c.status !== 'resolvido').length+externas.filter(c=>c.status!=='resolvido').length} em andamento</strong>
+          <span>{conversas.filter(c => c.status === 'resolvido').length+externas.filter(c=>c.status==='resolvido').length} resolvidos · {contagemSlaVencido} SLA vencido(s)</span>
         </div>
         <input aria-label="Buscar conversas" placeholder="Buscar por nome, telefone ou etiqueta"
           value={busca} onChange={e => setBusca(e.target.value)}/>
@@ -265,10 +295,10 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
         </div>
         <div className="crm-atendimentos-scroll">
           {carregando && <p className="crm-atendimentos-vazio">Carregando conversas…</p>}
-          {!carregando && !filtradas.length && <p className="crm-atendimentos-vazio">Nenhuma conversa neste filtro.</p>}
+          {!carregando && !filtradas.length && !externasFiltradas.length && <p className="crm-atendimentos-vazio">Nenhuma conversa neste filtro.</p>}
           {filtradas.map(c => <button type="button" key={c.telefone+':'+(c.canalId??0)}
             className={c.telefone === telefone && c.canalId===canalFiltro ? 'crm-atendimento-contato selecionado' : 'crm-atendimento-contato'}
-            onClick={() => { setCanalFiltro(c.canalId);setTelefone(c.telefone);setMostrarAuditoria(false);setAviso(''); setErro(''); }} >
+            onClick={() => { setConversaExternaId(null);setCanalFiltro(c.canalId);setTelefone(c.telefone);setMostrarAuditoria(false);setAviso(''); setErro(''); }} >
             <span className="crm-atendimento-contato-topo">
               <strong>{c.nome || c.telefone}</strong><time>{data(c.ultimaRecebida)}</time>
             </span>
@@ -285,13 +315,32 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
               {estadoSla(c.prazo_triagem_em,c.status)==='vencido'&&<span className="crm-sla-vencido">SLA vencido</span>}
             </span>
           </button>)}
+          {externasFiltradas.map(c=><button type="button" key={'externa:'+c.id}
+            className={c.id===conversaExternaId?'crm-atendimento-contato selecionado':'crm-atendimento-contato'}
+            onClick={()=>{setTelefone(null);setConversaExternaId(c.id);setAviso('');setErro('');}}>
+            <span className="crm-atendimento-contato-topo">
+              <strong>{c.nome||'Visitante do site'}</strong>
+              <time>{data(c.atualizado_em)}</time>
+            </span>
+            <span className="crm-atendimento-preview">{c.fonte?.nome||'Fonte externa'}</span>
+            <span className="crm-atendimento-contato-meta">
+              <span className={'crm-atendimento-status '+c.status}>{STATUS[c.status as StatusAtendimento]??c.status}</span>
+              <span>{c.fonte?.tipo==='webchat'?'Webchat':
+                c.fonte?.tipo==='instagram_dm'?'Instagram Direct':
+                c.fonte?.tipo==='facebook_messenger'?'Messenger':'Canal externo'}</span>
+              <span>{nomeAtendente(c.responsavel_id)}</span>
+            </span>
+          </button>)}
         </div>
       </aside>
 
       <section className="crm-atendimento-detalhe" aria-label="Conversa selecionada">
-        {!selecionada && <div className="crm-atendimentos-vazio">
+        {!selecionada && !conversaExternaId && <div className="crm-atendimentos-vazio">
           Selecione uma conversa para visualizar o histórico e gerenciar o atendimento.
         </div>}
+        {conversaExternaId&&<ConversaExternaDetalheCRM key={conversaExternaId}
+          id={conversaExternaId} podeAtribuir={podeAtribuir} atendentes={atendentes}
+          aoSalvar={()=>void carregarExternas()}/>}
         {selecionada && <>
           <header>
             <div>
