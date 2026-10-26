@@ -5,10 +5,12 @@ import {isAdmin} from '@/lib/crmControleAcesso';
 export const dynamic='force-dynamic';
 function linhasCSV(s:string):string[][]{
  const rows:string[][]=[];let row:string[]=[],v='',quoted=false;
+ const firstLine=s.split(/\r?\n/,1)[0]||'';
+ const delimiter=(firstLine.match(/;/g)||[]).length>(firstLine.match(/,/g)||[]).length?';':',';
  for(let i=0;i<s.length;i++){
   const c=s[i];
   if(c==='"'){if(quoted&&s[i+1]==='"'){v+='"';i++;}else quoted=!quoted;}
-  else if(!quoted&&(c===';'||c===',')){row.push(v.trim());v='';}
+  else if(!quoted&&c===delimiter){row.push(v.trim());v='';}
   else if(!quoted&&(c==='\n'||c==='\r')){
    if(c==='\r'&&s[i+1]==='\n')i++;
    row.push(v.trim());if(row.some(x=>x))rows.push(row);row=[];v='';
@@ -28,7 +30,9 @@ export async function POST(req:Request){
  if(!(file instanceof File)||!file.name.toLowerCase().endsWith('.csv')||file.size>1024*1024)
   return NextResponse.json({erro:'Envie um CSV de até 1 MB.'},{status:400});
  const bytes=await file.arrayBuffer();
- const texto=new TextDecoder('utf-8',{fatal:true}).decode(bytes).replace(/^\uFEFF/,'');
+ let texto:string;
+ try{texto=new TextDecoder('utf-8',{fatal:true}).decode(bytes).replace(/^\uFEFF/,'');}
+ catch{return NextResponse.json({erro:'Salve o CSV em UTF-8.'},{status:422});}
  let rows:string[][];
  try{rows=linhasCSV(texto);}catch{return NextResponse.json({erro:'CSV inválido.'},{status:422});}
  if(rows.length<2||rows.length>501)return NextResponse.json({erro:'CSV deve ter cabeçalho e até 500 produtos.'},{status:422});
