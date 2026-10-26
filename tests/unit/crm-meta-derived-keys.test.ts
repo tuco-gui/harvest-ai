@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createHmac} from 'node:crypto';
+import {chaveCriptografia,tokenVerificacaoMeta,configuracaoMeta}
+ from '../../app/src/lib/crmMetaOAuth.ts';
+process.env.HARVEST_META_APP_ID='2112411986271610';
+process.env.HARVEST_META_APP_SECRET='a'.repeat(32);
+delete process.env.HARVEST_META_TOKEN_KEY;
+delete process.env.HARVEST_META_WEBHOOK_VERIFY_TOKEN;
+const key=chaveCriptografia();
+assert(key&&key.length===32,'fallback HKDF deve retornar 32 bytes');
+assert.deepEqual(chaveCriptografia(),key,'chave de fallback deve ser estável');
+const token=tokenVerificacaoMeta();
+assert.match(token,/^[0-9a-f]{64}$/);
+assert.equal(token,createHmac('sha256','a'.repeat(32))
+ .update('harvest-meta-webhook-verification-v1').digest('hex'));
+assert.notEqual(token,'a'.repeat(32));
+assert.equal(configuracaoMeta('facebook_messenger')?.id,'2112411986271610');
+assert.equal(configuracaoMeta('instagram_dm')?.id,'2112411986271610');
+process.env.HARVEST_META_TOKEN_KEY='b'.repeat(64);
+process.env.HARVEST_META_WEBHOOK_VERIFY_TOKEN='valor-manual-de-staging';
+assert.equal(chaveCriptografia()?.toString('hex'),'b'.repeat(64),'chave dedicada tem prioridade');
+assert.equal(tokenVerificacaoMeta(),'valor-manual-de-staging','token dedicado tem prioridade');
+const src=(p:string)=>readFileSync(p,'utf8');
+const api=src('app/src/app/api/integracoes/meta/configurar/route.ts');
+const ui=src('app/src/componentes/IntegracoesCRM.tsx');
+const hook=src('app/src/app/api/webhook/meta-mensagens/route.ts');
+assert.match(api,/isAdmin\(perfil\.papel\)/);
+assert.match(api,/perfilTemModulo\(admin,perfil,'crm_avancado'\)/);
+assert.match(api,/'Cache-Control':'private, no-store'/);
+assert.doesNotMatch(api,/app_secret:/i);
+assert.match(api,/verify_token:token/);
+assert.match(ui,/Mostrar URLs e código de verificação/);
+assert.match(ui,/\/api\/integracoes\/meta\/configurar/);
+assert.match(hook,/tokenVerificacaoMeta\(\)/);
+console.log('Meta App Secret: derivação HKDF, token HMAC e painel admin protegidos OK');
