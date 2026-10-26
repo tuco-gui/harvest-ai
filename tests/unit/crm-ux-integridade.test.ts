@@ -15,6 +15,11 @@ assert.match(crm,/\{editorFunil\s*\?\s*<FunilDetalhe/,'editor de funil deve abri
 assert.match(crm,/embutido aoVoltar=/,'editor precisa voltar ao pipeline sem criar outra tela');
 assert.match(editor,/crm-kommo-fontes/,'fontes de lead devem estar na lateral das etapas');
 assert.match(editor,/fontesAbertas/,'modal de fontes precisa estar no contexto do funil');
+assert.match(editor,/ordemVisual\[from\]/,'arrastar usa ordem visual e não índice antigo');
+assert.match(editor,/proximoIdLocal\.current--/,'novos estágios não compartilham IDs temporários');
+assert.doesNotMatch(editor,/Promise\.all\(promises\)/,
+ 'o salvamento das etapas não pode reordenar em paralelo');
+assert.match(editor,/for\(const e of desejados\)/,'persistir ordenação sequencialmente');
 assert.match(crm,/crm-kommo-filtros-vistas/,'vistas do funil na coluna de filtros');
 assert.match(crm,/crm-kommo-filtros-propriedades/,'propriedades dos leads na coluna central');
 assert.match(crm,/crm-kommo-filtros-tags/,'etiquetas/gerência junto dos filtros');
@@ -33,6 +38,10 @@ for (const route of routes){
  assert.doesNotMatch(route,/!funil\s*&&\s*perfil\.papel\s*!==\s*'super_admin'/,
  'superadmin não pode transpor o tenant ativo por ID do funil');
 }
+assert.match(routes[0],/\.eq\('grupo',grupo\)/,
+ 'nova etapa usa ordenação independente por grupo');
+assert.match(routes[1],/\.eq\('grupo',b\.grupo/,
+ 'a atualização separa pipeline e encerramento');
 assert.match(routes[1],/\.eq\('funil_estagio_id',estagioId\)/,
  'não excluir etapa com negócios associados');
 console.log('Integridade UX: editor inline, fontes, filtros, contatos, Inbox e isolamento da conta OK');
