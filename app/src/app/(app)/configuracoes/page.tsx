@@ -106,6 +106,7 @@ export default async function Pagina() {
       mostraEnriquecimento={mostraEnriquecimento}
       eSuperAdmin={perfil.papel === 'super_admin'}
       eAdmin={perfil.papel === 'admin'}
+      crmAvancado={perfil.papel === 'super_admin' || modulos.has('crm_avancado')}
       optOuts={optOutsResult.dados}
       optOutsTotal={optOutsResult.total}
       optOutPolicy={politica}
