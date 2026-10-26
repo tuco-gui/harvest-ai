@@ -22,7 +22,8 @@ export async function trocarCodigoMeta(tipo:PlataformaMeta,code:string):
   });
   if(typeof curto.access_token!=='string'||!curto.user_id)
    throw Error('Meta não retornou credenciais profissionais.');
-  const granted=Array.isArray(curto.permissions)?curto.permissions.map(String):[];
+  const granted=Array.isArray(curto.permissions)?curto.permissions.map(String):
+   typeof curto.permissions==='string'?curto.permissions.split(',').map((x:string)=>x.trim()):[];
   if(!granted.includes('instagram_business_manage_messages'))
    throw Error('Autorize instagram_business_manage_messages para receber e responder DMs.');
   const u=new URL('https://graph.instagram.com/access_token');
