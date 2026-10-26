@@ -54,13 +54,13 @@ export default async function PaginaCrm() {
 
   return (
     <div className="pagina pagina-larga crm-pagina">
-      <header className="cabecalho-pagina">
+      {!avancado && <header className="cabecalho-pagina">
         <p className="label">Comercial</p>
         <h1>Pipeline de vendas</h1>
         <p className="ajuda">
           Acompanhe oportunidades, próximas ações e conversas em um único lugar.
         </p>
-      </header>
+      </header>}
       <CrmPipeline
         avancado={avancado}
         oportunidades={opsFiltradas}
