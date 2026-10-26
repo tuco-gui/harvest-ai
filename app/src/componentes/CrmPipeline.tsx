@@ -56,6 +56,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [filtroAberto, setFiltroAberto] = useState(false);
+  const [vistaLeads,setVistaLeads]=useState<'ativos'|'meus'|'ganhos'|'perdidos'>('ativos');
   const [tagsFiltro, setTagsFiltro] = useState<string[]>([]);
   const [tagsOperador, setTagsOperador] = useState<'ou'|'e'>('ou');
   const [coresEtiquetas, setCoresEtiquetas] = useState<Record<string,string|null>>({});
@@ -179,7 +180,12 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
   const estagios = mostrarEncerrados ? estagiosEncerrados : estagiosPipeline;
   const probabilidadeLocal = (id:string) => [...estagiosPipeline,...estagiosEncerrados].find(e=>e.id===id)?.probabilidade ?? probabilidadeEstagio(id);
-  const agrupar = (estagio: string) => visiveis.filter((o) => normalizar(o.estagio) === estagio);
+  const visiveisVista = avancado ? visiveis.filter(o=>
+    vistaLeads==='meus' ? Boolean(perfilId)&&o.owner_id===perfilId :
+    vistaLeads==='ganhos' ? normalizar(o.estagio)==='ganho' :
+    vistaLeads==='perdidos' ? normalizar(o.estagio)==='perdido' : true
+  ) : visiveis;
+  const agrupar = (estagio: string) => visiveisVista.filter(o=>normalizar(o.estagio)===estagio);
   const nomeOwner = (id: string | null) => owners.find((o) => o.id === id)?.nome ?? 'Sem responsável';
   const nomeCampanha = (id: number | null) => campanhas.find((c) => c.id === id)?.nome ?? null;
   const estiloEtiqueta = (nome:string) => {
@@ -416,7 +422,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         {avancado && <Link className="crm-atalho-tarefas" href="/crm/tarefas">Tarefas e prazos</Link>}
          {avancado && podeEditar && <details className="crm-pipeline-menu">
            <summary title="Opções do pipeline">···</summary>
-           <div><Link href={funilId?`/funis/${funilId}`:"/funis"}>Editar pipeline e canal</Link>
+           <div><Link href={funilId?`/funis/${funilId}`:"/funis"}>Editar pipeline e fontes de lead</Link>
              <Link href="/crm/campos-personalizados">Personalizar campos</Link></div>
          </details>}
         {funis.length > 0 && (
@@ -439,20 +445,45 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         {podeEditar && <button className="btn-primario crm-nova" type="button" onClick={() => { setNova({...NOVA_OPORTUNIDADE,estagio:estagiosPipeline[0]?.id||'novo'}); setNovaAberta(true); setErro(null); }}>+ Nova oportunidade</button>}
       </div>
 
-      {avancado && filtroAberto && <section className="crm-pipeline-filtro-tags">
-         <div className="crm-pipeline-filtro-topo"><strong>Tags</strong><button type="button"
-           onClick={()=>setFiltroAberto(false)}>Fechar filtros</button></div>
-         <GerenciadorEtiquetasCRM selecionadas={tagsFiltro} onChange={setTagsFiltro}
-           contexto="negócio" limite={20} contagens={contagemTags}/>
-         <label>Exibir negócios com
-           <select value={tagsOperador} onChange={e=>setTagsOperador(e.target.value as 'ou'|'e')}>
-             <option value="ou">Qualquer tag selecionada (OU)</option>
-             <option value="e">Todas as tags selecionadas (E)</option>
-           </select>
-         </label>
-         <button type="button" onClick={()=>setTagsFiltro([])}>Limpar filtro de tags</button>
-       </section>}
-       {erro && <div className="crm-aviso" role="alert">{erro}<button type="button" onClick={() => setErro(null)}>×</button></div>}
+      {avancado && filtroAberto && <section className="crm-kommo-filtros" aria-label="Buscar e filtrar leads">
+          <nav className="crm-kommo-filtros-vistas" aria-label="Vistas de leads">
+            <strong>Vistas salvas</strong>
+            {([
+              ['ativos','Leads ativos'],['meus','Meus leads'],['ganhos','Leads ganhos'],
+              ['perdidos','Leads perdidos'],
+            ] as const).map(([id,nome])=><button type="button" key={id}
+              className={vistaLeads===id?'ativo':''}
+              onClick={()=>{setVistaLeads(id);setMostrarEncerrados(id==='perdidos');}}>{nome}</button>)}
+          </nav>
+          <div className="crm-kommo-filtros-propriedades">
+            <strong>Propriedades do lead</strong>
+            <label>Pesquisar<input value={busca} onChange={e=>setBusca(e.target.value)}
+              placeholder="Nome, empresa ou telefone"/></label>
+            <label>Responsável<select value={ownerFiltro} onChange={e=>setOwnerFiltro(e.target.value)}>
+              <option value="">Todos os responsáveis</option>
+              {owners.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
+            <label>Campanha<select value={campanhaFiltro} onChange={e=>setCampanhaFiltro(e.target.value)}>
+              <option value="">Todas as campanhas</option>
+              {campanhas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
+            <label>Combinação de etiquetas<select value={tagsOperador}
+              onChange={e=>setTagsOperador(e.target.value as 'ou'|'e')}>
+              <option value="ou">Qualquer tag (OU)</option>
+              <option value="e">Todas as tags (E)</option>
+            </select></label>
+            <button type="button" onClick={()=>{setBusca('');setOwnerFiltro('');
+              setCampanhaFiltro('');setTagsFiltro([]);setVistaLeads('ativos');setMostrarEncerrados(false);}}>
+              Limpar filtros
+            </button>
+          </div>
+          <div className="crm-kommo-filtros-tags">
+            <GerenciadorEtiquetasCRM selecionadas={tagsFiltro} onChange={setTagsFiltro}
+              contexto="negócio" limite={20} contagens={contagemTags}/>
+          </div>
+          <div className="crm-kommo-filtros-acoes">
+            <button type="button" onClick={()=>setFiltroAberto(false)}>Aplicar filtros</button>
+          </div>
+        </section>}
+        {erro && <div className="crm-aviso" role="alert">{erro}<button type="button" onClick={() => setErro(null)}>×</button></div>}
 
       {visualizacao === 'kanban' ? (
       <div className={`crm-kanban ${mostrarEncerrados ? 'crm-kanban-encerrados' : ''}`}>
@@ -488,7 +519,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
             </tr>
           </thead>
           <tbody>
-            {visiveis.map((op) => {
+            {visiveisVista.map((op) => {
               const estCor = estagios.find((e) => e.id === normalizar(op.estagio))?.cor || '#8b8b8b';
               return (
               <tr key={op.id} onClick={() => void abrirFicha(op)} style={{ cursor: 'pointer' }}>
@@ -505,7 +536,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
               </tr>
               );
             })}
-            {!visiveis.length && <tr><td colSpan={8} className="crm-coluna-vazia">Nenhuma oportunidade</td></tr>}
+            {!visiveisVista.length && <tr><td colSpan={8} className="crm-coluna-vazia">Nenhuma oportunidade</td></tr>}
           </tbody>
         </table>
       </div>
