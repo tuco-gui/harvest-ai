@@ -38,3 +38,14 @@ Referência de usuário: gravação `Recording 2026-10-25 at 21-15-58.mp4`, 6m03
 - CI inclui testes anteriores de canais e funis, TypeScript e Next build. Nenhuma mensagem externa nem alteração SQL neste PR.
 - Browser connector retornou erro de `originating browser context` na tentativa de ler aba do usuário, TinyFish não possui perfil autenticado salvo no domínio do Harvest; não afirmar que navegação/prints autenticados foram executados.
 - Não se deve habilitar automações ou apagar dados de clientes para fins de teste.
+
+## Homologação técnica e publicação — 26/10/2026 UTC
+- PR [#28](https://github.com/tuco-gui/harvest-ai/pull/28) incorporado via squash `50f3ef552c7c3a5a2504ce44cbae4f9c4f4f5110`.
+- GitHub Actions validação de tipos, testes, regressão de UX e Next.js build na branch: **success** (run `40255381773`). Build e publicação da imagem na main: **success** (run `40255537332`).
+- Swarm `harvest_harvest` alterado **somente na imagem**; `UpdateStatus=completed`, task `running` sem erro; sem interferir no WAHA, Chatwoot, Supabase ou containers de clientes.
+- Imagem implantada: `ghcr.io/tuco-gui/harvest-ai:50f3ef552c7c3a5a2504ce44cbae4f9c4f4f5110@sha256:f7113a136ac2beab417866f7e04246027598aa1b5f6dd01bc94841fd46554564`.
+- Rollback de imagem: `ghcr.io/tuco-gui/harvest-ai:56dc16465a4a947f7f6bac7eb7b34718201ca801@sha256:409a5ab276997d589f0643eebe83e50c0699cf2f63f66736312ca92e608dd1b1`.
+- Smoke HTTP no contêiner atualizado: `/entrar=200`; `/crm`, `/crm/contatos`, `/crm/atendimentos`, `/crm/campos-personalizados`, `/crm/cadastros/empresas`, `/crm/cadastros/produtos`, `/crm/tarefas`, `/funis`, `/funis/1`, `/inbox`, `/api/funis/1`, `/api/funis/1/estagios`, `/api/crm/atendimentos` retornaram `307 /entrar` sem sessão, conforme restrição de acesso. ExitCode 0.
+- Contêiner de app `running`, RestartCount `0`. Contêiner helper Docker temporário removido.
+- **Limitação documentada e não resolvida:** sem sessão autenticada no navegador integrado, não foi possível clicar e produzir screenshots reais de cada tela logada. Connector Browser exige `originating browser context`; perfil TinyFish conectado não tem login salvo em Harvest. O teste HTTP sem sessão verifica rota/proteção, não certifica layout pixel a pixel, responsividade nem operações de criação/edição.
+- **Pontos ainda não certificados:** edição visual com sessão, contatos admin vs operador com dados reais, filtros/tags alterando registros reais, respostas WAHA/Evolution de verdade, conectores Meta Instagram/Messenger/Webchat/Google e compatibilidade real iOS. Não ativar automações nem mandar mensagens para fazer QA sem canal e destinatário controlados.
