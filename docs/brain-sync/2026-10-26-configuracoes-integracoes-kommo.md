@@ -24,3 +24,15 @@ A plataforma usa **um único aplicativo Meta de propriedade da Figueira**, autor
 - Nenhum envio de DM, mensagem WhatsApp, inscrição de página ou autorização de cliente por inferência.
 - OAuth de clientes e assinaturas Meta dependem de App Review/permissões válidas e aprovação pelo titular da conta.
 - Não relatar conexão real ou homologação até testar OAuth, callbacks e mensagens recebidas com uma conta profissional autorizada.
+
+## Publicação e QA em produção — 26/10/2026
+
+- PR [#31](https://github.com/tuco-gui/harvest-ai/pull/31) integrado ao main como `ddf77cdaf6173b63cec1dae8b44e1c5bd128b4ba`.
+- Dois workflows de CI da branch (hotfix de autenticação e agentes) finalizados em **success**, com testes da aba Integrações e build Next.js. Build/push da imagem `40342082368`: **success**.
+- Swarm serviço `harvest_harvest` atualizado **somente na imagem** com `UpdateStatus=completed`, tarefa nova `running`, contêiner `RestartCount=0`.
+- Imagem implantada `ghcr.io/tuco-gui/harvest-ai:ddf77cdaf6173b63cec1dae8b44e1c5bd128b4ba@sha256:55c1ca647416bc011455fd407a9cc646e9f93333c056fbb4d5ee0a99d5a5a777`.
+- Rollback `ghcr.io/tuco-gui/harvest-ai:4434cedad1425a9ddf2981d3b7cacceb1adf7f76@sha256:a3b5607eef0a1567a5afdb645063c752fd3b7de654ce19014f6756fc7a3710ae`.
+- Log de inicialização: `Next.js 15.5.23, Ready in 274ms`. Smoke anônimo no contêiner: `/entrar=200`, `/configuracoes=307 /entrar`, `/api/integracoes=307 /entrar`, `/api/webhook/meta-mensagens=403` sem challenge (comportamento correto). ExitCode 0. Contêiner helper de deploy removido.
+- Gateway `meta_figueira` institucional permanece pronto com acesso a Graph, mas configuração inspecionada do serviço Harvest **não possui** `HARVEST_META_APP_ID`, `HARVEST_META_APP_SECRET`, `HARVEST_INSTAGRAM_APP_ID`, `HARVEST_INSTAGRAM_APP_SECRET` ou `HARVEST_META_TOKEN_KEY` neste momento.
+- Portanto, interface e código OAuth estão publicados, mas a conexão Instagram/Messenger REAL **não foi concluída**. Para aproveitar o app Meta já existente, a credencial de OAuth (App ID + App Secret) precisa ser provisionada do cofre institucional para o serviço Harvest com chave AES e callback/webhook configurados no mesmo app, sem inventar credenciais ou usar access token Graph como app secret. Nenhuma conta de cliente foi vinculada e nenhuma mensagem enviada.
+- Navegador conectado contém aba Harvest autenticada na rota `/crm` mas o navegador de chat apenas permite ler a aba atual, sem navegar/clicar para revisar a nova `/configuracoes` neste turno. QA visual interativo da aba depende de navegação do usuário ou Work.
