@@ -94,6 +94,21 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
    normal(r.nome)===normal(p.nome) &&
    ((p.email && normal(r.email)===normal(p.email)) ||
     (p.telefone && p.telefone.replace(/\D/g,'')===r.telefone?.replace(/\D/g,'')))));
+ async function retirarProduto(registro:Registro){
+  if(entidade!=='produtos'||!registro.ativo)return;
+  if(!window.confirm('Retirar '+registro.nome+' do catálogo? O histórico de negócios será preservado.'))return;
+  setSalvando(true);setErro('');setSucesso('');
+  try{
+   const response=await fetch('/api/crm/cadastros/produtos',{
+    method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:registro.id})
+   });
+   const result=await response.json();
+   if(!response.ok)throw Error(result.erro||'Falha ao retirar produto.');
+   setSucesso('Produto retirado do catálogo. Para reativar, use Editar cadastro.');
+   await carregar();
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao retirar produto.');}
+  finally{setSalvando(false);}
+ }
  function cadastrarPessoaDoNegocio(p:{nome:string;telefone:string|null;email:string|null}) {
   setId(null);setForm({...REGISTRO_INICIAL.contatos(),nome:p.nome,
     telefone:p.telefone??'',email:p.email??''});
@@ -192,6 +207,8 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
        :<p>{x.email||x.telefone||'Sem contato informado'}</p>}
       {entidade==='contatos'&&x.empresa_id&&<p>Empresa: {empresas.find(a=>a.id===x.empresa_id)?.nome||'Empresa vinculada'}</p>}
       <button type="button" onClick={()=>editar(x)}>Editar cadastro</button>
+      {entidade==='produtos'&&x.ativo&&<button type="button" disabled={salvando}
+       onClick={()=>void retirarProduto(x)}>Retirar do catálogo</button>}
     </article>)}
   </section>
   {entidade==='contatos' && pendentes.length > 0 && <section className="crm-contatos-pendentes">
