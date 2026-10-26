@@ -453,7 +453,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
               ['perdidos','Leads perdidos'],
             ] as const).map(([id,nome])=><button type="button" key={id}
               className={vistaLeads===id?'ativo':''}
-              onClick={()=>{setVistaLeads(id);setMostrarEncerrados(id==='perdidos');}}>{nome}</button>)}
+              onClick={()=>{setVistaLeads(id);setMostrarEncerrados(id==='perdidos'||id==='ganhos');}}>{nome}</button>)}
           </nav>
           <div className="crm-kommo-filtros-propriedades">
             <strong>Propriedades do lead</strong>
