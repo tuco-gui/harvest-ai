@@ -32,6 +32,6 @@ assert.match(editor,/Remover do funil/);
 assert.match(editor,/Criar lead automaticamente neste funil/);
 assert.match(leads,/crm_criar_negocio_primeira_conversa_social/);
 assert.match(leads,/pg_advisory_xact_lock/);
-assert.match(leads,/telefone.*NULL/);
+assert.match(leads,/,NULL,'inbox'/);
 assert.match(webhook,/crm_criar_negocio_primeira_conversa_social/);
 console.log('Zernio: OAuth, workspace, assinatura, dedupe, Inbox e RLS verificados');
