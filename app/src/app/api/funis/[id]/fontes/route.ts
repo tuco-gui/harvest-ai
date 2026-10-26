@@ -37,13 +37,13 @@ async function contexto(id:string){
 export async function GET(_req:Request,{params}:Ctx){
  const c=await contexto((await params).id);if('erro'in c)return c.erro;
  const {data,error}=await c.admin.from('crm_fontes_funil')
-  .select('id,funil_id,tipo,nome,identificador_externo,dominio,status,token_publico,meta_token_cifrado,meta_assinatura_status,criado_em')
+  .select('id,funil_id,tipo,nome,identificador_externo,dominio,status,token_publico,meta_token_cifrado,zernio_account_id,criar_lead_automatico,meta_assinatura_status,criado_em')
   .eq('conta_id',c.perfil.conta_id).eq('funil_id',c.funil.id)
   .order('criado_em',{ascending:true}).limit(100);
  if(error)return NextResponse.json({erro:'Falha ao listar fontes.'},{status:503});
  // Token é público para incorporação, mas só o administrador recebe a lista completa.
  const fontes=(data??[]).map(({meta_token_cifrado,token_publico,...r})=>({
-  ...r,meta_autorizado:Boolean(meta_token_cifrado),
+  ...r,meta_autorizado:Boolean(meta_token_cifrado||r.zernio_account_id),
   ...(isAdmin(c.perfil.papel)?{token_publico}:{}),
  }));
  return NextResponse.json({fontes,podeGerenciar:isAdmin(c.perfil.papel)});
@@ -79,7 +79,13 @@ export async function PATCH(req:Request,{params}:Ctx){
  const dados:Record<string,unknown>={};
  if(b.status==='pausado')dados.status='pausado';
  else if(b.status==='pronto'&&atual.tipo==='webchat')dados.status='pronto';
+ else if(b.status==='reativar'&&atual.status==='pausado')dados.status='aguardando_autorizacao';
  else if(b.status!==undefined)return NextResponse.json({erro:'A ativação Meta requer autorização verificada.'},{status:403});
+ if(b.criar_lead_automatico!==undefined){
+  if(typeof b.criar_lead_automatico!=='boolean'||!['instagram_dm','facebook_messenger'].includes(atual.tipo))
+   return NextResponse.json({erro:'Configuração de leads inválida.'},{status:400});
+  dados.criar_lead_automatico=b.criar_lead_automatico;
+ }
  if(b.nome!==undefined){
   if(typeof b.nome!=='string'||b.nome.trim().length<2||b.nome.trim().length>100)
    return NextResponse.json({erro:'Nome inválido.'},{status:400});

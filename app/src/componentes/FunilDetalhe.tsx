@@ -10,7 +10,7 @@ type Funil = { id: number; nome: string; ativo: boolean; criado_em: string; cana
 type Canal = {id:number;nome:string;numero:string|null;status:string;provider:string;padrao:boolean};
 type FonteExterna = {
  id:string;funil_id:number;tipo:string;nome:string;status:'pronto'|'pausado'|'aguardando_autorizacao';
- dominio:string|null;identificador_externo:string|null;token_publico?:string;meta_autorizado?:boolean;
+ dominio:string|null;identificador_externo:string|null;token_publico?:string;meta_autorizado?:boolean;zernio_account_id?:string|null;criar_lead_automatico?:boolean;
 };
 type Estagio = {
   id: number; funil_id: number; nome: string; ordem: number;
@@ -50,22 +50,21 @@ export default function FunilDetalhe({
   const [dominioSite,setDominioSite]=useState('');
   const [fonteCopiada,setFonteCopiada]=useState('');
   const [iniciandoOAuth,setIniciandoOAuth]=useState<string|null>(null);
-  async function conectarMeta(id:string){
+  const [instagramUsuario,setInstagramUsuario]=useState('');
+  async function conectarFonte(id:string,tipo:string){
     if(iniciandoOAuth)return;
-    const popup=window.open('','harvest-meta-oauth','popup,width=650,height=740');
-    if(!popup){setErroFontes('Habilite janelas pop-up para conectar a conta Meta.');return;}
-    popup.document.title='Conectando conta Meta';
     setIniciandoOAuth(id);setErroFontes('');
     try{
-      const r=await fetch('/api/meta/oauth/iniciar',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({fonte_id:id}),
-      });
+      const r=await fetch('/api/zernio/iniciar',{method:'POST',
+       headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({fonte_id:id,username:tipo==='instagram_dm'?instagramUsuario.trim():undefined})});
       const d=await r.json();
-      if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Não foi possível iniciar a autorização.');
-      popup.location.href=d.url;
-    }catch(e){popup.close();setErroFontes(e instanceof Error?e.message:'Falha ao conectar conta.');}
-    finally{setIniciandoOAuth(null);}
+      if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Falha ao conectar a conta.');
+      const url=new URL(d.url);
+      if(url.protocol!=='https:'||!['zernio.com','www.zernio.com','www.instagram.com','instagram.com','www.facebook.com','facebook.com'].includes(url.hostname))
+       throw Error('URL de autenticação inválida.');
+      window.location.assign(url.toString());
+    }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao conectar.');setIniciandoOAuth(null);}
   }
   const carregarFontes=useCallback(async()=>{
     if(!autoPermitido)return;
@@ -106,7 +105,7 @@ export default function FunilDetalhe({
     }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao adicionar fonte.');}
     finally{setSalvandoFonte(null);}
   }
-  async function mudarFonte(id:string,status:'pausado'|'pronto'){
+  async function mudarFonte(id:string,status:'pausado'|'pronto'|'reativar'){
     if(salvandoFonte)return;
     setSalvandoFonte(id);setErroFontes('');
     try{
@@ -118,6 +117,20 @@ export default function FunilDetalhe({
       if(!r.ok)throw Error(d.erro||'Não foi possível alterar a fonte.');
       await carregarFontes();
     }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao salvar fonte.');}
+    finally{setSalvandoFonte(null);}
+  }
+  async function configurarLead(fonteId:string,ativar:boolean){
+    if(salvandoFonte)return;
+    setSalvandoFonte(fonteId);setErroFontes('');
+    try{
+      const r=await fetch('/api/funis/'+funil.id+'/fontes',{
+       method:'PATCH',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({id:fonteId,criar_lead_automatico:ativar})
+      });
+      const d=await r.json();
+      if(!r.ok)throw Error(d.erro||'Falha ao atualizar fonte.');
+      await carregarFontes();
+    }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao salvar.');}
     finally{setSalvandoFonte(null);}
   }
   function codigoWebchat(token:string):string{
@@ -654,9 +667,7 @@ export default function FunilDetalhe({
             <button type="button" aria-label="Fechar fontes"
               onClick={()=>setFontesAbertas(false)}>×</button></header>
           <p className="ajuda">Selecione a fonte deste funil. Instagram, Messenger e WhatsApp
-            oficial são autorizados em <strong>Configurações → Integrações</strong>, usando
-            o aplicativo Meta central da plataforma e a conta de cada cliente.
-            O webchat pode ser criado aqui mesmo.</p>
+            oficial podem ser adicionados ao funil. Escolha a conta e conecte diretamente aqui.</p>
           {erroFontes&&<p className="crm-aviso" role="alert">{erroFontes}</p>}
           {carregandoFontes&&<p className="ajuda">Carregando fontes…</p>}
           <label className="crm-fonte-dominio">
@@ -664,6 +675,8 @@ export default function FunilDetalhe({
             <input value={dominioSite} onChange={e=>setDominioSite(e.target.value)}
               placeholder="www.seusite.com.br" maxLength={253}/>
           </label>
+          <label>Instagram desejado (opcional)<input value={instagramUsuario}
+            onChange={e=>setInstagramUsuario(e.target.value)} placeholder="@perfil_profissional"/></label>
           <div className="crm-kommo-fontes-grade">
             {CANAIS_HARVEST.filter(c=>c.id!=='google_business_messages').map(c=>
               <div className="crm-kommo-fonte-tile" key={c.id}>
@@ -672,7 +685,7 @@ export default function FunilDetalhe({
                   'Avaliações do Google; não é canal de chat':
                   c.id==='webchat'?'Chat incorporável ao site':
                   c.situacao==='operacional'?'Conector WhatsApp existente':
-                  'Permissões Meta necessárias'}</small>
+                  'Conecte a conta escolhida'}</small>
                 {c.id==='whatsapp_waha'||c.id==='whatsapp_evolution'
                   ?<Link href="/configuracoes" onClick={()=>setFontesAbertas(false)}>
                     Gerenciar números</Link>
@@ -680,9 +693,9 @@ export default function FunilDetalhe({
                     ?<button type="button" disabled={!autoPermitido||!!salvandoFonte}
                       onClick={()=>void adicionarFonte(c.id)}>
                       {salvandoFonte===c.id?'Adicionando…':'Criar webchat'}</button>
-                    :<Link href={'/configuracoes?aba=integracoes&tipo='+encodeURIComponent(c.id)+
-                      '&funil_id='+funil.id} onClick={()=>setFontesAbertas(false)}>
-                      Configurar integração</Link>}
+                    :<button type="button" disabled={!!salvandoFonte}
+                      onClick={()=>void adicionarFonte(c.id)}>
+                      Adicionar fonte</button>}
               </div>)}
           </div>
           <h3 style={{marginTop:22}}>Fontes deste funil</h3>
@@ -703,10 +716,17 @@ export default function FunilDetalhe({
               </>}
             </div>
             {(f.tipo==='instagram_dm'||f.tipo==='facebook_messenger')&&f.status!=='pausado'&&
-              <Link href={'/configuracoes?aba=integracoes&tipo='+f.tipo+
-                '&funil_id='+funil.id} className="btn-primario">
-                {f.meta_autorizado?'Gerenciar integração':'Conectar em Configurações'}
-              </Link>}
+              <button type="button" disabled={!!iniciandoOAuth} onClick={()=>void conectarFonte(f.id,f.tipo)}>
+                {iniciandoOAuth===f.id?'Conectando…':f.identificador_externo?'Reconectar':'Conectar'}
+              </button>}
+            {(f.tipo==='instagram_dm'||f.tipo==='facebook_messenger')&&f.status!=='pausado'&&
+              <label><input type="checkbox" checked={f.criar_lead_automatico!==false}
+               disabled={!!salvandoFonte} onChange={e=>void configurarLead(f.id,e.target.checked)}/>
+               Criar lead automaticamente neste funil</label>}
+            {f.status==='pausado'&&<button type="button" disabled={!!salvandoFonte}
+              onClick={()=>void mudarFonte(f.id,'reativar')}>Reativar fonte</button>}
+            {f.status!=='pausado'&&<button type="button" disabled={!!salvandoFonte}
+              onClick={()=>void mudarFonte(f.id,'pausado')}>Remover do funil</button>}
             {f.tipo==='webchat'&&<button type="button"
               disabled={!!salvandoFonte} onClick={()=>void mudarFonte(f.id,f.status==='pronto'?'pausado':'pronto')}>
               {f.status==='pronto'?'Pausar':'Reativar'}</button>}

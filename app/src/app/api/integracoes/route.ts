@@ -62,7 +62,15 @@ export async function POST(req:Request){
   .eq('funil_id',funilId).eq('tipo',tipo).neq('status','pausado')
   .order('criado_em',{ascending:false}).limit(1);
  if(errExiste)return NextResponse.json({erro:'Não foi possível verificar as fontes existentes.'},{status:503});
- if(existentes?.[0])return NextResponse.json({fonte:existentes[0],existente:true});
+ // Cada conta Instagram/Facebook fica em sua própria fonte. Reutilizar apenas
+ // um cadastro ainda não autorizado, evitando sobrescrever contas conectadas.
+ if(existentes?.[0]){
+  const {data:previa}=await c.admin.from('crm_fontes_funil')
+   .select('id,zernio_account_id,meta_token_cifrado').eq('id',existentes[0].id)
+   .eq('conta_id',c.perfil.conta_id).maybeSingle();
+  if(tipo==='webchat'||(previa&&!previa.zernio_account_id&&!previa.meta_token_cifrado))
+   return NextResponse.json({fonte:existentes[0],existente:true});
+ }
  const nome=tipo==='instagram_dm'?'Instagram Direct':
   tipo==='facebook_messenger'?'Facebook Messenger':'Webchat do site';
  const {data,error}=await c.admin.from('crm_fontes_funil').insert({

@@ -26,8 +26,15 @@ export async function POST(req:Request){
   if(error||!estado)return NextResponse.json({erro:'Falha ao registrar conexão da workspace.'},{status:503});
   const plataforma=fonte.tipo==='instagram_dm'?'instagram':'facebook';
   const callback='https://harvest.figueiramarketing.com.br/api/zernio/callback?state='+encodeURIComponent(estado.id);
-  const result=await zernio('connect/'+plataforma+'?profileId='+encodeURIComponent(profileId)+
-   '&redirect_url='+encodeURIComponent(callback));
+  const username=typeof body?.username==='string'?body.username.trim().replace(/^@/,''):'';
+  if(username&&!/^[a-zA-Z0-9._]{1,100}$/.test(username))
+   return NextResponse.json({erro:'Usuário do Instagram inválido.'},{status:400});
+  const params=new URLSearchParams({profileId,redirect_url:callback});
+  if(plataforma==='instagram'){
+   params.set('forceReauth','true');
+   if(username)params.set('expectedUsername',username);
+  }
+  const result=await zernio('connect/'+plataforma+'?'+params.toString());
   const url=result?.authUrl;
   if(typeof url!=='string'||!url.startsWith('https://'))
    return NextResponse.json({erro:'Zernio não retornou um link seguro.'},{status:502});
