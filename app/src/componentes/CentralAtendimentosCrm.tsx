@@ -266,7 +266,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneIn
         <div className="crm-atendimentos-scroll">
           {carregando && <p className="crm-atendimentos-vazio">Carregando conversas…</p>}
           {!carregando && !filtradas.length && <p className="crm-atendimentos-vazio">Nenhuma conversa neste filtro.</p>}
-          {filtradas.map(c => <button type="button" key={c.telefone}
+          {filtradas.map(c => <button type="button" key={c.telefone+':'+(c.canalId??0)}
             className={c.telefone === telefone && c.canalId===canalFiltro ? 'crm-atendimento-contato selecionado' : 'crm-atendimento-contato'}
             onClick={() => { setCanalFiltro(c.canalId);setTelefone(c.telefone);setMostrarAuditoria(false);setAviso(''); setErro(''); }} >
             <span className="crm-atendimento-contato-topo">
