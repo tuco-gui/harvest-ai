@@ -81,9 +81,11 @@ export default function FunilDetalhe({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
   const dragNode = useRef<number | null>(null);
+  const proximoIdLocal=useRef(-1);
 
   const pipeline = estagios.filter((e) => e.grupo === 'pipeline').sort((a, b) => a.ordem - b.ordem);
   const encerrados = estagios.filter((e) => e.grupo === 'encerrado').sort((a, b) => a.ordem - b.ordem);
+  const ordemVisual=[...pipeline,...encerrados];
 
   function marcarSujo() { setSujo(true); }
 
@@ -105,7 +107,7 @@ export default function FunilDetalhe({
     const doGrupo = estagios.filter((e) => e.grupo === grupo);
     const maxOrdem = doGrupo.length > 0 ? Math.max(...doGrupo.map((e) => e.ordem)) : 0;
     const novo: Estagio = {
-      id: Date.now() * -1,
+      id:proximoIdLocal.current--,
       funil_id: funil.id,
       nome: 'Novo estágio',
       ordem: maxOrdem + 1,
@@ -121,7 +123,7 @@ export default function FunilDetalhe({
     const maxOrdem = doGrupo.length > 0 ? Math.max(...doGrupo.map((x) => x.ordem)) : 0;
     const copia: Estagio = {
       ...e,
-      id: Date.now() * -1,
+      id:proximoIdLocal.current--,
       nome: `${e.nome} (cópia)`,
       ordem: maxOrdem + 1,
     };
@@ -146,10 +148,14 @@ export default function FunilDetalhe({
     e.preventDefault();
     const from = dragNode.current;
     if (from === null || from === idx) { setDragIdx(null); setOverIdx(null); return; }
-    const grupo = estagios[from].grupo;
-    const mesmaLista = estagios.filter((x) => x.grupo === grupo).sort((a, b) => a.ordem - b.ordem);
-    const fromLocal = mesmaLista.findIndex((x) => x.id === estagios[from].id);
-    const toLocal = mesmaLista.findIndex((x) => x.id === estagios[idx].id);
+    const origem=ordemVisual[from];
+    const destino=ordemVisual[idx];
+    if(!origem||!destino||origem.grupo!==destino.grupo){
+      setDragIdx(null);setOverIdx(null);dragNode.current=null;return;
+    }
+    const mesmaLista=estagios.filter(x=>x.grupo===origem.grupo).sort((a,b)=>a.ordem-b.ordem);
+    const fromLocal=mesmaLista.findIndex(x=>x.id===origem.id);
+    const toLocal=mesmaLista.findIndex(x=>x.id===destino.id);
     if (fromLocal < 0 || toLocal < 0 || fromLocal === toLocal) { setDragIdx(null); setOverIdx(null); return; }
 
     const nova = [...mesmaLista];
