@@ -8,6 +8,10 @@ import { CANAIS_HARVEST } from '@/lib/canaisUnificados';
 
 type Funil = { id: number; nome: string; ativo: boolean; criado_em: string; canal_padrao_id: number|null; auto_criar_negocio_inbound:boolean };
 type Canal = {id:number;nome:string;numero:string|null;status:string;provider:string;padrao:boolean};
+type FonteExterna = {
+ id:string;funil_id:number;tipo:string;nome:string;status:'pronto'|'pausado'|'aguardando_autorizacao';
+ dominio:string|null;identificador_externo:string|null;token_publico?:string;
+};
 type Estagio = {
   id: number; funil_id: number; nome: string; ordem: number;
   grupo: 'pipeline' | 'encerrado'; probabilidade: number; cor: string | null;
@@ -39,6 +43,63 @@ export default function FunilDetalhe({
   const [salvandoCanal,setSalvandoCanal] = useState(false);
   const [avisoCanal,setAvisoCanal] = useState('');
   const [fontesAbertas,setFontesAbertas]=useState(false);
+  const [fontesExternas,setFontesExternas]=useState<FonteExterna[]>([]);
+  const [carregandoFontes,setCarregandoFontes]=useState(false);
+  const [salvandoFonte,setSalvandoFonte]=useState<string|null>(null);
+  const [erroFontes,setErroFontes]=useState('');
+  const [dominioSite,setDominioSite]=useState('');
+  const [fonteCopiada,setFonteCopiada]=useState('');
+  const carregarFontes=useCallback(async()=>{
+    if(!autoPermitido)return;
+    setCarregandoFontes(true);
+    try{
+      const r=await fetch('/api/funis/'+funil.id+'/fontes',{cache:'no-store'});
+      const d=await r.json();
+      if(!r.ok)throw Error(d.erro||'Falha ao carregar fontes.');
+      setFontesExternas(d.fontes??[]);setErroFontes('');
+    }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao carregar fontes.');}
+    finally{setCarregandoFontes(false);}
+  },[funil.id,autoPermitido]);
+  useEffect(()=>{void carregarFontes();},[carregarFontes]);
+  async function adicionarFonte(tipo:string){
+    if(salvandoFonte)return;
+    setSalvandoFonte(tipo);setErroFontes('');
+    try{
+      const r=await fetch('/api/funis/'+funil.id+'/fontes',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({tipo,dominio:tipo==='webchat'?dominioSite:null}),
+      });
+      const d=await r.json();
+      if(!r.ok)throw Error(d.erro||'Não foi possível adicionar a fonte.');
+      await carregarFontes();
+      if(tipo==='webchat')setDominioSite('');
+    }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao adicionar fonte.');}
+    finally{setSalvandoFonte(null);}
+  }
+  async function mudarFonte(id:string,status:'pausado'|'pronto'){
+    if(salvandoFonte)return;
+    setSalvandoFonte(id);setErroFontes('');
+    try{
+      const r=await fetch('/api/funis/'+funil.id+'/fontes',{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id,status}),
+      });
+      const d=await r.json();
+      if(!r.ok)throw Error(d.erro||'Não foi possível alterar a fonte.');
+      await carregarFontes();
+    }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao salvar fonte.');}
+    finally{setSalvandoFonte(null);}
+  }
+  function codigoWebchat(token:string):string{
+    const url=window.location.origin+'/webchat/'+token;
+    return '<iframe title="Atendimento" src="'+url+
+     '" style="position:fixed;right:18px;bottom:18px;width:360px;max-width:calc(100vw - 28px);height:530px;max-height:85vh;border:0;border-radius:12px;z-index:99999;box-shadow:0 10px 40px #0003" loading="lazy"></iframe>';
+  }
+  async function copiarWebchat(f:FonteExterna){
+    if(!f.token_publico)return;
+    try{await navigator.clipboard.writeText(codigoWebchat(f.token_publico));setFonteCopiada(f.id);}
+    catch{setErroFontes('O navegador não permitiu copiar. Use a seleção manual do código.');}
+  }
   const [autoCriar,setAutoCriar] = useState(funil.auto_criar_negocio_inbound);
   const [salvandoAutomacao,setSalvandoAutomacao] = useState(false);
   const [avisoAutomacao,setAvisoAutomacao] = useState('');
@@ -303,7 +364,17 @@ export default function FunilDetalhe({
                 <small>{c.id===canalFunil?'Selecionado neste funil · ':''}
                   {c.status==='conectado'?'Conectado':'Desconectado'}</small></div>
             </button>)}
-            {!canais.length&&<p className="ajuda">Nenhum canal cadastrado nesta workspace.</p>}
+            {!canais.length&&<p className="ajuda">Nenhum WhatsApp cadastrado nesta workspace.</p>}
+            {fontesExternas.filter(f=>f.status!=='pausado').map(f=>
+              <div className="crm-kommo-fonte-linha crm-fonte-ativa" key={f.id}>
+                <span className="crm-kommo-fonte-icone">{f.tipo==='instagram_dm'?'IG':
+                  f.tipo==='facebook_messenger'?'FB':f.tipo==='webchat'?'WEB':'API'}</span>
+                <div><strong>{f.nome}</strong><small>{f.tipo==='webchat'?'Site':
+                  f.tipo==='instagram_dm'?'Instagram':
+                  f.tipo==='facebook_messenger'?'Messenger': 'Integração'}</small>
+                  <small>{f.status==='pronto'?'Disponível':
+                    'Aguardando autorização e webhook'}</small></div>
+              </div>)}
           </div>
           <button className="crm-kommo-adicionar-fonte" type="button"
             onClick={()=>setFontesAbertas(true)}>+ Adicionar fonte</button>
@@ -551,20 +622,46 @@ export default function FunilDetalhe({
           <header><h2 id="crm-fontes-titulo">Fontes de lead</h2>
             <button type="button" aria-label="Fechar fontes"
               onClick={()=>setFontesAbertas(false)}>×</button></header>
-          <p className="ajuda">Escolha um canal. Somente WAHA e Evolution têm integração de mensagens
-            implementada atualmente; outros provedores são indicados como planejados.</p>
+          <p className="ajuda">Conecte a fonte aqui, dentro do funil. Canais Meta precisam
+            das permissões oficiais de mensagens; não serão apresentados como conectados
+            antes da autorização. Webchat pode ser publicado imediatamente no site.</p>
+          {erroFontes&&<p className="crm-aviso" role="alert">{erroFontes}</p>}
+          {carregandoFontes&&<p className="ajuda">Carregando fontes…</p>}
           <div className="crm-kommo-fontes-grade">
             {CANAIS_HARVEST.filter(c=>c.id!=='google_business_messages').map(c=>
               <div className="crm-kommo-fonte-tile" key={c.id}>
                 <strong>{c.nome}</strong>
-                <small>{c.situacao==='operacional'?'Conector disponível':
-                  c.situacao==='planejado'?'Em desenvolvimento':'Indisponível'}</small>
+                <small>{c.id==='google_business_reviews'?
+                  'Avaliações do Google; não é canal de chat':
+                  c.situacao==='operacional'?'Conector WhatsApp existente':
+                  c.id==='webchat'?'Chat incorporável ao site':
+                  'Permissões Meta necessárias'}</small>
                 {c.situacao==='operacional'
                   ?<Link href="/configuracoes" onClick={()=>setFontesAbertas(false)}>
-                    Gerenciar conexão</Link>
-                  :<span className="crm-kommo-fonte-indisponivel">Ainda não conectável</span>}
+                    Gerenciar números</Link>
+                  :<button type="button" disabled={!autoPermitido||!!salvandoFonte}
+                    onClick={()=>void adicionarFonte(c.id)}>
+                    {salvandoFonte===c.id?'Adicionando…':c.id==='webchat'?
+                      'Criar webchat':'Cadastrar fonte'}</button>}
               </div>)}
           </div>
+          <h3 style={{marginTop:22}}>Fontes deste funil</h3>
+          {!fontesExternas.length&&<p className="ajuda">Nenhuma fonte externa cadastrada.</p>}
+          {fontesExternas.map(f=><div key={f.id} className="crm-fonte-registro">
+            <div><strong>{f.nome}</strong>
+              <small>{f.status==='pronto'?'Disponível':
+                f.status==='pausado'?'Pausado':'Aguardando autorização oficial'}</small>
+              {f.tipo==='webchat'&&f.status==='pronto'&&f.token_publico&&<>
+                <p className="ajuda">Cole este código no HTML do seu site:</p>
+                <code className="crm-fonte-snippet">{codigoWebchat(f.token_publico)}</code>
+                <button type="button" onClick={()=>void copiarWebchat(f)}>
+                  {fonteCopiada===f.id?'Copiado':'Copiar código'}</button>
+              </>}
+            </div>
+            {f.tipo==='webchat'&&<button type="button"
+              disabled={!!salvandoFonte} onClick={()=>void mudarFonte(f.id,f.status==='pronto'?'pausado':'pronto')}>
+              {f.status==='pronto'?'Pausar':'Reativar'}</button>}
+          </div>)}
         </section>
       </div>}
     </div>
