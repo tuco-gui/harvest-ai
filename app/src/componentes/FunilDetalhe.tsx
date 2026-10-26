@@ -10,7 +10,7 @@ type Funil = { id: number; nome: string; ativo: boolean; criado_em: string; cana
 type Canal = {id:number;nome:string;numero:string|null;status:string;provider:string;padrao:boolean};
 type FonteExterna = {
  id:string;funil_id:number;tipo:string;nome:string;status:'pronto'|'pausado'|'aguardando_autorizacao';
- dominio:string|null;identificador_externo:string|null;token_publico?:string;
+ dominio:string|null;identificador_externo:string|null;token_publico?:string;meta_autorizado?:boolean;
 };
 type Estagio = {
   id: number; funil_id: number; nome: string; ordem: number;
@@ -49,6 +49,24 @@ export default function FunilDetalhe({
   const [erroFontes,setErroFontes]=useState('');
   const [dominioSite,setDominioSite]=useState('');
   const [fonteCopiada,setFonteCopiada]=useState('');
+  const [iniciandoOAuth,setIniciandoOAuth]=useState<string|null>(null);
+  async function conectarMeta(id:string){
+    if(iniciandoOAuth)return;
+    const popup=window.open('','harvest-meta-oauth','popup,width=650,height=740');
+    if(!popup){setErroFontes('Habilite janelas pop-up para conectar a conta Meta.');return;}
+    popup.document.title='Conectando conta Meta';
+    setIniciandoOAuth(id);setErroFontes('');
+    try{
+      const r=await fetch('/api/meta/oauth/iniciar',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({fonte_id:id}),
+      });
+      const d=await r.json();
+      if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Não foi possível iniciar a autorização.');
+      popup.location.href=d.url;
+    }catch(e){popup.close();setErroFontes(e instanceof Error?e.message:'Falha ao conectar conta.');}
+    finally{setIniciandoOAuth(null);}
+  }
   const carregarFontes=useCallback(async()=>{
     if(!autoPermitido)return;
     setCarregandoFontes(true);
@@ -61,6 +79,18 @@ export default function FunilDetalhe({
     finally{setCarregandoFontes(false);}
   },[funil.id,autoPermitido]);
   useEffect(()=>{void carregarFontes();},[carregarFontes]);
+  useEffect(()=>{
+    const receber=(evento:MessageEvent)=>{
+      if(evento.origin!==window.location.origin||evento.data?.tipo!=='harvest-meta-oauth')return;
+      void carregarFontes();
+      if(evento.data?.resultado==='erro')
+        setErroFontes('A autorização Meta não foi concluída. Confira permissões e app review.');
+      else setErroFontes('');
+    };
+    window.addEventListener('message',receber);
+    return()=>window.removeEventListener('message',receber);
+  },[carregarFontes]);
+
   async function adicionarFonte(tipo:string){
     if(salvandoFonte)return;
     setSalvandoFonte(tipo);setErroFontes('');
@@ -655,8 +685,12 @@ export default function FunilDetalhe({
           {!fontesExternas.length&&<p className="ajuda">Nenhuma fonte externa cadastrada.</p>}
           {fontesExternas.map(f=><div key={f.id} className="crm-fonte-registro">
             <div><strong>{f.nome}</strong>
-              <small>{f.status==='pronto'?'Disponível':
-                f.status==='pausado'?'Pausado':'Aguardando autorização oficial'}</small>
+              <small>{f.status==='pronto'?'Webhook de mensagens validado':
+                f.status==='pausado'?'Pausado':
+                f.meta_autorizado?'Conta autorizada. Aguardando assinatura/primeira mensagem do webhook':
+                'Aguardando autorização oficial'}</small>
+              {f.identificador_externo&&f.tipo!=='webchat'&&
+                <small>ID da conta: {f.identificador_externo}</small>}
               {f.tipo==='webchat'&&f.status==='pronto'&&f.token_publico&&<>
                 <p className="ajuda">Cole este código no HTML do seu site:</p>
                 <code className="crm-fonte-snippet">{codigoWebchat(f.token_publico)}</code>
@@ -664,6 +698,12 @@ export default function FunilDetalhe({
                   {fonteCopiada===f.id?'Copiado':'Copiar código'}</button>
               </>}
             </div>
+            {(f.tipo==='instagram_dm'||f.tipo==='facebook_messenger')&&f.status!=='pausado'&&
+              <button type="button" className="btn-primario" disabled={!!iniciandoOAuth}
+                onClick={()=>void conectarMeta(f.id)}>
+                {iniciandoOAuth===f.id?'Abrindo autorização…':
+                  f.meta_autorizado?'Reautorizar conta':'Conectar conta Meta'}
+              </button>}
             {f.tipo==='webchat'&&<button type="button"
               disabled={!!salvandoFonte} onClick={()=>void mudarFonte(f.id,f.status==='pronto'?'pausado':'pronto')}>
               {f.status==='pronto'?'Pausar':'Reativar'}</button>}
