@@ -16,8 +16,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     .from('funis').select('id')
     .eq('id', id).eq('conta_id', perfil.conta_id ?? '').maybeSingle();
 
-  // Super admin pode acessar qualquer funil
-  if (!funil && perfil.papel !== 'super_admin') {
+  // Até super_admin deve respeitar a workspace ATIVA da sessão.
+  if (!funil) {
     return NextResponse.json({ erro: 'Funil não encontrado.' }, { status: 404 });
   }
 
@@ -44,7 +44,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const { data: funil } = await admin
     .from('funis').select('id')
     .eq('id', id).eq('conta_id', perfil.conta_id ?? '').maybeSingle();
-  if (!funil && perfil.papel !== 'super_admin') {
+  if (!funil) {
     return NextResponse.json({ erro: 'Funil não encontrado.' }, { status: 404 });
   }
 
@@ -52,10 +52,12 @@ export async function POST(req: Request, { params }: Ctx) {
   const nome = String(b.nome ?? '').trim();
   if (!nome) return NextResponse.json({ erro: 'Falta o nome do estágio.' }, { status: 400 });
 
+  const grupo=b.grupo==='encerrado'?'encerrado':'pipeline';
+  // Cada grupo mantém sua própria sequência sem contaminar os encerrados.
   // Próxima ordem
   const { data: ultimo } = await admin
     .from('funil_estagios').select('ordem')
-    .eq('funil_id', id).order('ordem', { ascending: false }).limit(1).maybeSingle();
+    .eq('funil_id', id).eq('grupo',grupo).order('ordem', { ascending: false }).limit(1).maybeSingle();
   const proximaOrdem = (ultimo?.ordem ?? 0) + 1;
 
   const { data: estagio, error } = await admin
@@ -64,7 +66,7 @@ export async function POST(req: Request, { params }: Ctx) {
       funil_id: id,
       nome,
       ordem: Number(b.ordem) || proximaOrdem,
-      grupo: b.grupo === 'encerrado' ? 'encerrado' : 'pipeline',
+      grupo,
       probabilidade: Number(b.probabilidade) || 0,
       cor: b.cor || '#8b8b8b',
     })

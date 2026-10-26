@@ -49,7 +49,7 @@ export default function Funis({funis:funisIniciais,canais=[]}:{funis:Funil[];
       </p>
 
       <div style={{
-        display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16,
+        display: 'flex', gap: 8, flexWrap:'wrap', alignItems: 'center', marginBottom: 16,
         padding: 14, border: '1px solid var(--rule)', borderRadius: 3, background: 'var(--sunken)',
       }}>
         <input
@@ -57,9 +57,9 @@ export default function Funis({funis:funisIniciais,canais=[]}:{funis:Funil[];
           onChange={(e) => setNovoNome(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && criarFunil()}
           placeholder="Nome do novo funil…"
-          style={{ height: 38, padding: '0 12px', background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14, flex: 1 }}
+          style={{ height: 38, padding: '0 12px', background: 'var(--surface)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 14, flex: '1 1 240px', minWidth: 0 }}
         />
-        <label style={{display:'grid',gap:3,minWidth:220,fontSize:11}}>
+        <label style={{display:'grid',gap:3,minWidth:0,flex:'1 1 220px',fontSize:11}}>
           WhatsApp deste funil
           <select aria-label="Canal WhatsApp do novo funil"
             style={{height:38,padding:'0 9px',background:'var(--surface)',border:'1px solid var(--rule)'}}

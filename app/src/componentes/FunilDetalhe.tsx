@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AutomacaoEstagio from './AutomacaoEstagio';
 import { CANAIS_HARVEST } from '@/lib/canaisUnificados';
@@ -18,12 +18,24 @@ const CORES_PADRAO = [
   '#d55c2a', '#1A7A4A', '#C4191F', '#555555', '#2196F3',
 ];
 
-export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais,autoPermitido=false }: { funil: Funil; estagios: Estagio[]; canais: Canal[];autoPermitido?:boolean }) {
+export default function FunilDetalhe({
+ funil, estagios: estagiosIniciais, canais, autoPermitido=false,
+ embutido=false, aoVoltar, aoSalvar,
+}: {
+ funil:Funil;estagios:Estagio[];canais:Canal[];autoPermitido?:boolean;
+ embutido?:boolean;aoVoltar?:()=>void;aoSalvar?:()=>void;
+}) {
   const router = useRouter();
   const [estagios, setEstagios] = useState(estagiosIniciais);
   const [salvando, setSalvando] = useState(false);
   const [sujo, setSujo] = useState(false);
+  // Ao salvar no editor embutido, o CRM carrega as IDs reais dos estágios
+  // recém-criados; atualizar a ficha sem sobrescrever edições não salvas.
+  useEffect(()=>{
+    if(!sujo)setEstagios(estagiosIniciais);
+  },[estagiosIniciais,sujo]);
   const [canalFunil, setCanalFunil] = useState<number|null>(funil.canal_padrao_id);
+  const [canalPersistido,setCanalPersistido]=useState<number|null>(funil.canal_padrao_id);
   const [salvandoCanal,setSalvandoCanal] = useState(false);
   const [avisoCanal,setAvisoCanal] = useState('');
   const [fontesAbertas,setFontesAbertas]=useState(false);
@@ -48,6 +60,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
       setAvisoAutomacao(proximo?'Automação ativada para novas conversas elegíveis.':
         'Criação automática desligada. Negócios existentes foram preservados.');
       router.refresh();
+      aoSalvar?.();
     }catch(e){setAvisoAutomacao(e instanceof Error?e.message:'Falha ao salvar automação.');}
     finally{setSalvandoAutomacao(false);}
   }
@@ -61,8 +74,10 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
       });
       const d=await resposta.json();
       if(!resposta.ok)throw Error(d.erro||'Não consegui salvar o canal.');
+      setCanalPersistido(canalFunil);
       setAvisoCanal('Canal deste funil salvo. Campanhas com seleção manual não foram alteradas.');
       router.refresh();
+      aoSalvar?.();
     } catch(e) {
       setAvisoCanal(e instanceof Error?e.message:'Falha ao salvar vínculo.');
     } finally {setSalvandoCanal(false);}
@@ -71,9 +86,11 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
   const dragNode = useRef<number | null>(null);
+  const proximoIdLocal=useRef(-1);
 
   const pipeline = estagios.filter((e) => e.grupo === 'pipeline').sort((a, b) => a.ordem - b.ordem);
   const encerrados = estagios.filter((e) => e.grupo === 'encerrado').sort((a, b) => a.ordem - b.ordem);
+  const ordemVisual=[...pipeline,...encerrados];
 
   function marcarSujo() { setSujo(true); }
 
@@ -95,7 +112,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
     const doGrupo = estagios.filter((e) => e.grupo === grupo);
     const maxOrdem = doGrupo.length > 0 ? Math.max(...doGrupo.map((e) => e.ordem)) : 0;
     const novo: Estagio = {
-      id: Date.now() * -1,
+      id:proximoIdLocal.current--,
       funil_id: funil.id,
       nome: 'Novo estágio',
       ordem: maxOrdem + 1,
@@ -111,7 +128,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
     const maxOrdem = doGrupo.length > 0 ? Math.max(...doGrupo.map((x) => x.ordem)) : 0;
     const copia: Estagio = {
       ...e,
-      id: Date.now() * -1,
+      id:proximoIdLocal.current--,
       nome: `${e.nome} (cópia)`,
       ordem: maxOrdem + 1,
     };
@@ -136,10 +153,14 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
     e.preventDefault();
     const from = dragNode.current;
     if (from === null || from === idx) { setDragIdx(null); setOverIdx(null); return; }
-    const grupo = estagios[from].grupo;
-    const mesmaLista = estagios.filter((x) => x.grupo === grupo).sort((a, b) => a.ordem - b.ordem);
-    const fromLocal = mesmaLista.findIndex((x) => x.id === estagios[from].id);
-    const toLocal = mesmaLista.findIndex((x) => x.id === estagios[idx].id);
+    const origem=ordemVisual[from];
+    const destino=ordemVisual[idx];
+    if(!origem||!destino||origem.grupo!==destino.grupo){
+      setDragIdx(null);setOverIdx(null);dragNode.current=null;return;
+    }
+    const mesmaLista=estagios.filter(x=>x.grupo===origem.grupo).sort((a,b)=>a.ordem-b.ordem);
+    const fromLocal=mesmaLista.findIndex(x=>x.id===origem.id);
+    const toLocal=mesmaLista.findIndex(x=>x.id===destino.id);
     if (fromLocal < 0 || toLocal < 0 || fromLocal === toLocal) { setDragIdx(null); setOverIdx(null); return; }
 
     const nova = [...mesmaLista];
@@ -166,49 +187,69 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
 
   // --- Persistir ---
   async function salvarTudo() {
+    if(salvando)return;
+    if(!estagios.length||!estagios.some(e=>e.grupo==='pipeline')){
+      alert('O pipeline precisa de pelo menos uma etapa.');return;
+    }
+    if(estagios.some(e=>!e.nome.trim())){
+      alert('Preencha o nome de todas as etapas antes de salvar.');return;
+    }
     setSalvando(true);
-    try {
-      const promises: Promise<Response>[] = [];
-      for (const e of estagios) {
-        if (e.id > 0) {
-          promises.push(
-            fetch(`/api/funis/${funil.id}/estagios/${e.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nome: e.nome, cor: e.cor, ordem: e.ordem, probabilidade: e.probabilidade, grupo: e.grupo }),
-            })
-          );
-        } else {
-          promises.push(
-            fetch(`/api/funis/${funil.id}/estagios`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ nome: e.nome, cor: e.cor, probabilidade: e.probabilidade, grupo: e.grupo }),
-            })
-          );
-        }
+    const requisitar=async (url:string,init:RequestInit)=>{
+      const resposta=await fetch(url,init);
+      const dados=await resposta.json().catch(()=>({}));
+      if(!resposta.ok)throw Error(dados.erro||'A operação no funil não foi concluída.');
+      return dados;
+    };
+    try{
+      const base='/api/funis/'+funil.id+'/estagios';
+      const removidos=estagiosIniciais.filter(e=>e.id>0&&!estagios.some(x=>x.id===e.id));
+      // Exclusões bloqueadas pelo servidor se a etapa contém negócios.
+      // São processadas antes dos demais campos para não editar parcialmente
+      // o pipeline caso alguma exclusão importante não seja permitida.
+      for(const e of removidos)await requisitar(base+'/'+e.id,{method:'DELETE'});
+      const criados=new Map<number,number>();
+      const desejados=[...estagios].sort((a,b)=>{
+        const ga=a.grupo==='pipeline'?0:1, gb=b.grupo==='pipeline'?0:1;
+        return ga-gb||a.ordem-b.ordem;
+      });
+      for(const e of desejados.filter(e=>e.id<0)){
+        const d=await requisitar(base,{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({nome:e.nome.trim(),cor:e.cor,probabilidade:e.probabilidade,
+            grupo:e.grupo,ordem:e.ordem}),
+        });
+        if(!Number.isSafeInteger(d.estagio?.id)||d.estagio.id<=0)
+          throw Error('O servidor não confirmou o ID da nova etapa.');
+        criados.set(e.id,d.estagio.id);
       }
-
-      const deletados = estagiosIniciais.filter((orig) => !estagios.some((e) => e.id === orig.id));
-      for (const d of deletados) {
-        promises.push(
-          fetch(`/api/funis/${funil.id}/estagios/${d.id}`, { method: 'DELETE' })
-        );
+      // PATCH sequencial: o endpoint recalcula as ordens por grupo.
+      // Promise.all causava disputas entre patches simultâneos no mesmo funil.
+      for(const e of desejados){
+        const id=e.id>0?e.id:criados.get(e.id);
+        if(!id)throw Error('Etapa sem ID confirmado pelo servidor.');
+        await requisitar(base+'/'+id,{
+          method:'PATCH',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({nome:e.nome.trim(),cor:e.cor,ordem:e.ordem,
+            probabilidade:e.probabilidade,grupo:e.grupo}),
+        });
       }
-
-      const results = await Promise.all(promises);
-      const ok = results.every((r) => r.ok);
-      if (ok) {
-        setSujo(false);
-        router.refresh();
-      } else {
-        alert('Alguns estágios não foram salvos.');
-      }
-    } catch {
-      alert('Sem conexão.');
-    } finally {
+      setSujo(false);
+      router.refresh();
+      aoSalvar?.();
+    }catch(err){
+      // Operações anteriores podem ter sido persistidas; não afirmar rollback.
+      alert((err instanceof Error?err.message:'Falha ao salvar alterações.')+
+        ' Confira as etapas antes de tentar novamente. Nenhuma mensagem foi enviada.');
+      aoSalvar?.();
+    }finally{
       setSalvando(false);
     }
+  }
+
+  function voltar() {
+    if(sujo && !window.confirm('Descartar as alterações não salvas do pipeline?'))return;
+    aoVoltar?.();
   }
 
   function cancelar() {
@@ -217,8 +258,10 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
   }
 
   return (
-    <div className="pagina" style={{ maxWidth: 'none', padding: '24px 28px 40px' }}>
-      <p className="ajuda"><Link href="/funis">← Funis</Link></p>
+    <div className={embutido?'crm-editor-funil-embutido':'pagina'} style={{ maxWidth:'none', padding: embutido?'10px 8px 36px':'24px 28px 40px' }}>
+      <p className="ajuda">{embutido
+   ? <button type="button" className="crm-editor-voltar" onClick={voltar}>← Voltar ao pipeline</button>
+   : <Link href="/funis">← Funis</Link>}</p>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
@@ -249,13 +292,17 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
           <h3>FONTES DE LEAD</h3>
           <p className="ajuda">Números e canais de entrada deste pipeline.</p>
           <div className="crm-kommo-fontes-lista">
-            {canais.map(c=><div key={c.id} className="crm-kommo-fonte-linha">
+            {canais.map(c=><button type="button" key={c.id}
+              aria-pressed={canalFunil===c.id}
+              className={'crm-kommo-fonte-linha'+(canalFunil===c.id?' selecionada':'')}
+              onClick={()=>{setCanalFunil(c.id);
+                setAvisoCanal('Fonte selecionada. Confirme em Salvar canal do funil.');}}> 
               <span className="crm-kommo-fonte-icone">W</span>
               <div><strong>{c.nome}</strong><small>{c.provider.toUpperCase()}
                 {c.numero?' · '+c.numero:''}</small>
                 <small>{c.id===canalFunil?'Selecionado neste funil · ':''}
                   {c.status==='conectado'?'Conectado':'Desconectado'}</small></div>
-            </div>)}
+            </button>)}
             {!canais.length&&<p className="ajuda">Nenhum canal cadastrado nesta workspace.</p>}
           </div>
           <button className="crm-kommo-adicionar-fonte" type="button"
@@ -280,7 +327,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
             </select>
           </label>
           <button type="button" className="btn-primario"
-            disabled={salvandoCanal || canalFunil===funil.canal_padrao_id}
+            disabled={salvandoCanal || canalFunil===canalPersistido}
             onClick={()=>void salvarCanalPadrao()}>
               {salvandoCanal?'Salvando…':'Salvar canal do funil'}
           </button>

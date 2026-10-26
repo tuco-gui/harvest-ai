@@ -13,10 +13,15 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
 
   const admin = supabaseAdmin();
+  // Segurança: validar o funil na workspace ativa antes de consultar
+  // ou modificar qualquer etapa por ID (inclusive super_admin).
+  const {data:funil}=await admin.from('funis').select('id')
+    .eq('id',id).eq('conta_id',perfil.conta_id??'').maybeSingle();
+  if(!funil)return NextResponse.json({erro:'Funil não encontrado nesta workspace.'},{status:404});
 
   // Verificar que o estágio pertence ao funil da conta
   const { data: estagio } = await admin
-    .from('funil_estagios').select('id, funil_id')
+    .from('funil_estagios').select('id, funil_id, grupo')
     .eq('id', estagioId).eq('funil_id', id).maybeSingle();
   if (!estagio) return NextResponse.json({ erro: 'Estágio não encontrado.' }, { status: 404 });
 
@@ -41,7 +46,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (typeof b.ordem === 'number') {
     const { data: todos } = await admin
       .from('funil_estagios').select('id, ordem')
-      .eq('funil_id', id).order('ordem');
+      .eq('funil_id', id).eq('grupo',b.grupo==='encerrado'?'encerrado':b.grupo==='pipeline'?'pipeline':estagio.grupo).order('ordem');
 
     if (todos) {
       const reordenados = todos
@@ -71,10 +76,15 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   }
 
   const admin = supabaseAdmin();
+  // Segurança: validar o funil na workspace ativa antes de consultar
+  // ou modificar qualquer etapa por ID (inclusive super_admin).
+  const {data:funil}=await admin.from('funis').select('id')
+    .eq('id',id).eq('conta_id',perfil.conta_id??'').maybeSingle();
+  if(!funil)return NextResponse.json({erro:'Funil não encontrado nesta workspace.'},{status:404});
 
   // Verificar que o estágio pertence ao funil da conta
   const { data: estagio } = await admin
-    .from('funil_estagios').select('id, funil_id')
+    .from('funil_estagios').select('id, funil_id, grupo')
     .eq('id', estagioId).eq('funil_id', id).maybeSingle();
   if (!estagio) return NextResponse.json({ erro: 'Estágio não encontrado.' }, { status: 404 });
 
@@ -88,6 +98,17 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     return NextResponse.json({ erro: 'Não é possível remover o último estágio do pipeline.' }, { status: 400 });
   }
 
+  // Nunca eliminar uma etapa com negócios associados por engano ao editar
+  // o pipeline em lote. A transferência deve ser explícita antes da exclusão.
+  const {count:emUso,error:erroUso}=await admin.from('oportunidades')
+    .select('id',{count:'exact',head:true})
+    .eq('conta_id',perfil.conta_id??'')
+    .eq('funil_id',id).eq('funil_estagio_id',estagioId);
+  if(erroUso)return NextResponse.json({erro:'Falha ao validar uso do estágio.'},{status:503});
+  if((emUso??0)>0)return NextResponse.json({
+    erro:'Esta etapa possui '+emUso+' negócio(s). Mova-os antes de excluir.',
+  },{status:409});
+
   const { error } = await admin
     .from('funil_estagios').delete()
     .eq('id', estagioId);
@@ -95,11 +116,16 @@ export async function DELETE(_req: Request, { params }: Ctx) {
 
   // Reordenar restantes
   const { data: todos } = await admin
-    .from('funil_estagios').select('id')
+    .from('funil_estagios').select('id,grupo')
     .eq('funil_id', id).order('ordem');
   if (todos) {
-    for (let i = 0; i < todos.length; i++) {
-      await admin.from('funil_estagios').update({ ordem: i + 1 }).eq('id', todos[i].id);
+    for (const grupo of ['pipeline','encerrado']) {
+      const etapas=todos.filter(t=>t.grupo===grupo);
+      for(let i=0;i<etapas.length;i++){
+        const {error:erroOrdem}=await admin.from('funil_estagios')
+          .update({ordem:i+1}).eq('id',etapas[i].id).eq('funil_id',id);
+        if(erroOrdem)return NextResponse.json({erro:'Falha ao reordenar estágios.'},{status:500});
+      }
     }
   }
 

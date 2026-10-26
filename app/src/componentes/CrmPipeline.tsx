@@ -10,10 +10,19 @@ import type { Oportunidade } from '@/lib/twenty';
 import LinhaDoTempoCrm from '@/componentes/LinhaDoTempoCrm';
 import CamposOportunidadeCRM from '@/componentes/CamposOportunidadeCRM';
 import GerenciadorEtiquetasCRM from '@/componentes/GerenciadorEtiquetasCRM';
+import FunilDetalhe from '@/componentes/FunilDetalhe';
 import SeletorEtiquetasCRM from '@/componentes/SeletorEtiquetasCRM';
 
 type Owner = { id: string; nome: string };
 type Campanha = { id: number; nome: string };
+type EstagioEditor = { id:number;funil_id:number;nome:string;ordem:number;
+ grupo:'pipeline'|'encerrado';probabilidade:number;cor:string|null; };
+type FunilEditorData = {
+ funil:{id:number;nome:string;ativo:boolean;criado_em:string;
+   canal_padrao_id:number|null;auto_criar_negocio_inbound:boolean};
+ estagios:EstagioEditor[];
+ canais:{id:number;nome:string;numero:string|null;status:string;provider:string;padrao:boolean}[];
+};
 type Canal = { id: number; nome: string; numero: string | null; provider: string };
 type Atividade = {
   id: number; tipo: string; titulo: string; descricao: string | null;
@@ -56,6 +65,8 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
   const [filtroAberto, setFiltroAberto] = useState(false);
+  const [editorFunil,setEditorFunil]=useState<FunilEditorData|null>(null);
+  const [abrindoEditor,setAbrindoEditor]=useState(false);
   const [vistaLeads,setVistaLeads]=useState<'ativos'|'meus'|'ganhos'|'perdidos'>('ativos');
   const [tagsFiltro, setTagsFiltro] = useState<string[]>([]);
   const [tagsOperador, setTagsOperador] = useState<'ou'|'e'>('ou');
@@ -381,6 +392,39 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     if (ficha?.id === op.id) setFicha(null);
   }
 
+  // Editor Kommo: o pipeline permanece na mesma rota/contexto, sem criar
+  // uma segunda interface. Somente administradores do CRM avançado.
+  async function abrirEditorDoFunil(){
+    if(!avancado||!podeEditar||!funilId||abrindoEditor)return;
+    setAbrindoEditor(true);setErro(null);setFiltroAberto(false);
+    try{
+      const [rf,rc]=await Promise.all([
+        fetch('/api/funis/'+funilId,{cache:'no-store'}),
+        fetch('/api/canais',{cache:'no-store'}),
+      ]);
+      const [df,dc]=await Promise.all([json(rf),json(rc)]);
+      if(!rf.ok||!rc.ok||!df.funil)
+        throw Error(df.erro||dc.erro||'Não foi possível abrir a edição deste pipeline.');
+      const lista=Array.isArray(dc.canais)?dc.canais:[];
+      setEditorFunil({funil:df.funil,estagios:df.estagios??[],
+        canais:lista.map((c:FunilEditorData['canais'][number])=>({
+          id:c.id,nome:c.nome,numero:c.numero,status:c.status,
+          provider:c.provider,padrao:c.padrao===true,
+        }))});
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao carregar o pipeline.');}
+    finally{setAbrindoEditor(false);}
+  }
+  async function atualizarDadosEditor(){
+    if(!editorFunil)return;
+    const id=editorFunil.funil.id;
+    const r=await fetch('/api/funis/'+id,{cache:'no-store'});
+    const d=await json(r);
+    if(!r.ok||!d.funil) {setErro(d.erro||'Não foi possível atualizar o funil.');return;}
+    setEditorFunil(atual=>atual?.funil.id===id
+      ?{...atual,funil:d.funil,estagios:d.estagios??[]} : atual);
+    if(funilId===id)setEstagiosDb(d.estagios??[]);
+  }
+
   // Link direto das tarefas para o negócio correspondente.
   useEffect(() => {
     if (!avancado) return;
@@ -392,7 +436,13 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
   return (
     <div className={'crm-shell' + (avancado ? ' crm-kommo' : '')}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+      {editorFunil ? <FunilDetalhe
+        funil={editorFunil.funil} estagios={editorFunil.estagios}
+        canais={editorFunil.canais} autoPermitido={podeEditar}
+        embutido aoVoltar={()=>setEditorFunil(null)}
+        aoSalvar={()=>void atualizarDadosEditor()}
+      /> : <>
+      <div className="crm-legado-topo" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         {avancado && funilId && <span className="crm-canal-funil-indicador">
           Canal do funil: {(()=>{
             const id=funis.find(f=>f.id===funilId)?.canal_padrao_id;
@@ -422,7 +472,8 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
         {avancado && <Link className="crm-atalho-tarefas" href="/crm/tarefas">Tarefas e prazos</Link>}
          {avancado && podeEditar && <details className="crm-pipeline-menu">
            <summary title="Opções do pipeline">···</summary>
-           <div><Link href={funilId?`/funis/${funilId}`:"/funis"}>Editar pipeline e fontes de lead</Link>
+           <div><button type="button" onClick={()=>void abrirEditorDoFunil()}
+             disabled={abrindoEditor}>{abrindoEditor?'Abrindo…':'Editar pipeline e fontes de lead'}</button>
              <Link href="/crm/campos-personalizados">Personalizar campos</Link></div>
          </details>}
         {funis.length > 0 && (
@@ -453,7 +504,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
               ['perdidos','Leads perdidos'],
             ] as const).map(([id,nome])=><button type="button" key={id}
               className={vistaLeads===id?'ativo':''}
-              onClick={()=>{setVistaLeads(id);setMostrarEncerrados(id==='perdidos');}}>{nome}</button>)}
+              onClick={()=>{setVistaLeads(id);setMostrarEncerrados(id==='perdidos'||id==='ganhos');}}>{nome}</button>)}
           </nav>
           <div className="crm-kommo-filtros-propriedades">
             <strong>Propriedades do lead</strong>
@@ -657,6 +708,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
           </section>
         </div>
       )}
+      </>}
     </div>
   );
 }
