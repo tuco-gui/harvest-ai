@@ -10,7 +10,7 @@ type Funil = { id: number; nome: string; ativo: boolean; criado_em: string; cana
 type Canal = {id:number;nome:string;numero:string|null;status:string;provider:string;padrao:boolean};
 type FonteExterna = {
  id:string;funil_id:number;tipo:string;nome:string;status:'pronto'|'pausado'|'aguardando_autorizacao';
- dominio:string|null;identificador_externo:string|null;token_publico?:string;meta_autorizado?:boolean;zernio_account_id?:string|null;
+ dominio:string|null;identificador_externo:string|null;token_publico?:string;meta_autorizado?:boolean;zernio_account_id?:string|null;criar_lead_automatico?:boolean;
 };
 type Estagio = {
   id: number; funil_id: number; nome: string; ordem: number;
@@ -105,7 +105,7 @@ export default function FunilDetalhe({
     }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao adicionar fonte.');}
     finally{setSalvandoFonte(null);}
   }
-  async function mudarFonte(id:string,status:'pausado'|'pronto'){
+  async function mudarFonte(id:string,status:'pausado'|'pronto'|'reativar'){
     if(salvandoFonte)return;
     setSalvandoFonte(id);setErroFontes('');
     try{
@@ -117,6 +117,20 @@ export default function FunilDetalhe({
       if(!r.ok)throw Error(d.erro||'Não foi possível alterar a fonte.');
       await carregarFontes();
     }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao salvar fonte.');}
+    finally{setSalvandoFonte(null);}
+  }
+  async function configurarLead(fonteId:string,ativar:boolean){
+    if(salvandoFonte)return;
+    setSalvandoFonte(fonteId);setErroFontes('');
+    try{
+      const r=await fetch('/api/funis/'+funil.id+'/fontes',{
+       method:'PATCH',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({id:fonteId,criar_lead_automatico:ativar})
+      });
+      const d=await r.json();
+      if(!r.ok)throw Error(d.erro||'Falha ao atualizar fonte.');
+      await carregarFontes();
+    }catch(e){setErroFontes(e instanceof Error?e.message:'Falha ao salvar.');}
     finally{setSalvandoFonte(null);}
   }
   function codigoWebchat(token:string):string{
@@ -705,6 +719,12 @@ export default function FunilDetalhe({
               <button type="button" disabled={!!iniciandoOAuth} onClick={()=>void conectarFonte(f.id,f.tipo)}>
                 {iniciandoOAuth===f.id?'Conectando…':f.identificador_externo?'Reconectar':'Conectar'}
               </button>}
+            {(f.tipo==='instagram_dm'||f.tipo==='facebook_messenger')&&f.status!=='pausado'&&
+              <label><input type="checkbox" checked={f.criar_lead_automatico!==false}
+               disabled={!!salvandoFonte} onChange={e=>void configurarLead(f.id,e.target.checked)}/>
+               Criar lead automaticamente neste funil</label>}
+            {f.status==='pausado'&&<button type="button" disabled={!!salvandoFonte}
+              onClick={()=>void mudarFonte(f.id,'reativar')}>Reativar fonte</button>}
             {f.status!=='pausado'&&<button type="button" disabled={!!salvandoFonte}
               onClick={()=>void mudarFonte(f.id,'pausado')}>Remover do funil</button>}
             {f.tipo==='webchat'&&<button type="button"
