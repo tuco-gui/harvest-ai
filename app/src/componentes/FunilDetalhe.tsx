@@ -91,7 +91,8 @@ export default function FunilDetalhe({
     finally{setSalvandoFonte(null);}
   }
   function codigoWebchat(token:string):string{
-    const url=window.location.origin+'/webchat/'+token;
+    const origem=typeof window==='undefined'?'https://harvest.figueiramarketing.com.br':window.location.origin;
+    const url=origem+'/webchat/'+token;
     return '<iframe title="Atendimento" src="'+url+
      '" style="position:fixed;right:18px;bottom:18px;width:360px;max-width:calc(100vw - 28px);height:530px;max-height:85vh;border:0;border-radius:12px;z-index:99999;box-shadow:0 10px 40px #0003" loading="lazy"></iframe>';
   }
@@ -627,6 +628,11 @@ export default function FunilDetalhe({
             antes da autorização. Webchat pode ser publicado imediatamente no site.</p>
           {erroFontes&&<p className="crm-aviso" role="alert">{erroFontes}</p>}
           {carregandoFontes&&<p className="ajuda">Carregando fontes…</p>}
+          <label className="crm-fonte-dominio">
+            Domínio do site para o webchat (opcional)
+            <input value={dominioSite} onChange={e=>setDominioSite(e.target.value)}
+              placeholder="www.seusite.com.br" maxLength={253}/>
+          </label>
           <div className="crm-kommo-fontes-grade">
             {CANAIS_HARVEST.filter(c=>c.id!=='google_business_messages').map(c=>
               <div className="crm-kommo-fonte-tile" key={c.id}>
