@@ -6,7 +6,8 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 type Tipo='instagram_dm'|'facebook_messenger'|'whatsapp_cloud_api'|'webchat';
 type Fonte={id:string;funil_id:number;tipo:Tipo;nome:string;status:string;
  autorizado:boolean;identificador_externo:string|null;dominio:string|null;token_publico?:string;
- meta_assinatura_status?:'pendente'|'inscrita'|'falha';meta_assinatura_em?:string|null;};
+ meta_assinatura_status?:'pendente'|'inscrita'|'falha';meta_assinatura_em?:string|null;
+ zernio_account_id?:string|null;zernio_webhook_id?:string|null;};
 type Funil={id:number;nome:string;ativo:boolean;canal_padrao_id:number|null};
 type Numero={id:number;nome:string;numero:string|null;provider:string;status:string;ativo:boolean};
 type Dados={fontes:Fonte[];funis:Funil[];numeros:Numero[];podeGerenciar:boolean;
@@ -81,6 +82,19 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   // e mantém a jornada de login do cliente inteiramente na Meta.
   window.location.assign(destino.toString());
  }
+ async function iniciarMetaAlternativo(fonteId:string){
+  setOcupado(true);setErro('');
+  try{
+   const r=await fetch('/api/meta/oauth/iniciar',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({fonte_id:fonteId})});
+   const d=await r.json();
+   if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Meta indisponível.');
+   const url=new URL(d.url);
+   if(url.protocol!=='https:'||!['www.facebook.com','www.instagram.com'].includes(url.hostname))
+    throw Error('Autorização inválida.');
+   window.location.assign(url.toString());
+  }catch(e){setErro(e instanceof Error?e.message:'Falha de conexão Meta.');setOcupado(false);}
+ }
  async function autorizar(fonteId:string){
   if(ocupado)return;
   setOcupado(true);setErro('');setAviso('');
@@ -146,12 +160,6 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
     <p className="ajuda">{ativo?.ajuda}</p>
     {erro&&<p className="crm-aviso" role="alert">{erro}</p>}
     {aviso&&<p className="ajuda" role="status">{aviso}</p>}
-    {false&&!metaOk&&['instagram_dm','facebook_messenger'].includes(tipo)&&
-     <p className="crm-aviso" role="status">
-      O aplicativo Meta da plataforma ainda não foi configurado com credenciais
-      de OAuth de mensagens neste serviço. O cadastro é preservado, mas não é possível
-      concluir a conexão até essa configuração.
-     </p>}
     <div className="integracoes-crm-conectar">
      <label>Funil que receberá este canal
       <select value={funilId} onChange={e=>setFunilId(e.target.value)}>
@@ -165,6 +173,12 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
         tipo==='whatsapp_cloud_api'?'WhatsApp oficial: integração pendente':'Conectar via Zernio'}
      </button>
     </div>
+    {metaOk&&['instagram_dm','facebook_messenger'].includes(tipo)&&conexoes.length>0&&
+     <details><summary>Conexão Meta direta (alternativa)</summary>
+      <button type="button" disabled={ocupado} onClick={()=>void iniciarMetaAlternativo(conexoes[0].id)}>
+       Autorizar pelo aplicativo Meta
+      </button>
+     </details>}
     <h3>Contas e fontes desta workspace</h3>
     {!conexoes.length&&<p className="ajuda">Nenhuma conta conectada desse tipo.</p>}
     <div className="integracoes-crm-conexoes">
@@ -185,7 +199,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
          <button type="button" disabled={ocupado} onClick={()=>void autorizar(c.id)}>
            {c.identificador_externo?'Reconectar conta':'Autorizar conta'}
          </button>}
-        {false&&c.tipo==='facebook_messenger'&&c.autorizado&&dados?.podeGerenciar&&
+        {c.tipo==='facebook_messenger'&&c.autorizado&&!c.zernio_account_id&&dados?.podeGerenciar&&
          c.status!=='pausado'&&c.meta_assinatura_status!=='inscrita'&&
          <button type="button" disabled={!!assinando||ocupado}
           onClick={()=>void retentarAssinatura(c.id)}>
