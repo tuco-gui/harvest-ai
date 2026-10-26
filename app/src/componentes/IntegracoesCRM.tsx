@@ -27,23 +27,6 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
  const [aviso,setAviso]=useState('');
  const [copiado,setCopiado]=useState('');
  const [assinando,setAssinando]=useState<string|null>(null);
- const [setupMeta,setSetupMeta]=useState<{
-  app_id:string;webhook_url:string;verify_token:string;
-  oauth_facebook:string;oauth_instagram:string
- }|null>(null);
- const [carregandoSetup,setCarregandoSetup]=useState(false);
- async function revelarSetup(){
-  if(carregandoSetup)return;
-  if(setupMeta){setSetupMeta(null);return;}
-  setCarregandoSetup(true);setErro('');
-  try{
-   const r=await fetch('/api/integracoes/meta/configurar',{cache:'no-store'});
-   const d=await r.json();
-   if(!r.ok)throw Error(d.erro||'Não foi possível consultar dados da Meta.');
-   setSetupMeta(d);
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar configuração.');}
-  finally{setCarregandoSetup(false);}
- }
  const carregar=useCallback(async(signal?:AbortSignal)=>{
   try{
    const r=await fetch('/api/integracoes',{cache:'no-store',signal});
@@ -60,6 +43,9 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   if(TIPOS.some(x=>x.id===tipoAlvo))setTipo(tipoAlvo as Tipo);
   const funilAlvo=p.get('funil_id');
   if(funilAlvo&&/^\d+$/.test(funilAlvo))setFunilId(funilAlvo);
+  const retorno=p.get('meta_oauth');
+  if(retorno==='ok')setAviso('Conta autorizada. Verifique o status do webhook para concluir a conexão.');
+  if(retorno==='erro')setAviso('A autorização não foi concluída. Verifique as permissões da conta Meta.');
   const ctl=new AbortController();
   void carregar(ctl.signal);
   const receber=(e:MessageEvent)=>{
@@ -80,40 +66,39 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   return '<iframe title="Atendimento" src="'+origem+'/webchat/'+token+
    '" style="position:fixed;right:18px;bottom:18px;width:360px;max-width:calc(100vw - 28px);height:530px;max-height:85vh;border:0;border-radius:12px;z-index:99999" loading="lazy"></iframe>';
  }
- async function autorizar(fonteId:string,janelaExistente?:Window|null){
-  const popup=janelaExistente??window.open('','harvest-meta-oauth','popup,width=650,height=740');
-  if(!popup){setErro('Permita a janela pop-up para autorizar a Meta.');return;}
-  setOcupado(true);setErro('');
-  try{
-   const r=await fetch('/api/meta/oauth/iniciar',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({fonte_id:fonteId})});
-   const d=await r.json();
-   if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Não foi possível iniciar a conexão.');
-   popup.location.href=d.url;
-  }catch(e){popup.close();setErro(e instanceof Error?e.message:'Falha ao conectar a conta.');}
-  finally{setOcupado(false);}
+ async function iniciarOAuth(fonteId:string){
+  const r=await fetch('/api/meta/oauth/iniciar',{method:'POST',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify({fonte_id:fonteId})});
+  const d=await r.json();
+  if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Não foi possível iniciar a conexão Meta.');
+  const destino=new URL(d.url);
+  if(!['www.facebook.com','www.instagram.com'].includes(destino.hostname)||destino.protocol!=='https:')
+   throw Error('Destino de autorização inválido.');
+  // OAuth na mesma aba: evita pop-ups bloqueados, sessões/cookies inconsistentes
+  // e mantém a jornada de login do cliente inteiramente na Meta.
+  window.location.assign(destino.toString());
+ }
+ async function autorizar(fonteId:string){
+  if(ocupado)return;
+  setOcupado(true);setErro('');setAviso('');
+  try{await iniciarOAuth(fonteId);}
+  catch(e){setErro(e instanceof Error?e.message:'Falha ao conectar a conta.');setOcupado(false);}
  }
  async function cadastrar(){
   if(!funilId||ocupado)return;
-  // A janela deve abrir diretamente no gesto do clique do cliente.
-  // Aguardar cadastro/fetch antes de window.open faz navegadores bloquearem OAuth.
-  const precisaMeta=tipo==='instagram_dm'||tipo==='facebook_messenger';
-  const popup=precisaMeta?window.open('','harvest-meta-oauth','popup,width=650,height=740'):null;
-  if(precisaMeta&&!popup){setErro('Permita janelas pop-up para conectar sua conta Meta.');return;}
   setOcupado(true);setErro('');setAviso('');
   try{
    const r=await fetch('/api/integracoes',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo,funil_id:Number(funilId)})});
    const d=await r.json();
    if(!r.ok||!d.fonte)throw Error(d.erro||'Não foi possível cadastrar o canal.');
-   await carregar();
    if(tipo==='instagram_dm'||tipo==='facebook_messenger'){
-    await autorizar(d.fonte.id,popup);
-   }else{
-    setAviso('Fonte adicionada a este funil. Você pode gerenciá-la logo abaixo.');
+    await iniciarOAuth(d.fonte.id);
+    return;
    }
-  }catch(e){popup?.close();setErro(e instanceof Error?e.message:'Falha ao adicionar integração.');}
+   await carregar();
+   setAviso('Fonte adicionada a este funil. Você pode gerenciá-la logo abaixo.');
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao adicionar integração.');}
   finally{setOcupado(false);}
  }
  async function retentarAssinatura(fonteId:string){
@@ -212,31 +197,6 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
        </div>
       </article>)}
     </div>
-    {dados?.podeGerenciar&&['instagram_dm','facebook_messenger'].includes(tipo)&&
-       <div className="integracoes-crm-setup">
-        <h3>Configuração do aplicativo Meta</h3>
-        <p className="ajuda">Use estas informações no Meta for Developers para
-          vincular o aplicativo da Figueira. Não é necessário criar outro app.</p>
-        <button type="button" onClick={()=>void revelarSetup()} disabled={carregandoSetup}>
-          {carregandoSetup?'Consultando…':setupMeta?'Ocultar configuração':'Mostrar URLs e código de verificação'}
-        </button>
-        {setupMeta&&<div className="integracoes-crm-setup-dados">
-         {([
-          ['App ID',setupMeta.app_id],
-          ['URL do webhook',setupMeta.webhook_url],
-          ['Código de verificação',setupMeta.verify_token],
-          ['Retorno do Facebook',setupMeta.oauth_facebook],
-          ['Retorno do Instagram',setupMeta.oauth_instagram],
-         ] as const).map(([nome,valor])=><label key={nome}>
-          <span>{nome}</span>
-          <input type="text" readOnly value={valor} aria-label={nome}/>
-          <button type="button" onClick={async()=>{
-           try{await navigator.clipboard.writeText(valor);setCopiado(nome);}
-           catch{setErro('Não foi possível copiar a informação.');}
-          }}>{copiado===nome?'Copiado':'Copiar'}</button>
-         </label>)}
-        </div>}
-       </div>}
     <p className="ajuda">Instagram e Messenger exigem permissões e assinatura de mensagens
      aprovadas pela Meta. Ter acesso a várias páginas no Business Manager não as conecta
      automaticamente; selecione e autorize a conta de cada cliente.</p>
