@@ -955,3 +955,140 @@ a:hover{color:var(--ink)}
 .crm-funil-canal-acoes select{width:100%;background:var(--surface);color:var(--ink);padding:11px;border:1px solid var(--rule)}
 .crm-campanha-herdar-canal{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px;margin:12px 0}
 .crm-canal-funil-indicador{font-size:11px;color:var(--ink-3);padding:4px 8px;border:1px solid var(--rule);border-radius:4px}
+
+
+/* Revisão baseada na gravação do Kommo, 25/10: arquitetura visual do funil.
+ * Somente crm_avancado recebe a nova composição; páginas legadas preservadas. */
+.crm-pagina:has(.crm-kommo){max-width:none;padding:0 12px 24px}
+.crm-kommo>div:first-child{display:none!important}
+.crm-kommo>.crm-resumo{display:none!important}
+.crm-kommo .crm-barra{position:relative;display:flex;align-items:center;flex-wrap:wrap;
+  gap:7px;padding:12px 8px;border-bottom:1px solid var(--rule);
+  background:var(--surface);margin:0 0 8px}
+.crm-kommo .crm-barra>.crm-atalho-tarefas{display:none}
+.crm-kommo .crm-barra>select:first-of-type{order:0;flex:0 1 215px;font-weight:800!important;
+  border:0!important;background:transparent!important}
+.crm-kommo .crm-barra>.crm-pipeline-menu{order:1;flex:none}
+.crm-kommo .crm-barra>.crm-busca{order:2;flex:1 1 170px;max-width:340px}
+.crm-kommo .crm-barra>button[aria-expanded]{order:3}
+.crm-kommo .crm-barra>select:not(:first-of-type){display:none}
+.crm-kommo .crm-barra>.crm-view-toggle{order:4}
+.crm-kommo .crm-barra>.crm-alternar{order:5}
+.crm-kommo .crm-barra>.crm-nova{order:6;margin-left:auto;white-space:nowrap}
+.crm-kommo .crm-kanban{grid-template-columns:repeat(7,minmax(170px,1fr));gap:5px;
+ padding:0 0 10px;min-height:65vh}
+.crm-kommo .crm-kanban-encerrados{grid-template-columns:repeat(4,minmax(210px,1fr))}
+.crm-kommo .crm-coluna{border-radius:0;min-height:65vh;border-color:var(--rule)}
+.crm-kommo .crm-coluna-cabecalho{border-radius:0;padding:10px 8px}
+.crm-kommo .crm-cartao{border-radius:2px;padding:9px}
+.crm-kommo .crm-coluna-cards{padding:6px;gap:6px}
+.crm-kommo-filtros{display:grid;grid-template-columns:190px minmax(230px,1fr) minmax(280px,1.1fr);
+ gap:0;position:relative;z-index:20;width:min(950px,100%);
+ max-height:min(75vh,720px);overflow:auto;background:var(--surface);
+ border:1px solid var(--rule);box-shadow:0 14px 32px #0002;margin:0 0 14px;
+ font-size:12px}
+.crm-kommo-filtros>nav,.crm-kommo-filtros-propriedades,.crm-kommo-filtros-tags{padding:16px;
+ border-right:1px solid var(--rule);min-width:0;display:flex;flex-direction:column;gap:9px}
+.crm-kommo-filtros>nav strong,.crm-kommo-filtros-propriedades>strong{font-size:12px;margin-bottom:5px}
+.crm-kommo-filtros-vistas button{text-align:left;border:0;border-bottom:1px solid var(--rule);
+ padding:8px 4px;font-size:11px}
+.crm-kommo-filtros-vistas button.ativo{font-weight:800;color:var(--red);border-left:2px solid var(--red);padding-left:9px}
+.crm-kommo-filtros-propriedades label{display:flex;flex-direction:column;gap:5px;font-size:11px}
+.crm-kommo-filtros-propriedades input,.crm-kommo-filtros-propriedades select{
+ width:100%;height:32px;background:var(--surface);color:var(--ink);
+ padding:5px 7px;border:1px solid var(--rule)}
+.crm-kommo-filtros-propriedades>button{text-align:left;color:var(--red);font-weight:600}
+.crm-kommo-filtros-tags .crm-gestao-etiquetas{max-width:100%}
+.crm-kommo-filtros-tags .crm-etiquetas-opcoes{max-height:290px;overflow:auto}
+.crm-kommo-filtros-acoes{grid-column:1/-1;padding:8px 14px;background:var(--sunken);display:flex;justify-content:flex-end}
+.crm-kommo-filtros-acoes button{padding:8px 14px;background:var(--ink);color:var(--bg);font-weight:700}
+.crm-overlay:has(.crm-ficha-kommo){padding:0;background:var(--surface)}
+.crm-ficha-kommo{width:100%;max-width:none;height:100dvh;max-height:100dvh;box-shadow:none;border:0}
+.crm-ficha-kommo>.drawer-cabecalho{min-height:85px;background:var(--surface);
+ border-bottom:1px solid var(--rule);padding:12px 18px}
+.crm-ficha-kommo>.drawer-cabecalho>div:first-child{max-width:31%;width:31%;background:#202a2c;
+ color:white;margin:-12px 0 -12px -18px;padding:12px 17px;min-height:85px}
+.crm-ficha-kommo .drawer-cabecalho .label{color:#ddd}
+.crm-ficha-kommo .crm-tags-ficha-menu summary{color:#eee}
+.crm-ficha-kommo .crm-ficha-corpo{grid-template-columns:minmax(300px,31%) minmax(0,69%)}
+.crm-ficha-painel-dados{display:flex;flex-direction:column;min-height:0;overflow:hidden;
+ border-right:1px solid var(--rule);background:var(--surface)}
+.crm-ficha-painel-dados>.crm-ficha-dados{flex:1;border-right:0}
+.crm-abas-dados{display:flex;align-items:stretch;gap:0;min-height:36px;
+ background:var(--sunken);border-bottom:1px solid var(--rule);overflow:auto}
+.crm-abas-dados button{flex:1 0 auto;padding:8px 10px;font-size:11px;text-align:center;
+ white-space:nowrap;color:var(--ink-3);border-bottom:2px solid transparent}
+.crm-abas-dados button.ativa{font-weight:800;color:var(--ink);border-bottom-color:var(--red)}
+.crm-ficha-campos-laterais{flex:1;min-height:0;overflow:auto}
+.crm-ficha-campos-laterais .crm-oportunidade-extras{min-height:auto;overflow:visible}
+.crm-ficha-kommo .crm-ficha-dados .crm-form-grid{grid-template-columns:1fr;
+ padding:14px;gap:9px}
+.crm-ficha-kommo .crm-ficha-dados .crm-form-grid>label{
+ flex-direction:row;align-items:center;justify-content:space-between;gap:8px;font-size:11px}
+.crm-ficha-kommo .crm-ficha-dados .crm-form-grid>label input,
+.crm-ficha-kommo .crm-ficha-dados .crm-form-grid>label select,
+.crm-ficha-kommo .crm-ficha-dados .crm-form-grid>label textarea{
+ width:60%;min-width:0;flex:0 0 60%;background:transparent}
+.crm-ficha-kommo .crm-ficha-dados .crm-form-grid .campo-largo{grid-column:auto}
+.crm-ficha-kommo .crm-ficha-contexto{background:var(--surface)}
+.crm-ficha-kommo .crm-mensagens{flex:1}
+.crm-ficha-kommo .crm-abas{border-bottom:1px solid var(--rule)}
+.crm-ficha-kommo .crm-compositor{margin-top:auto;background:var(--surface)}
+/* Fontes de lead configuradas na coluna da edição do funil, como no Kommo. */
+.crm-kommo-editor-grid{display:grid;grid-template-columns:245px minmax(0,1fr);
+ gap:16px;align-items:start}
+.crm-kommo-fontes{border-right:1px solid var(--rule);padding:12px;min-width:0;
+ background:var(--surface);min-height:58vh}
+.crm-kommo-fontes>h3{font-size:11px;font-weight:800;letter-spacing:.06em;margin:0 0 9px}
+.crm-kommo-fontes .crm-funil-canal{padding:12px 0;border:0;border-top:1px solid var(--rule);
+ border-radius:0;margin:16px 0 0}
+.crm-kommo-fontes .crm-funil-canal>h3{font-size:12px}
+.crm-kommo-fontes .crm-funil-canal-acoes{flex-direction:column;align-items:stretch}
+.crm-kommo-fontes .crm-funil-canal-acoes label{flex:auto;min-width:0}
+.crm-kommo-fontes .crm-funil-canal-acoes button{align-self:flex-start}
+.crm-kommo-editor-estagios{min-width:0}
+.crm-kommo-fontes-lista{display:flex;flex-direction:column;gap:7px;margin:12px 0}
+.crm-kommo-fonte-linha{display:flex;gap:9px;align-items:center;padding:8px;
+ background:var(--sunken);border:1px solid var(--rule);min-width:0}
+.crm-kommo-fonte-icone{width:28px;height:28px;border-radius:50%;background:#188b64;
+ color:white;display:grid;place-items:center;font-weight:800;font-size:12px;flex:none}
+.crm-kommo-fonte-linha>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.crm-kommo-fonte-linha strong{font-size:11px;overflow-wrap:anywhere}
+.crm-kommo-fonte-linha small{font-size:10px;color:var(--ink-3)}
+.crm-kommo-adicionar-fonte{padding:9px;border:1px dashed var(--rule-2);
+ width:100%;font-size:12px;text-align:left;font-weight:700}
+.crm-kommo-fontes-overlay{position:fixed;inset:0;z-index:1000;background:#0008;
+ display:grid;place-items:center;padding:18px}
+.crm-kommo-fontes-dialogo{width:min(720px,100%);max-height:88dvh;overflow:auto;
+ background:var(--surface);padding:20px;border-radius:6px;box-shadow:0 20px 60px #0003}
+.crm-kommo-fontes-dialogo>header{display:flex;align-items:center;justify-content:space-between;
+ margin-bottom:12px}
+.crm-kommo-fontes-dialogo h2{font-size:19px}
+.crm-kommo-fontes-dialogo>header button{font-size:24px}
+.crm-kommo-fontes-grade{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:10px;margin-top:12px}
+.crm-kommo-fonte-tile{padding:16px 12px;border:1px solid var(--rule);border-top:3px solid var(--red);
+ display:flex;flex-direction:column;align-items:flex-start;gap:13px;min-height:140px}
+.crm-kommo-fonte-tile strong{font-size:13px}
+.crm-kommo-fonte-tile small{font-size:11px;color:var(--ink-3)}
+.crm-kommo-fonte-tile a,.crm-kommo-fonte-indisponivel{margin-top:auto;font-size:11px;font-weight:700}
+.crm-kommo-fonte-tile a{text-decoration:underline;color:var(--red)}
+.crm-kommo-fonte-indisponivel{color:var(--ink-3)}
+@media(max-width:950px){
+ .crm-kommo-editor-grid{grid-template-columns:1fr}
+ .crm-kommo-fontes{min-height:auto;border-right:0;border-bottom:1px solid var(--rule)}
+ .crm-kommo-fontes-grade{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .crm-kommo-filtros{grid-template-columns:150px minmax(170px,1fr) minmax(190px,1fr)}
+}
+@media(max-width:700px){
+ .crm-kommo .crm-barra{gap:7px}
+ .crm-kommo .crm-barra>.crm-nova{margin-left:0}
+ .crm-kommo-filtros{grid-template-columns:1fr}
+ .crm-kommo-filtros>nav,.crm-kommo-filtros-propriedades,.crm-kommo-filtros-tags{
+ border-right:0;border-bottom:1px solid var(--rule)}
+ .crm-kommo-filtros-vistas{display:flex!important;flex-direction:row!important;flex-wrap:wrap}
+ .crm-ficha-kommo .crm-ficha-corpo{grid-template-columns:1fr;overflow:auto}
+ .crm-ficha-kommo>.drawer-cabecalho>div:first-child{width:75%;max-width:75%}
+ .crm-ficha-kommo .crm-ficha-painel-dados{min-height:45vh;border-right:0}
+ .crm-ficha-kommo .crm-ficha-contexto{min-height:45vh}
+}
