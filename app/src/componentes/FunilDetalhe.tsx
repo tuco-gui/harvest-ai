@@ -18,7 +18,13 @@ const CORES_PADRAO = [
   '#d55c2a', '#1A7A4A', '#C4191F', '#555555', '#2196F3',
 ];
 
-export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais,autoPermitido=false }: { funil: Funil; estagios: Estagio[]; canais: Canal[];autoPermitido?:boolean }) {
+export default function FunilDetalhe({
+ funil, estagios: estagiosIniciais, canais, autoPermitido=false,
+ embutido=false, aoVoltar, aoSalvar,
+}: {
+ funil:Funil;estagios:Estagio[];canais:Canal[];autoPermitido?:boolean;
+ embutido?:boolean;aoVoltar?:()=>void;aoSalvar?:()=>void;
+}) {
   const router = useRouter();
   const [estagios, setEstagios] = useState(estagiosIniciais);
   const [salvando, setSalvando] = useState(false);
@@ -48,6 +54,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
       setAvisoAutomacao(proximo?'Automação ativada para novas conversas elegíveis.':
         'Criação automática desligada. Negócios existentes foram preservados.');
       router.refresh();
+      aoSalvar?.();
     }catch(e){setAvisoAutomacao(e instanceof Error?e.message:'Falha ao salvar automação.');}
     finally{setSalvandoAutomacao(false);}
   }
@@ -201,6 +208,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
       if (ok) {
         setSujo(false);
         router.refresh();
+        aoSalvar?.();
       } else {
         alert('Alguns estágios não foram salvos.');
       }
@@ -211,14 +219,21 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
     }
   }
 
+  function voltar() {
+    if(sujo && !window.confirm('Descartar as alterações não salvas do pipeline?'))return;
+    aoVoltar?.();
+  }
+
   function cancelar() {
     setEstagios(estagiosIniciais);
     setSujo(false);
   }
 
   return (
-    <div className="pagina" style={{ maxWidth: 'none', padding: '24px 28px 40px' }}>
-      <p className="ajuda"><Link href="/funis">← Funis</Link></p>
+    <div className={embutido?'crm-editor-funil-embutido':'pagina'} style={{ maxWidth:'none', padding: embutido?'10px 8px 36px':'24px 28px 40px' }}>
+      <p className="ajuda">{embutido
+   ? <button type="button" className="crm-editor-voltar" onClick={voltar}>← Voltar ao pipeline</button>
+   : <Link href="/funis">← Funis</Link>}</p>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
