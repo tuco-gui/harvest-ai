@@ -62,5 +62,10 @@ export async function POST(req:Request,{params}:Context){
     .eq('id',id).eq('conta_id',fonte.conta_id)
   ]);
  }
+ // A primeira conversa gera um lead no funil, caso a opção esteja habilitada.
+ const {error:leadErro}=await db.rpc('crm_criar_negocio_primeira_conversa_social',{
+  p_conta:fonte.conta_id,p_fonte:id,p_conversa:conversa.id
+ });
+ if(leadErro)return new Response('Lead persistence error',{status:503});
  return Response.json({ok:true});
 }
