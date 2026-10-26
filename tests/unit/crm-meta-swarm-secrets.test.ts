@@ -9,7 +9,7 @@ assert.match(lib,/\/run\/secrets\//);
 assert.match(lib,/harvest_meta_app_secret/);
 assert.match(lib,/harvest_meta_token_key/);
 assert.match(lib,/harvest_meta_webhook_verify_token/);
-assert.match(webhook,/segredoMeta\('webhook'\)/);
+assert.match(webhook,/tokenVerificacaoMeta\(\)/);
 assert.doesNotMatch(webhook,/process\.env\.HARVEST_META_WEBHOOK_VERIFY_TOKEN/);
 process.env.HARVEST_META_APP_ID='2112411986271610';
 process.env.HARVEST_META_APP_SECRET='segredo_somente_para_teste';

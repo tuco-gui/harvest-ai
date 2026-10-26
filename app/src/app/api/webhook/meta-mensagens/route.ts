@@ -1,11 +1,11 @@
 import {NextResponse} from 'next/server';
 import {supabaseAdmin} from '@/lib/supabase/server';
-import {configuracaoMeta,verificarAssinaturaMeta,segredoMeta} from '@/lib/crmMetaOAuth';
+import {configuracaoMeta,verificarAssinaturaMeta,tokenVerificacaoMeta} from '@/lib/crmMetaOAuth';
 import {extrairMensagensMeta,gravarMensagemMeta} from '@/lib/crmMetaInbound';
 
 export async function GET(req:Request){
  const url=new URL(req.url);
- const token=segredoMeta('webhook');
+ const token=tokenVerificacaoMeta();
  if(!token||url.searchParams.get('hub.mode')!=='subscribe'||
    url.searchParams.get('hub.verify_token')!==token)return new Response('Forbidden',{status:403});
  const challenge=url.searchParams.get('hub.challenge')??'';

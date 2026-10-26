@@ -1193,3 +1193,19 @@ a:hover{color:var(--ink)}
  .integracoes-crm-detalhe{padding:13px}
  .integracoes-crm-conexao{flex-wrap:wrap}
 }
+
+
+/* Integrações Meta: URLs e token de desafio apresentados só ao administrador. */
+.integracoes-crm-setup{margin:18px 0;padding:15px;border:1px solid var(--rule);
+ background:var(--sunken);display:flex;flex-direction:column;gap:10px}
+.integracoes-crm-setup>button{align-self:flex-start;border:1px solid var(--rule);
+ background:var(--surface);padding:8px 12px;color:var(--ink);font-weight:600;font-size:12px}
+.integracoes-crm-setup-dados{display:flex;flex-direction:column;gap:9px}
+.integracoes-crm-setup-dados label{display:grid;grid-template-columns:140px minmax(0,1fr) auto;
+ align-items:center;gap:9px;font-size:12px}
+.integracoes-crm-setup-dados input{width:100%;min-width:0;padding:7px;
+ background:var(--surface);color:var(--ink);border:1px solid var(--rule);font-family:monospace;font-size:11px}
+.integracoes-crm-setup-dados button{padding:8px 10px;color:var(--ink);
+ background:var(--surface);border:1px solid var(--rule);cursor:pointer}
+@media(max-width:640px){.integracoes-crm-setup-dados label{grid-template-columns:1fr auto}
+ .integracoes-crm-setup-dados label>span{grid-column:1 / -1}}
