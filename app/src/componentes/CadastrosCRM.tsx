@@ -46,6 +46,7 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
  const [carregando,setCarregando]=useState(true);
  const [salvando,setSalvando]=useState(false);
  const [erro,setErro]=useState('');
+ const [importando,setImportando]=useState(false);
  const [sucesso,setSucesso]=useState('');
  const carregar=useCallback(async()=>{
   setCarregando(true);setErro('');
@@ -68,6 +69,21 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
  const filtrados=registros.filter(r=>
   [r.nome,r.email??'',r.telefone??'',r.sku??'',r.cnpj??'']
    .some(v=>v.toLocaleLowerCase('pt-BR').includes(busca.toLocaleLowerCase('pt-BR'))));
+ async function importarCSV(file:File){
+  setImportando(true);setErro('');setSucesso('');
+  try{
+   const form=new FormData();form.append('file',file);
+   const r=await fetch('/api/crm/cadastros/produtos/importar',{method:'POST',body:form});
+   const d=await r.json();
+   if(!r.ok)throw Error(d.erro||'Falha na importação.');
+   setSucesso(String(d.criados)+' produto(s) criado(s), '+String(d.atualizados)+
+    ' atualizado(s).'+(d.erros?.length?' '+d.erros.length+' linha(s) com erro.':''));
+   if(d.erros?.length)setErro(d.erros.slice(0,8).map((x:{linha:number;erro:string})=>
+    'Linha '+x.linha+': '+x.erro).join(' | '));
+   await carregar();
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao importar.');}
+  finally{setImportando(false);}
+ }
  function mudar(chave:string,val:unknown){setForm(v=>({...v,[chave]:val}));}
  const pessoasDosNegocios = useMemo(
    () => entidade==='contatos' ? contatosDasOportunidades(oportunidadesRelacionadas) : [],
@@ -112,6 +128,11 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
     <Link href="/crm/cadastros/produtos">Produtos</Link>
     <Link href="/crm/campos-personalizados">Campos personalizados</Link>
   </nav>
+  {entidade==='produtos'&&<label style={{display:'inline-flex',gap:8,alignItems:'center',marginBottom:12}}>
+   <span>{importando?'Importando…':'Importar produtos (CSV)'}</span>
+   <input type="file" accept=".csv,text/csv" disabled={importando}
+    onChange={e=>{const f=e.target.files?.[0];if(f)void importarCSV(f);e.target.value='';}}/>
+  </label>}
   <div className="crm-tarefas-header">
    <div><p className="label">CRM · CADASTROS</p>
     <h1>{NOMES[entidade]}</h1>
