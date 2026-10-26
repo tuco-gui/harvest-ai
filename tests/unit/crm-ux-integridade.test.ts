@@ -28,7 +28,7 @@ assert.doesNotMatch(css,/\.crm-kommo>div:first-child/,'não ocultar editor inlin
 assert.match(contatos,/redirect\('\/crm\/contatos'\)/,'um único menu de contatos');
 assert.match(atendimento,/redirect\(q\.telefone \?/,'atendimento legado deve redirecionar à Inbox');
 for (const route of routes){
- assert.match(route, /\.eq\('conta_id',perfil\.conta_id\?\?''\)/,
+ assert.match(route, /\.eq\('conta_id',\s*perfil\.conta_id\s*\?\?\s*''\)/,
  'estágios exigem filtro de workspace ativa');
  assert.doesNotMatch(route,/!funil\s*&&\s*perfil\.papel\s*!==\s*'super_admin'/,
  'superadmin não pode transpor o tenant ativo por ID do funil');
