@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import IntegracoesCRM from '@/componentes/IntegracoesCRM';
 import { useRouter } from 'next/navigation';
 import { PROVEDORES } from '@/lib/ia';
 import { CANAIS_HARVEST } from '@/lib/canaisUnificados';
@@ -60,6 +61,7 @@ type Props = {
   mostraEnriquecimento: boolean;
   eSuperAdmin: boolean;
   eAdmin: boolean;
+  crmAvancado: boolean;
   optOuts: OptOut[];
   optOutsTotal: number;
   optOutPolicy: string;
@@ -67,7 +69,12 @@ type Props = {
 
 export default function Configuracoes(p: Props) {
   const router = useRouter();
-  const [aba, setAba] = useState<'conexoes' | 'mensagens' | 'tempo' | 'erros' | 'optouts'>('conexoes');
+  const [aba, setAba] = useState<'conexoes' | 'integracoes' | 'mensagens' | 'tempo' | 'erros' | 'optouts'>('conexoes');
+
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    if(params.get('aba')==='integracoes'&&p.crmAvancado)setAba('integracoes');
+  },[p.crmAvancado]);
 
   const [serpapi, setSerpapi] = useState('');
   const [evoUrl, setEvoUrl] = useState(p.evolutionUrl);
@@ -373,6 +380,7 @@ export default function Configuracoes(p: Props) {
     <div className="pagina">
       <div className="modos" style={{ marginBottom: 28 }}>
         <button aria-pressed={aba === 'conexoes'} onClick={() => setAba('conexoes')}>Conexões</button>
+        {p.crmAvancado && <button aria-pressed={aba === 'integracoes'} onClick={() => setAba('integracoes')}>Integrações</button>}
         <button aria-pressed={aba === 'mensagens'} onClick={() => setAba('mensagens')}>Mensagens</button>
         <button aria-pressed={aba === 'tempo'} onClick={() => setAba('tempo')}>Tempo de envio</button>
         <button aria-pressed={aba === 'erros'} onClick={() => setAba('erros')}>
@@ -384,6 +392,9 @@ export default function Configuracoes(p: Props) {
           </button>
         )}
       </div>
+
+      {aba === 'integracoes' && p.crmAvancado &&
+        <IntegracoesCRM onVerWhatsapp={()=>setAba('conexoes')}/>}
 
       {aba === 'conexoes' && (
         <>
@@ -1111,7 +1122,7 @@ export default function Configuracoes(p: Props) {
         </>
       )}
 
-      {aba !== 'erros' && aba !== 'optouts' && (
+      {aba !== 'erros' && aba !== 'optouts' && aba !== 'integracoes' && (
         <button className="salvar" onClick={salvar} disabled={salvando}>
           {salvando ? 'Salvando…' : 'Salvar'}
         </button>
