@@ -27,8 +27,10 @@ export function decifrarMeta(valor:string):string{
  dec.setAuthTag(tag);return Buffer.concat([dec.update(conteudo),dec.final()]).toString('utf8');
 }
 export function configuracaoMeta(tipo:PlataformaMeta):{id:string;secret:string}|null{
- const id=tipo==='instagram_dm'?process.env.HARVEST_INSTAGRAM_APP_ID:process.env.HARVEST_META_APP_ID;
- const secret=tipo==='instagram_dm'?process.env.HARVEST_INSTAGRAM_APP_SECRET:process.env.HARVEST_META_APP_SECRET;
+ // Um só aplicativo Meta serve às workspaces. Um ID de produto Instagram
+ // opcional pode ser configurado somente se o produto assim exigir.
+ const id=tipo==='instagram_dm'?(process.env.HARVEST_INSTAGRAM_APP_ID||process.env.HARVEST_META_APP_ID):process.env.HARVEST_META_APP_ID;
+  const secret=tipo==='instagram_dm'?(process.env.HARVEST_INSTAGRAM_APP_SECRET||process.env.HARVEST_META_APP_SECRET):process.env.HARVEST_META_APP_SECRET;
  if(!id?.trim()||!secret?.trim()||!chaveCriptografia())return null;
  return {id:id.trim(),secret:secret.trim()};
 }

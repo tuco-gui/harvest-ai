@@ -653,9 +653,10 @@ export default function FunilDetalhe({
           <header><h2 id="crm-fontes-titulo">Fontes de lead</h2>
             <button type="button" aria-label="Fechar fontes"
               onClick={()=>setFontesAbertas(false)}>×</button></header>
-          <p className="ajuda">Conecte a fonte aqui, dentro do funil. Canais Meta precisam
-            das permissões oficiais de mensagens; não serão apresentados como conectados
-            antes da autorização. Webchat pode ser publicado imediatamente no site.</p>
+          <p className="ajuda">Selecione a fonte deste funil. Instagram, Messenger e WhatsApp
+            oficial são autorizados em <strong>Configurações → Integrações</strong>, usando
+            o aplicativo Meta central da plataforma e a conta de cada cliente.
+            O webchat pode ser criado aqui mesmo.</p>
           {erroFontes&&<p className="crm-aviso" role="alert">{erroFontes}</p>}
           {carregandoFontes&&<p className="ajuda">Carregando fontes…</p>}
           <label className="crm-fonte-dominio">
@@ -675,10 +676,13 @@ export default function FunilDetalhe({
                 {c.id==='whatsapp_waha'||c.id==='whatsapp_evolution'
                   ?<Link href="/configuracoes" onClick={()=>setFontesAbertas(false)}>
                     Gerenciar números</Link>
-                  :<button type="button" disabled={!autoPermitido||!!salvandoFonte}
-                    onClick={()=>void adicionarFonte(c.id)}>
-                    {salvandoFonte===c.id?'Adicionando…':c.id==='webchat'?
-                      'Criar webchat':'Cadastrar fonte'}</button>}
+                  :c.id==='webchat'
+                    ?<button type="button" disabled={!autoPermitido||!!salvandoFonte}
+                      onClick={()=>void adicionarFonte(c.id)}>
+                      {salvandoFonte===c.id?'Adicionando…':'Criar webchat'}</button>
+                    :<Link href={'/configuracoes?aba=integracoes&tipo='+encodeURIComponent(c.id)+
+                      '&funil_id='+funil.id} onClick={()=>setFontesAbertas(false)}>
+                      Configurar integração</Link>}
               </div>)}
           </div>
           <h3 style={{marginTop:22}}>Fontes deste funil</h3>
@@ -699,11 +703,10 @@ export default function FunilDetalhe({
               </>}
             </div>
             {(f.tipo==='instagram_dm'||f.tipo==='facebook_messenger')&&f.status!=='pausado'&&
-              <button type="button" className="btn-primario" disabled={!!iniciandoOAuth}
-                onClick={()=>void conectarMeta(f.id)}>
-                {iniciandoOAuth===f.id?'Abrindo autorização…':
-                  f.meta_autorizado?'Reautorizar conta':'Conectar conta Meta'}
-              </button>}
+              <Link href={'/configuracoes?aba=integracoes&tipo='+f.tipo+
+                '&funil_id='+funil.id} className="btn-primario">
+                {f.meta_autorizado?'Gerenciar integração':'Conectar em Configurações'}
+              </Link>}
             {f.tipo==='webchat'&&<button type="button"
               disabled={!!salvandoFonte} onClick={()=>void mudarFonte(f.id,f.status==='pronto'?'pausado':'pronto')}>
               {f.status==='pronto'?'Pausar':'Reativar'}</button>}
