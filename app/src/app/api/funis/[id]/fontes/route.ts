@@ -37,12 +37,15 @@ async function contexto(id:string){
 export async function GET(_req:Request,{params}:Ctx){
  const c=await contexto((await params).id);if('erro'in c)return c.erro;
  const {data,error}=await c.admin.from('crm_fontes_funil')
-  .select('id,funil_id,tipo,nome,identificador_externo,dominio,status,token_publico,criado_em')
+  .select('id,funil_id,tipo,nome,identificador_externo,dominio,status,token_publico,meta_token_cifrado,criado_em')
   .eq('conta_id',c.perfil.conta_id).eq('funil_id',c.funil.id)
   .order('criado_em',{ascending:true}).limit(100);
  if(error)return NextResponse.json({erro:'Falha ao listar fontes.'},{status:503});
  // Token é público para incorporação, mas só o administrador recebe a lista completa.
- const fontes=isAdmin(c.perfil.papel)?data??[]:(data??[]).map(({token_publico,...r})=>r);
+ const fontes=(data??[]).map(({meta_token_cifrado,token_publico,...r})=>({
+  ...r,meta_autorizado:Boolean(meta_token_cifrado),
+  ...(isAdmin(c.perfil.papel)?{token_publico}:{}),
+ }));
  return NextResponse.json({fontes,podeGerenciar:isAdmin(c.perfil.papel)});
 }
 export async function POST(req:Request,{params}:Ctx){
