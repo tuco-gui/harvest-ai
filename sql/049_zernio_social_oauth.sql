@@ -21,5 +21,12 @@ ALTER TABLE public.crm_fontes_funil
 CREATE UNIQUE INDEX IF NOT EXISTS crm_fontes_zernio_conta_unique
  ON public.crm_fontes_funil(conta_id,zernio_account_id)
  WHERE zernio_account_id IS NOT NULL;
+ALTER TABLE public.crm_conversas_externas
+ ADD COLUMN IF NOT EXISTS zernio_conversation_id text NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS crm_zernio_thread_idx
+ ON public.crm_conversas_externas(fonte_id,zernio_conversation_id)
+ WHERE zernio_conversation_id IS NOT NULL;
+ALTER TABLE public.crm_fontes_funil
+ ADD COLUMN IF NOT EXISTS zernio_webhook_id text NULL;
 NOTIFY pgrst,'reload schema';
 COMMIT;
