@@ -43,5 +43,13 @@ CREATE TRIGGER crm_validar_oauth_fonte_tg BEFORE INSERT OR UPDATE OF
 ALTER TABLE public.crm_meta_oauth_estados ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.crm_meta_oauth_estados FROM PUBLIC,anon,authenticated;
 GRANT ALL ON public.crm_meta_oauth_estados TO service_role;
+-- Estado real de entrega e chave de idempotência do envio manual Meta.
+ALTER TABLE public.crm_mensagens_externas
+ ADD COLUMN IF NOT EXISTS status_envio text NOT NULL DEFAULT 'enviado'
+ CHECK(status_envio IN ('pendente','enviado','falhou')),
+ ADD COLUMN IF NOT EXISTS meta_mensagem_id text NULL;
+CREATE INDEX IF NOT EXISTS crm_mensagens_saida_status_idx
+ ON public.crm_mensagens_externas(conta_id,conversa_id,status_envio)
+ WHERE direcao='saida';
 NOTIFY pgrst,'reload schema';
 COMMIT;
