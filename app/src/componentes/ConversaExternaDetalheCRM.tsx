@@ -3,7 +3,7 @@ import {useCallback,useEffect,useState} from 'react';
 type Atendente={id:string;nome:string};
 type Fonte={id:string;nome:string;tipo:string;status:string;funil_id:number};
 type Conversa={id:string;nome:string|null;visitante_id:string;status:string;responsavel_id:string|null};
-type Mensagem={id:string;direcao:'entrada'|'saida';texto:string;criado_em:string};
+type Mensagem={id:string;direcao:'entrada'|'saida';texto:string;criado_em:string;status_envio?:'pendente'|'enviado'|'falhou'};
 export default function ConversaExternaDetalheCRM({id,podeAtribuir,atendentes,aoSalvar}:{
  id:string;podeAtribuir:boolean;atendentes:Atendente[];aoSalvar:()=>void;
 }){
@@ -41,12 +41,12 @@ export default function ConversaExternaDetalheCRM({id,podeAtribuir,atendentes,ao
   try{
    const r=await fetch('/api/crm/conversas-externas/'+id,{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({texto:texto.trim()}),
+    body:JSON.stringify({texto:texto.trim(),idempotencia:crypto.randomUUID()}),
    });
    const d=await r.json();
    if(!r.ok)throw Error(d.erro||'Falha ao enviar.');
    setMensagens(a=>a.concat(d.mensagem));setTexto('');
-   setAviso('Resposta salva no webchat, sem enviar WhatsApp.');
+   setAviso(fonte?.tipo==='webchat'?'Resposta salva no webchat, sem enviar WhatsApp.':'Resposta enviada pela Meta e registrada no histórico.');
    aoSalvar();
   }catch(e){setErro(e instanceof Error?e.message:'Falha na resposta.');}
   finally{setSalvando(false);}
@@ -75,18 +75,18 @@ export default function ConversaExternaDetalheCRM({id,podeAtribuir,atendentes,ao
   <div className="crm-atendimento-mensagens">
    {!mensagens.length&&<p className="crm-atendimentos-vazio">Nenhuma mensagem registrada.</p>}
    {mensagens.map(m=><article key={m.id} className={'crm-atendimento-mensagem '+m.direcao}>
-    <p>{m.texto}</p><small>{formato(m.criado_em)} · {m.direcao==='entrada'?'Recebida':'Enviada'}</small>
+    <p>{m.texto}</p><small>{formato(m.criado_em)} · {m.direcao==='entrada'?'Recebida':m.status_envio==='falhou'?'Falha no envio':m.status_envio==='pendente'?'Confirmação pendente':'Enviada'}</small>
    </article>)}
   </div>
   <div className="crm-inbox-compositor">
-   {fonte?.tipo==='webchat'&&fonte.status==='pronto'?
+   {(fonte?.tipo==='webchat'||fonte?.tipo==='instagram_dm'||fonte?.tipo==='facebook_messenger')&&fonte.status==='pronto'?
     <form onSubmit={responder}>
-     <label>Responder no webchat
+     <label>Responder {fonte?.tipo==='webchat'?'no webchat':fonte?.tipo==='instagram_dm'?'no Instagram':'no Messenger'}
       <textarea maxLength={2000} value={texto} onChange={e=>setTexto(e.target.value)}
         placeholder="Digite sua resposta…" rows={3}/>
      </label>
      <button type="submit" className="btn-primario"
-       disabled={!texto.trim()||salvando}>{salvando?'Salvando…':'Enviar resposta'}</button>
+       disabled={!texto.trim()||salvando}>{salvando?'Enviando…':'Enviar resposta'}</button>
     </form>:
     <p className="ajuda">A fonte ainda não tem mensagens de saída habilitadas.
       Autorize a conta no editor do funil antes de responder.</p>}
