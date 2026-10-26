@@ -24,7 +24,7 @@ export async function GET(){
  const [funis,fontes,numeros]=await Promise.all([
   admin.from('funis').select('id,nome,ativo,canal_padrao_id').eq('conta_id',perfil.conta_id)
    .order('nome').limit(200),
-  admin.from('crm_fontes_funil').select('id,funil_id,tipo,nome,status,dominio,identificador_externo,meta_token_cifrado,meta_assinatura_status,meta_assinatura_em,token_publico,criado_em')
+  admin.from('crm_fontes_funil').select('id,funil_id,tipo,nome,status,dominio,identificador_externo,meta_token_cifrado,zernio_account_id,zernio_webhook_id,meta_assinatura_status,meta_assinatura_em,token_publico,criado_em')
    .eq('conta_id',perfil.conta_id).order('criado_em',{ascending:false}).limit(200),
   admin.from('whatsapp_canais').select('id,nome,provider,numero,status,ativo')
    .eq('conta_id',perfil.conta_id).order('id').limit(200),
@@ -33,7 +33,7 @@ export async function GET(){
   return NextResponse.json({erro:'Não foi possível carregar as integrações desta workspace.'},{status:503});
  const podeGerenciar=isAdmin(perfil.papel);
  const lista=(fontes.data??[]).map(({meta_token_cifrado,token_publico,...f})=>({
-  ...f,autorizado:Boolean(meta_token_cifrado),
+  ...f,autorizado:Boolean(meta_token_cifrado||f.zernio_account_id),
   ...(podeGerenciar&&f.tipo==='webchat'?{token_publico}:{}),
  }));
  return NextResponse.json({funis:funis.data??[],fontes:lista,numeros:numeros.data??[],

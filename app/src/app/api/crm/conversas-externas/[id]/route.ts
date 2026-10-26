@@ -1,20 +1,21 @@
 import {NextResponse} from 'next/server';
 import {contexto,isAdmin} from '@/lib/contextoConversasExternas';
 import {enviarRespostaMeta} from '@/lib/crmMetaEnvio';
+import {zernio} from '@/lib/crmZernio';
 type Ctx={params:Promise<{id:string}>};
 async function carregar(id:string){
  const c=await contexto();if('erro'in c)return {erro:c.erro};
  if(!/^[0-9a-f-]{36}$/i.test(id))return {erro:NextResponse.json({erro:'Conversa inválida.'},{status:400})} as const;
  const {admin,perfil}=c;
  const {data:conversa,error}=await admin.from('crm_conversas_externas')
-  .select('id,fonte_id,nome,visitante_id,status,responsavel_id,criado_em,atualizado_em')
+  .select('id,fonte_id,nome,visitante_id,status,responsavel_id,criado_em,atualizado_em,zernio_conversation_id')
   .eq('id',id).eq('conta_id',perfil.conta_id).maybeSingle();
  if(error)return {erro:NextResponse.json({erro:'Falha ao consultar conversa.'},{status:503})} as const;
  if(!conversa)return {erro:NextResponse.json({erro:'Conversa não encontrada.'},{status:404})} as const;
  if(!isAdmin(perfil.papel)&&conversa.responsavel_id!==perfil.id)
   return {erro:NextResponse.json({erro:'Sem permissão para esta conversa.'},{status:403})} as const;
  const {data:fonte}=await admin.from('crm_fontes_funil')
-  .select('id,nome,tipo,status,funil_id').eq('id',conversa.fonte_id)
+  .select('id,nome,tipo,status,funil_id,zernio_account_id').eq('id',conversa.fonte_id)
   .eq('conta_id',perfil.conta_id).maybeSingle();
  if(!fonte)return {erro:NextResponse.json({erro:'Fonte não encontrada.'},{status:404})} as const;
  return {perfil,admin,conversa,fonte} as const;
@@ -85,6 +86,37 @@ export async function POST(req:Request,{params}:Ctx){
   .order('criado_em',{ascending:false}).limit(1).maybeSingle();
  if(errEntrada||!entrada||Date.now()-Date.parse(entrada.criado_em)>24*3600*1000)
   return NextResponse.json({erro:'Fora da janela de 24h. Aguarde nova mensagem do contato.'},{status:409});
+ if(c.fonte.zernio_account_id){
+  if(!c.conversa.zernio_conversation_id)
+   return NextResponse.json({erro:'Conversa da Zernio não identificada.'},{status:409});
+  const localId='local:'+chave;
+  const existente=await c.admin.from('crm_mensagens_externas').select('id')
+   .eq('conta_id',c.perfil.conta_id).eq('conversa_id',c.conversa.id)
+   .eq('mensagem_externa_id',localId).maybeSingle();
+  if(existente.data)return NextResponse.json({erro:'Tentativa já registrada.'},{status:409});
+  const reserva=await c.admin.from('crm_mensagens_externas').insert({
+   conta_id:c.perfil.conta_id,conversa_id:c.conversa.id,direcao:'saida',
+   texto:b.texto.trim(),mensagem_externa_id:localId,status_envio:'pendente'
+  }).select('id,texto,direcao,criado_em,status_envio').single();
+  if(reserva.error)return NextResponse.json({erro:'Tentativa já registrada ou indisponível.'},{status:409});
+  try{
+   const result=await zernio('inbox/conversations/'+encodeURIComponent(c.conversa.zernio_conversation_id)+'/messages',{
+    method:'POST',body:{accountId:c.fonte.zernio_account_id,message:b.texto.trim()}
+   });
+   const mid=result?.data?.messageId;
+   if(typeof mid!=='string'||!mid)throw Error('Sem confirmação de envio.');
+   const {data:msg,error}=await c.admin.from('crm_mensagens_externas')
+    .update({status_envio:'enviado',meta_mensagem_id:mid})
+    .eq('id',reserva.data.id).eq('conta_id',c.perfil.conta_id)
+    .select('id,texto,direcao,criado_em,status_envio').single();
+   if(error)return NextResponse.json({erro:'Zernio confirmou, mas o registro local falhou. Não reenvie.'},{status:503});
+   return NextResponse.json({mensagem:msg},{status:201});
+  }catch{
+   await c.admin.from('crm_mensagens_externas').update({status_envio:'falhou'})
+    .eq('id',reserva.data.id).eq('conta_id',c.perfil.conta_id);
+   return NextResponse.json({erro:'Zernio não confirmou o envio. Verifique a conversa antes de repetir.'},{status:502});
+  }
+ }
  const {data:fonte,error:erroFonte}=await c.admin.from('crm_fontes_funil')
   .select('id,tipo,identificador_externo,meta_token_cifrado,meta_expira_em')
   .eq('id',c.fonte.id).eq('conta_id',c.perfil.conta_id)

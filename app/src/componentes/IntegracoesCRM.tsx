@@ -6,7 +6,8 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 type Tipo='instagram_dm'|'facebook_messenger'|'whatsapp_cloud_api'|'webchat';
 type Fonte={id:string;funil_id:number;tipo:Tipo;nome:string;status:string;
  autorizado:boolean;identificador_externo:string|null;dominio:string|null;token_publico?:string;
- meta_assinatura_status?:'pendente'|'inscrita'|'falha';meta_assinatura_em?:string|null;};
+ meta_assinatura_status?:'pendente'|'inscrita'|'falha';meta_assinatura_em?:string|null;
+ zernio_account_id?:string|null;zernio_webhook_id?:string|null;};
 type Funil={id:number;nome:string;ativo:boolean;canal_padrao_id:number|null};
 type Numero={id:number;nome:string;numero:string|null;provider:string;status:string;ativo:boolean};
 type Dados={fontes:Fonte[];funis:Funil[];numeros:Numero[];podeGerenciar:boolean;
@@ -43,6 +44,9 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   if(TIPOS.some(x=>x.id===tipoAlvo))setTipo(tipoAlvo as Tipo);
   const funilAlvo=p.get('funil_id');
   if(funilAlvo&&/^\d+$/.test(funilAlvo))setFunilId(funilAlvo);
+  const zernioRetorno=p.get('zernio_oauth');
+  if(zernioRetorno==='ok')setAviso('Conta autorizada pela Zernio. O recebimento ainda depende do webhook.');
+  if(zernioRetorno==='erro')setAviso('A Zernio não concluiu a conexão. Verifique a conta e tente novamente.');
   const retorno=p.get('meta_oauth');
   if(retorno==='ok')setAviso('Conta autorizada. Verifique o status do webhook para concluir a conexão.');
   if(retorno==='erro')setAviso('A autorização não foi concluída. Verifique as permissões da conta Meta.');
@@ -67,16 +71,29 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
    '" style="position:fixed;right:18px;bottom:18px;width:360px;max-width:calc(100vw - 28px);height:530px;max-height:85vh;border:0;border-radius:12px;z-index:99999" loading="lazy"></iframe>';
  }
  async function iniciarOAuth(fonteId:string){
-  const r=await fetch('/api/meta/oauth/iniciar',{method:'POST',
+  const r=await fetch('/api/zernio/iniciar',{method:'POST',
    headers:{'Content-Type':'application/json'},body:JSON.stringify({fonte_id:fonteId})});
   const d=await r.json();
-  if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Não foi possível iniciar a conexão Meta.');
+  if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Não foi possível iniciar a conexão Zernio.');
   const destino=new URL(d.url);
-  if(!['www.facebook.com','www.instagram.com'].includes(destino.hostname)||destino.protocol!=='https:')
+  if(!['www.facebook.com','facebook.com','www.instagram.com','instagram.com','zernio.com','www.zernio.com'].includes(destino.hostname)||destino.protocol!=='https:')
    throw Error('Destino de autorização inválido.');
   // OAuth na mesma aba: evita pop-ups bloqueados, sessões/cookies inconsistentes
   // e mantém a jornada de login do cliente inteiramente na Meta.
   window.location.assign(destino.toString());
+ }
+ async function iniciarMetaAlternativo(fonteId:string){
+  setOcupado(true);setErro('');
+  try{
+   const r=await fetch('/api/meta/oauth/iniciar',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({fonte_id:fonteId})});
+   const d=await r.json();
+   if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Meta indisponível.');
+   const url=new URL(d.url);
+   if(url.protocol!=='https:'||!['www.facebook.com','www.instagram.com'].includes(url.hostname))
+    throw Error('Autorização inválida.');
+   window.location.assign(url.toString());
+  }catch(e){setErro(e instanceof Error?e.message:'Falha de conexão Meta.');setOcupado(false);}
  }
  async function autorizar(fonteId:string){
   if(ocupado)return;
@@ -101,6 +118,19 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao adicionar integração.');}
   finally{setOcupado(false);}
  }
+ async function reativarZernio(fonteId:string){
+  if(assinando)return;
+  setAssinando(fonteId);setErro('');setAviso('');
+  try{
+   const r=await fetch('/api/zernio/assinar',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({fonte_id:fonteId})});
+   const d=await r.json();
+   if(!r.ok)throw Error(d.erro||'Falha ao assinar webhook Zernio.');
+   await carregar();
+   setAviso('Webhook cadastrado. Envie uma mensagem ao perfil conectado para validar o atendimento.');
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao ativar recebimento.');}
+  finally{setAssinando(null);}
+ }
  async function retentarAssinatura(fonteId:string){
   if(assinando)return;
   setAssinando(fonteId);setErro('');setAviso('');
@@ -123,8 +153,8 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   <header>
    <h2 id="integracoes-titulo">Integrações</h2>
    <p className="ajuda">Conecte contas e números nesta workspace. Depois associe a fonte
-    ao funil desejado. As credenciais do aplicativo da Figueira são únicas;
-    cada cliente autoriza apenas as próprias contas.</p>
+    ao funil desejado. Instagram e Facebook são autorizados pela Zernio,
+    com contas separadas para cada cliente.</p>
   </header>
   {carregando&&<p className="ajuda">Carregando integrações…</p>}
   <div className="integracoes-crm-layout">
@@ -143,12 +173,6 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
     <p className="ajuda">{ativo?.ajuda}</p>
     {erro&&<p className="crm-aviso" role="alert">{erro}</p>}
     {aviso&&<p className="ajuda" role="status">{aviso}</p>}
-    {!metaOk&&['instagram_dm','facebook_messenger'].includes(tipo)&&
-     <p className="crm-aviso" role="status">
-      O aplicativo Meta da plataforma ainda não foi configurado com credenciais
-      de OAuth de mensagens neste serviço. O cadastro é preservado, mas não é possível
-      concluir a conexão até essa configuração.
-     </p>}
     <div className="integracoes-crm-conectar">
      <label>Funil que receberá este canal
       <select value={funilId} onChange={e=>setFunilId(e.target.value)}>
@@ -156,12 +180,18 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
        {(dados?.funis??[]).filter(f=>f.ativo).map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
       </select>
      </label>
-     <button type="button" className="btn-primario" disabled={!dados?.podeGerenciar||!funilId||ocupado||tipo==='whatsapp_cloud_api'||(!metaOk&&['instagram_dm','facebook_messenger'].includes(tipo))}
+     <button type="button" className="btn-primario" disabled={!dados?.podeGerenciar||!funilId||ocupado||tipo==='whatsapp_cloud_api'}
        onClick={()=>void cadastrar()}>
        {ocupado?'Conectando…':tipo==='webchat'?'Criar webchat':
-        tipo==='whatsapp_cloud_api'?'WhatsApp oficial: integração pendente':'Conectar com a Meta'}
+        tipo==='whatsapp_cloud_api'?'WhatsApp oficial: integração pendente':'Conectar via Zernio'}
      </button>
     </div>
+    {metaOk&&['instagram_dm','facebook_messenger'].includes(tipo)&&conexoes.length>0&&
+     <details><summary>Conexão Meta direta (alternativa)</summary>
+      <button type="button" disabled={ocupado} onClick={()=>void iniciarMetaAlternativo(conexoes[0].id)}>
+       Autorizar pelo aplicativo Meta
+      </button>
+     </details>}
     <h3>Contas e fontes desta workspace</h3>
     {!conexoes.length&&<p className="ajuda">Nenhuma conta conectada desse tipo.</p>}
     <div className="integracoes-crm-conexoes">
@@ -171,7 +201,8 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
         <small>{c.status==='pronto'?'Conectado / operacional':
           c.status==='pausado'?'Pausado':c.autorizado?
           'Conta autorizada; aguardando confirmação do webhook':'Não autorizado'}</small>
-        {c.identificador_externo&&<small>Conta Meta: {c.identificador_externo}</small>}
+        {c.identificador_externo&&<small>Conta conectada: {c.identificador_externo}</small>}
+        {c.zernio_account_id&&<small>Webhook Zernio: {c.zernio_webhook_id?'Inscrito':'Pendente'}</small>}
         {c.tipo==='facebook_messenger'&&c.autorizado&&
           <small>Webhook da página: {c.meta_assinatura_status==='inscrita'?
            'Inscrição confirmada':c.meta_assinatura_status==='falha'?
@@ -180,9 +211,14 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
        <div>
         {(c.tipo==='instagram_dm'||c.tipo==='facebook_messenger')&&dados?.podeGerenciar&&
          <button type="button" disabled={ocupado} onClick={()=>void autorizar(c.id)}>
-           {c.autorizado?'Reautorizar':'Autorizar conta'}
+           {c.identificador_externo?'Reconectar conta':'Autorizar conta'}
          </button>}
-        {c.tipo==='facebook_messenger'&&c.autorizado&&dados?.podeGerenciar&&
+        {c.zernio_account_id&&!c.zernio_webhook_id&&dados?.podeGerenciar&&
+         <button type="button" disabled={!!assinando||ocupado}
+          onClick={()=>void reativarZernio(c.id)}>
+          {assinando===c.id?'Ativando…':'Ativar recebimento Zernio'}
+         </button>}
+        {c.tipo==='facebook_messenger'&&c.autorizado&&!c.zernio_account_id&&dados?.podeGerenciar&&
          c.status!=='pausado'&&c.meta_assinatura_status!=='inscrita'&&
          <button type="button" disabled={!!assinando||ocupado}
           onClick={()=>void retentarAssinatura(c.id)}>
@@ -197,9 +233,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
        </div>
       </article>)}
     </div>
-    <p className="ajuda">Instagram e Messenger exigem permissões e assinatura de mensagens
-     aprovadas pela Meta. Ter acesso a várias páginas no Business Manager não as conecta
-     automaticamente; selecione e autorize a conta de cada cliente.</p>
+    <p className="ajuda">A autorização abre o login hospedado pela Zernio. O canal só ficará operacional após verificar mensagens recebidas e enviadas.</p>
    </div>
   </div>
  </section>;
