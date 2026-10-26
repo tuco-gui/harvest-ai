@@ -18,3 +18,14 @@
 - Não tocar WAHA/Evolution nem clientes sem autorização; sem migrações destrutivas.
 - `crm_fontes_funil.meta_assinatura_status` e `meta_assinatura_em` não incluem token, payload ou segredos.
 - HMAC no endpoint de entrada já implantado no PR31; qualquer webhook sem assinatura é recusado.
+
+## Implantação verificada — 26/10/2026
+- PR [#32](https://github.com/tuco-gui/harvest-ai/pull/32) integrado ao main como `7a0efb324beeeb84f8edd5b9d13015c8c50c7acf`.
+- Workflow branch `40345830445` aprovado, incluindo TypeScript, regressões da assinatura e Next.js build. Build/push `40346365397` aprovado.
+- Migração SQL 047: `COMMIT`, exit 0, nova restrição de status verificada; 1 fonte externa pré-existente preservada, zero assinaturas criadas artificialmente, 6072 eventos antigos preservados, zero OAuth realizados e zero mensagens enviadas.
+- Swarm `harvest_harvest` update completed, tarefa running, 0 reinicializações.
+- Imagem atual: `ghcr.io/tuco-gui/harvest-ai:7a0efb324beeeb84f8edd5b9d13015c8c50c7acf@sha256:ce3e6130063a0b231cd7d00879d80a6b87cfa7e90fac0d2fd65005953f674d71`.
+- Imagem rollback: `ghcr.io/tuco-gui/harvest-ai:ddf77cdaf6173b63cec1dae8b44e1c5bd128b4ba@sha256:55c1ca647416bc011455fd407a9cc646e9f93333c056fbb4d5ee0a99d5a5a777`.
+- Smoke anônimo dentro do contêiner: `/entrar=200`; `/configuracoes`, `/api/integracoes`, `/api/integracoes/meta/assinar` = 307 para `/entrar`; GET `/api/webhook/meta-mensagens` sem desafio = 403; exit code 0. Não foram usados tokens nem mensagens de clientes para teste.
+- Fonte de credencial existente analisada no Gateway: a integração institucional Meta está pronta para Graph, com AppRole no OpenBao, mas nenhum App ID/Secret do produto de **mensagens** foi confirmado acessível no serviço Harvest. Uma tentativa de inspecionar diretamente credenciais foi bloqueada pelas regras de segurança; não contornar o controle nem inventar segredo. A assinatura real de uma Page Meta não pôde ser executada sem autorização OAuth do titular.
+- **Não declarar integração 100% concluída**: faltam o aprovisionamento seguro do OAuth App ID/Secret do Meta App existente, configuração do callback no dashboard e validação real de troca de código/webhook/DM.
