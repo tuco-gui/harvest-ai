@@ -2,7 +2,7 @@ import {NextResponse} from 'next/server';
 import {contexto,isAdmin} from '@/lib/contextoConversasExternas';
 type Ctx={params:Promise<{id:string}>};
 async function carregar(id:string){
- const c=await contexto();if('erro'in c)return c;
+ const c=await contexto();if('erro'in c)return {erro:c.erro};
  if(!/^[0-9a-f-]{36}$/i.test(id))return {erro:NextResponse.json({erro:'Conversa inválida.'},{status:400})} as const;
  const {admin,perfil}=c;
  const {data:conversa,error}=await admin.from('crm_conversas_externas')
@@ -16,7 +16,7 @@ async function carregar(id:string){
   .select('id,nome,tipo,status,funil_id').eq('id',conversa.fonte_id)
   .eq('conta_id',perfil.conta_id).maybeSingle();
  if(!fonte)return {erro:NextResponse.json({erro:'Fonte não encontrada.'},{status:404})} as const;
- return {...c,conversa,fonte} as const;
+ return {perfil,admin,conversa,fonte} as const;
 }
 export async function GET(_req:Request,{params}:Ctx){
  const c=await carregar((await params).id);if('erro'in c)return c.erro;
