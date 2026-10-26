@@ -22,6 +22,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
  const [dados,setDados]=useState<Dados|null>(null);
  const [tipo,setTipo]=useState<Tipo>('instagram_dm');
  const [funilId,setFunilId]=useState('');
+ const [usuarioInstagram,setUsuarioInstagram]=useState('');
  const [carregando,setCarregando]=useState(true);
  const [ocupado,setOcupado]=useState(false);
  const [erro,setErro]=useState('');
@@ -72,7 +73,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
  }
  async function iniciarOAuth(fonteId:string){
   const r=await fetch('/api/zernio/iniciar',{method:'POST',
-   headers:{'Content-Type':'application/json'},body:JSON.stringify({fonte_id:fonteId})});
+   headers:{'Content-Type':'application/json'},body:JSON.stringify({fonte_id:fonteId,username:tipo==='instagram_dm'?usuarioInstagram.trim():undefined})});
   const d=await r.json();
   if(!r.ok||typeof d.url!=='string')throw Error(d.erro||'Não foi possível iniciar a conexão Zernio.');
   const destino=new URL(d.url);
@@ -153,8 +154,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   <header>
    <h2 id="integracoes-titulo">Integrações</h2>
    <p className="ajuda">Conecte contas e números nesta workspace. Depois associe a fonte
-    ao funil desejado. Instagram e Facebook são autorizados pela Zernio,
-    com contas separadas para cada cliente.</p>
+    ao funil desejado. Cada empresa conecta e administra suas próprias contas.</p>
   </header>
   {carregando&&<p className="ajuda">Carregando integrações…</p>}
   <div className="integracoes-crm-layout">
@@ -174,6 +174,10 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
     {erro&&<p className="crm-aviso" role="alert">{erro}</p>}
     {aviso&&<p className="ajuda" role="status">{aviso}</p>}
     <div className="integracoes-crm-conectar">
+     {tipo==='instagram_dm'&&<label>Instagram que deseja conectar (opcional)
+      <input value={usuarioInstagram} onChange={e=>setUsuarioInstagram(e.target.value)}
+       placeholder="@perfil_profissional" autoComplete="off"/>
+     </label>}
      <label>Funil que receberá este canal
       <select value={funilId} onChange={e=>setFunilId(e.target.value)}>
        <option value="">Selecione um funil</option>
@@ -183,7 +187,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
      <button type="button" className="btn-primario" disabled={!dados?.podeGerenciar||!funilId||ocupado||tipo==='whatsapp_cloud_api'}
        onClick={()=>void cadastrar()}>
        {ocupado?'Conectando…':tipo==='webchat'?'Criar webchat':
-        tipo==='whatsapp_cloud_api'?'WhatsApp oficial: integração pendente':'Conectar via Zernio'}
+        tipo==='whatsapp_cloud_api'?'WhatsApp oficial: integração pendente':'Conectar'}
      </button>
     </div>
     {metaOk&&['instagram_dm','facebook_messenger'].includes(tipo)&&conexoes.length>0&&
@@ -233,7 +237,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
        </div>
       </article>)}
     </div>
-    <p className="ajuda">A autorização abre o login hospedado pela Zernio. O canal só ficará operacional após verificar mensagens recebidas e enviadas.</p>
+    <p className="ajuda">Você pode adicionar outros perfis usando Conectar novamente. O canal fica operacional após a primeira mensagem recebida.</p>
    </div>
   </div>
  </section>;
