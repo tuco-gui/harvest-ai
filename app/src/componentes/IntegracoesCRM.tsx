@@ -118,6 +118,19 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao adicionar integração.');}
   finally{setOcupado(false);}
  }
+ async function reativarZernio(fonteId:string){
+  if(assinando)return;
+  setAssinando(fonteId);setErro('');setAviso('');
+  try{
+   const r=await fetch('/api/zernio/assinar',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({fonte_id:fonteId})});
+   const d=await r.json();
+   if(!r.ok)throw Error(d.erro||'Falha ao assinar webhook Zernio.');
+   await carregar();
+   setAviso('Webhook cadastrado. Envie uma mensagem ao perfil conectado para validar o atendimento.');
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao ativar recebimento.');}
+  finally{setAssinando(null);}
+ }
  async function retentarAssinatura(fonteId:string){
   if(assinando)return;
   setAssinando(fonteId);setErro('');setAviso('');
@@ -189,6 +202,7 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
           c.status==='pausado'?'Pausado':c.autorizado?
           'Conta autorizada; aguardando confirmação do webhook':'Não autorizado'}</small>
         {c.identificador_externo&&<small>Conta conectada: {c.identificador_externo}</small>}
+        {c.zernio_account_id&&<small>Webhook Zernio: {c.zernio_webhook_id?'Inscrito':'Pendente'}</small>}
         {c.tipo==='facebook_messenger'&&c.autorizado&&
           <small>Webhook da página: {c.meta_assinatura_status==='inscrita'?
            'Inscrição confirmada':c.meta_assinatura_status==='falha'?
@@ -198,6 +212,11 @@ export default function IntegracoesCRM({onVerWhatsapp}:{onVerWhatsapp:()=>void})
         {(c.tipo==='instagram_dm'||c.tipo==='facebook_messenger')&&dados?.podeGerenciar&&
          <button type="button" disabled={ocupado} onClick={()=>void autorizar(c.id)}>
            {c.identificador_externo?'Reconectar conta':'Autorizar conta'}
+         </button>}
+        {c.zernio_account_id&&!c.zernio_webhook_id&&dados?.podeGerenciar&&
+         <button type="button" disabled={!!assinando||ocupado}
+          onClick={()=>void reativarZernio(c.id)}>
+          {assinando===c.id?'Ativando…':'Ativar recebimento Zernio'}
          </button>}
         {c.tipo==='facebook_messenger'&&c.autorizado&&!c.zernio_account_id&&dados?.podeGerenciar&&
          c.status!=='pausado'&&c.meta_assinatura_status!=='inscrita'&&
