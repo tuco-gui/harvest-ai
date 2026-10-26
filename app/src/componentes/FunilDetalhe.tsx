@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import AutomacaoEstagio from './AutomacaoEstagio';
+import { CANAIS_HARVEST } from '@/lib/canaisUnificados';
 
 type Funil = { id: number; nome: string; ativo: boolean; criado_em: string; canal_padrao_id: number|null; auto_criar_negocio_inbound:boolean };
 type Canal = {id:number;nome:string;numero:string|null;status:string;provider:string;padrao:boolean};
@@ -25,6 +26,7 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
   const [canalFunil, setCanalFunil] = useState<number|null>(funil.canal_padrao_id);
   const [salvandoCanal,setSalvandoCanal] = useState(false);
   const [avisoCanal,setAvisoCanal] = useState('');
+  const [fontesAbertas,setFontesAbertas]=useState(false);
   const [autoCriar,setAutoCriar] = useState(funil.auto_criar_negocio_inbound);
   const [salvandoAutomacao,setSalvandoAutomacao] = useState(false);
   const [avisoAutomacao,setAvisoAutomacao] = useState('');
@@ -242,7 +244,23 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
         {funil.ativo ? 'Ativo' : 'Inativo'} · {pipeline.length} estágio(s) no pipeline · {encerrados.length} encerrado(s)
       </p>
 
-      {/* Configuração de canal permanece DENTRO da edição do funil. */}
+      <div className="crm-kommo-editor-grid">
+        <aside className="crm-kommo-fontes">
+          <h3>FONTES DE LEAD</h3>
+          <p className="ajuda">Números e canais de entrada deste pipeline.</p>
+          <div className="crm-kommo-fontes-lista">
+            {canais.map(c=><div key={c.id} className="crm-kommo-fonte-linha">
+              <span className="crm-kommo-fonte-icone">W</span>
+              <div><strong>{c.nome}</strong><small>{c.provider.toUpperCase()}
+                {c.numero?' · '+c.numero:''}</small>
+                <small>{c.id===canalFunil?'Selecionado neste funil · ':''}
+                  {c.status==='conectado'?'Conectado':'Desconectado'}</small></div>
+            </div>)}
+            {!canais.length&&<p className="ajuda">Nenhum canal cadastrado nesta workspace.</p>}
+          </div>
+          <button className="crm-kommo-adicionar-fonte" type="button"
+            onClick={()=>setFontesAbertas(true)}>+ Adicionar fonte</button>
+          {/* Canal pertence à configuração lateral de fontes, não a um painel novo. */}
       <section className="secao crm-funil-canal" aria-label="Canal de WhatsApp do funil">
         <h3>Canal de WhatsApp deste funil</h3>
         <p className="ajuda">
@@ -290,6 +308,8 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
         </button>
         {avisoAutomacao&&<p role="status" className="ajuda">{avisoAutomacao}</p>}
       </section>}
+        </aside>
+        <div className="crm-kommo-editor-estagios">
       {/* Pipeline stages — horizontal */}
       <section style={{ marginBottom: 32 }}>
         <h3 style={{ fontFamily: 'var(--display)', fontWeight: 700, fontSize: 13, marginBottom: 10, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
@@ -475,6 +495,31 @@ export default function FunilDetalhe({ funil, estagios: estagiosIniciais, canais
           </div>
         </div>
       </section>
+        </div>
+      </div>
+      {fontesAbertas&&<div className="crm-kommo-fontes-overlay"
+        onMouseDown={()=>setFontesAbertas(false)}>
+        <section className="crm-kommo-fontes-dialogo" role="dialog" aria-modal="true"
+          aria-labelledby="crm-fontes-titulo" onMouseDown={e=>e.stopPropagation()}>
+          <header><h2 id="crm-fontes-titulo">Fontes de lead</h2>
+            <button type="button" aria-label="Fechar fontes"
+              onClick={()=>setFontesAbertas(false)}>×</button></header>
+          <p className="ajuda">Escolha um canal. Somente WAHA e Evolution têm integração de mensagens
+            implementada atualmente; outros provedores são indicados como planejados.</p>
+          <div className="crm-kommo-fontes-grade">
+            {CANAIS_HARVEST.filter(c=>c.id!=='google_business_messages').map(c=>
+              <div className="crm-kommo-fonte-tile" key={c.id}>
+                <strong>{c.nome}</strong>
+                <small>{c.situacao==='operacional'?'Conector disponível':
+                  c.situacao==='planejado'?'Em desenvolvimento':'Indisponível'}</small>
+                {c.situacao==='operacional'
+                  ?<Link href="/configuracoes" onClick={()=>setFontesAbertas(false)}>
+                    Gerenciar conexão</Link>
+                  :<span className="crm-kommo-fonte-indisponivel">Ainda não conectável</span>}
+              </div>)}
+          </div>
+        </section>
+      </div>}
     </div>
   );
 }
