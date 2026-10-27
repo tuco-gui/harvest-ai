@@ -6,6 +6,7 @@ import { contatosDasOportunidades } from '@/lib/crmContatos';
 import type { Oportunidade } from '@/lib/twenty';
 import CamposDinamicosCRM from '@/componentes/CamposDinamicosCRM';
 import type { CampoDef, EntidadeCadastro } from '@/lib/crmCadastros';
+import { PRODUTOS_POR_PAGINA, type EstadoCatalogo } from '@/lib/crmCatalogoBusca';
 
 type Registro = {
  id:number;nome:string;email?:string|null;telefone?:string|null;
@@ -40,6 +41,10 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
  const [empresas,setEmpresas]=useState<Empresa[]>([]);
  const [campos,setCampos]=useState<CampoDef[]>([]);
  const [busca,setBusca]=useState('');
+ const [pagina,setPagina]=useState(1);
+ const [estado,setEstado]=useState<EstadoCatalogo>('todos');
+ const [total,setTotal]=useState(0);
+ const [temMais,setTemMais]=useState(false);
  const [form,setForm]=useState<Record<string,any>>(()=>REGISTRO_INICIAL[entidade]());
  const [aberto,setAberto]=useState(false);
  const [id,setId]=useState<number|null>(null);
@@ -48,25 +53,42 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
  const [erro,setErro]=useState('');
  const [importando,setImportando]=useState(false);
  const [sucesso,setSucesso]=useState('');
- const carregar=useCallback(async()=>{
+ const buscaRemota=entidade==='produtos'?busca:'';
+ const carregar=useCallback(async(signal?:AbortSignal)=>{
   setCarregando(true);setErro('');
   try{
-   const uris=['/api/crm/cadastros/'+entidade];
+    const uris=['/api/crm/cadastros/'+entidade];
+    if(entidade==='produtos')uris[0]+='?'+new URLSearchParams({pagina:String(pagina),busca:buscaRemota,estado});
    if(entidade==='contatos')uris.push('/api/crm/cadastros/empresas');
    if(ENTIDADE_CAMPO[entidade])uris.push('/api/crm/campos-personalizados?entidade='+ENTIDADE_CAMPO[entidade]);
    const res=await Promise.all(uris.map(async u=>{
-    const r=await fetch(u,{cache:'no-store'});const d=await r.json();
+     const r=await fetch(u,{cache:'no-store',signal});const d=await r.json();
     if(!r.ok)throw Error(d.erro||'Falha ao carregar registros.');return d;
    }));
-   setRegistros(res[0].registros??[]);
+    if(signal?.aborted)return;
+    if(entidade==='produtos'){
+     const encontrados=res[0].meta.total;
+     const ultima=Math.max(1,Math.ceil(encontrados/PRODUTOS_POR_PAGINA));
+     if(pagina>ultima){setPagina(ultima);return;}
+     setTotal(encontrados);setTemMais(res[0].meta.tem_mais);
+    }
+    setRegistros(res[0].registros??[]);
    let at=1;
    if(entidade==='contatos')setEmpresas(res[at++].registros??[]);
    if(ENTIDADE_CAMPO[entidade])setCampos(res[at].campos??[]);
-  }catch(e){setErro(e instanceof Error?e.message:'Falha de conexão.');}
-  finally{setCarregando(false);}
- },[entidade]);
- useEffect(()=>{void carregar();},[carregar]);
- const filtrados=registros.filter(r=>
+   }catch(e){if(!signal?.aborted){
+    setErro(e instanceof Error?e.message:'Falha de conexão.');
+    if(entidade==='produtos'){setRegistros([]);setTemMais(false);}
+   }}
+   finally{if(!signal?.aborted)setCarregando(false);}
+ },[entidade,pagina,buscaRemota,estado]);
+ useEffect(()=>{
+  const controller=new AbortController();
+  setCarregando(true);
+  const timer=setTimeout(()=>void carregar(controller.signal),entidade==='produtos'?250:0);
+  return ()=>{clearTimeout(timer);controller.abort();};
+ },[carregar,entidade]);
+ const filtrados=entidade==='produtos'?registros:registros.filter(r=>
   [r.nome,r.email??'',r.telefone??'',r.sku??'',r.cnpj??'']
    .some(v=>v.toLocaleLowerCase('pt-BR').includes(busca.toLocaleLowerCase('pt-BR'))));
  async function importarCSV(file:File){
@@ -194,23 +216,36 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
   </form>}
   <div className="crm-cadastros-filtros">
    <input aria-label="Buscar cadastro" placeholder={'Buscar '+NOMES[entidade].toLowerCase()}
-     value={busca} onChange={e=>setBusca(e.target.value)}/>
-   <span>{filtrados.length} resultado(s) · até 250 registros</span>
-   <button type="button" onClick={()=>void carregar()}>Atualizar</button>
+      value={busca} maxLength={160} onChange={e=>{setBusca(e.target.value);setPagina(1);}}/>
+    {entidade==='produtos'&&<label>Estado do catálogo
+     <select value={estado} onChange={e=>{setEstado(e.target.value as EstadoCatalogo);setPagina(1);}}>
+      <option value="todos">Todos os produtos</option>
+      <option value="ativos">Ativos</option>
+      <option value="inativos">Retirados do catálogo</option>
+     </select>
+    </label>}
+    <span>{carregando?'Buscando…':entidade==='produtos'?total+' resultado(s)':filtrados.length+' resultado(s) · até 250 registros'}</span>
+    <button type="button" disabled={carregando} onClick={()=>void carregar()}>Atualizar</button>
   </div>
   <section className="crm-cadastros-grade">
     {carregando&&<p>Carregando…</p>}
     {!carregando&&filtrados.length===0&&<p className="ajuda">Nenhum registro encontrado.</p>}
-    {filtrados.map(x=><article key={x.id} className="crm-cadastro-card">
+     {!carregando&&filtrados.map(x=><article key={x.id} className="crm-cadastro-card">
       <strong>{x.nome}</strong>
       {entidade==='produtos'?<p>R$ {Number(x.preco??0).toLocaleString('pt-BR',{minimumFractionDigits:2})} · {x.sku||'Sem SKU'}</p>
        :<p>{x.email||x.telefone||'Sem contato informado'}</p>}
-      {entidade==='contatos'&&x.empresa_id&&<p>Empresa: {empresas.find(a=>a.id===x.empresa_id)?.nome||'Empresa vinculada'}</p>}
+       {entidade==='contatos'&&x.empresa_id&&<p>Empresa: {empresas.find(a=>a.id===x.empresa_id)?.nome||'Empresa vinculada'}</p>}
+       {entidade==='produtos'&&<p>{x.ativo?'Ativo':'Retirado do catálogo'}</p>}
       <button type="button" onClick={()=>editar(x)}>Editar cadastro</button>
       {entidade==='produtos'&&x.ativo&&<button type="button" disabled={salvando}
        onClick={()=>void retirarProduto(x)}>Retirar do catálogo</button>}
     </article>)}
-  </section>
+   </section>
+   {entidade==='produtos'&&!erro&&<nav aria-label="Páginas do catálogo" className="crm-cadastros-filtros">
+    <button type="button" disabled={carregando||pagina<=1} onClick={()=>setPagina(p=>p-1)}>Anterior</button>
+    <span>Página {pagina} de {Math.max(1,Math.ceil(total/PRODUTOS_POR_PAGINA))}</span>
+    <button type="button" disabled={carregando||!temMais} onClick={()=>setPagina(p=>p+1)}>Próxima</button>
+   </nav>}
   {entidade==='contatos' && pendentes.length > 0 && <section className="crm-contatos-pendentes">
    <h2>Contatos identificados em negócios · conferir</h2>
    <p className="ajuda">São pessoas encontradas nos negócios e ainda não vinculadas com segurança

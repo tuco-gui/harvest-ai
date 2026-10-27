@@ -49,3 +49,14 @@ Decisão: preservar Harvest em produção e implementar paridade DeskcommCRM por
 - Para cada módulo, anexar ao PR: origem exata/commit Deskcomm; arquivos Harvest alterados; SQL; licença se trecho substancial copiado; testes; screenshot/filme da jornada; aprovação do pipeline; rollback.
 - Não declarar “clonado” até todos os blocos estarem demonstrados em ambiente autenticado e os critérios de aceite estarem verdes.
 - **Estado deste documento:** inventário e contrato de migração. Não comprova paridade nem autoriza deploy por si só.
+
+## Incrementos de catálogo — 27/10/2026
+
+- Já entregues: importação CSV com atualização por SKU/nome (`1711e77`) e retirada lógica com reativação (`5e5e7f7`).
+- Incremento seguinte: busca por nome/SKU no servidor, paginação de 50 produtos, contagem total e filtro de ativos/retirados. A busca alcança produtos além dos 250 anteriormente carregados no navegador.
+- Referência funcional: DeskcommCRM `f13d26f6b00d65730f101e92fac50e3205b97211`, arquivos `app/api/v1/products/route.ts` e `lib/catalogo/busca-da-tela.ts`. Implementação própria adaptada às tabelas, permissões e `conta_id` Harvest; sem cópia de schema.
+- API: `GET /api/crm/cadastros/produtos?pagina=1&busca=termo&estado=todos`. Estados aceitos: `todos`, `ativos`, `inativos`. Retorna `registros`, `limite` e `meta` (`pagina`, `por_pagina`, `total`, `tem_mais`). Parâmetros inválidos retornam 400. Página além do fim retorna lista vazia com contagem real. Sem parâmetros, mantém o contrato anterior de até 250 registros.
+- UI: debounce de busca, cancelamento de respostas obsoletas, retorno à primeira página ao filtrar e ajuste para a última página existente após alterações no catálogo.
+- SQL: nenhuma alteração. Reversão: restaurar a imagem anterior; nenhum dado precisa ser revertido.
+- Verificação automatizada: `tests/unit/crm-catalogo-busca.test.ts` (validação e escape do filtro) e `tests/unit/crm-catalogo-rota.test.ts` (handler real com banco simulado: 301 produtos, outro tenant, busca após o limite anterior, filtros, paginação, contrato legado, autorização e indisponibilidade do banco). O teste de rota não substitui validação autenticada de UI em produção.
+- Resultado local: 38 arquivos de testes unitários aprovados, `tsc --noEmit` e `npm run build` aprovados. O helper `crmCatalogoBusca.ts` atingiu 100% de linhas, ramos e funções no relatório de cobertura Node; essa medida é do helper, não da aplicação inteira. Incremento implementado na branch `feat/deskcomm-catalogo-paginado`; produção permanece no deploy validado de `88a2995`.

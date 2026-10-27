@@ -4,6 +4,7 @@ import { perfilTemModulo } from '@/lib/autorizacao';
 import { isAdmin } from '@/lib/crmControleAcesso';
 import { cadastroValido, validarCadastro, validarValoresPersonalizados,
   type EntidadeCadastro, type CampoDef } from '@/lib/crmCadastros';
+import { consultaCatalogo, filtroCatalogo, intervaloCatalogo, PRODUTOS_POR_PAGINA } from '@/lib/crmCatalogoBusca';
 
 const TABELAS:Record<EntidadeCadastro,string> = {
   empresas:'crm_empresas', contatos:'crm_contatos', produtos:'crm_produtos',
@@ -58,9 +59,37 @@ async function validarESanitizar(admin:ReturnType<typeof supabaseAdmin>,contaId:
   }
   return {novo} as const;
 }
-export async function GET(_req:Request,{params}:{params:Promise<{entidade:string}>}) {
+export async function GET(req:Request,{params}:{params:Promise<{entidade:string}>}) {
   const c=await contexto((await params).entidade);
   if('resposta' in c)return c.resposta;
+  // Opt-in para manter o contrato dos consumidores existentes do cadastro.
+  const search=new URL(req.url).searchParams;
+  if(c.entidade==='produtos' && ['pagina','busca','estado'].some(k=>search.has(k))){
+    let consulta:ReturnType<typeof consultaCatalogo>;
+    try{consulta=consultaCatalogo(search);}
+    catch(e){return NextResponse.json({erro:e instanceof Error?e.message:'Consulta inválida.'},{status:400});}
+    const {pagina,busca,estado}=consulta;
+    const filtro=filtroCatalogo(busca);
+    const resposta=(registros:unknown[],total:number)=>NextResponse.json({registros,limite:PRODUTOS_POR_PAGINA,
+      meta:{pagina,por_pagina:PRODUTOS_POR_PAGINA,total,tem_mais:pagina*PRODUTOS_POR_PAGINA<total}});
+    if(busca && !filtro)return resposta([],0);
+    const base=(contar=false)=>{
+      let q=c.admin.from('crm_produtos').select('*',{count:'exact',head:contar})
+        .eq('conta_id',c.perfil.conta_id);
+      if(filtro)q=q.or(filtro);
+      if(estado!=='todos')q=q.eq('ativo',estado==='ativos');
+      return q;
+    };
+    const {data,error,count}=await base().order('ativo',{ascending:false}).order('nome').order('id')
+      .range(...intervaloCatalogo(pagina));
+    if(error?.code==='PGRST103'){
+      const {count:total,error:falha}=await base(true);
+      if(falha)return NextResponse.json({erro:'Falha ao contar produtos.'},{status:503});
+      return resposta([],total??0);
+    }
+    if(error)return NextResponse.json({erro:'Falha ao carregar produtos.'},{status:503});
+    return resposta(data??[],count??0);
+  }
   const {data,error}=await c.admin.from(TABELAS[c.entidade])
     .select('*').eq('conta_id',c.perfil.conta_id).order('atualizado_em',{ascending:false}).limit(250);
   if(error)return NextResponse.json({erro:'Falha ao carregar registros.'},{status:503});
