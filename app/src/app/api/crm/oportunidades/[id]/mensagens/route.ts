@@ -9,6 +9,8 @@ import { getOrCreateSession, sendText as wahaSendText } from '@/lib/waha';
 import { registrarTentativaContato } from '@/lib/historicoContato';
 import { podeAcessarOportunidade } from '@/lib/crmControleAcesso';
 import { crmBackend } from '@/lib/twenty';
+import { conversaDaOportunidade, mensagensDaConversa } from '@/lib/crmConversaOportunidade';
+import { GET as lerConversa, POST as responderConversa } from '@/app/api/crm/conversas-externas/[id]/route';
 
 /**
  * Busca ou cria localmente a oportunidade.
@@ -25,7 +27,7 @@ async function contexto(idRaw: string) {
   const numId = Number(idRaw);
   let oportunidade: any = null;
 
-  if (numId && numId > 0) {
+  if (Number.isSafeInteger(numId) && numId > 0) {
     // Local integer ID
     const acesso = await podeAcessarOportunidade(admin, perfil, numId);
     if (!acesso.ok) return { erro: NextResponse.json({ erro: acesso.erro }, { status: 403 }) };
@@ -80,6 +82,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const ctx = await contexto(id);
   if ('erro' in ctx) return ctx.erro;
+  try{
+    const conversaId=await conversaDaOportunidade(ctx.admin,ctx.perfil.conta_id!,ctx.oportunidade.id);
+    if(conversaId){
+      const resposta=await lerConversa(_req,{params:Promise.resolve({id:conversaId})});
+      if(!resposta.ok)return resposta;
+      const historico=await resposta.json();
+      return NextResponse.json({mensagens:mensagensDaConversa(historico.mensagens),
+        conversaExterna:{id:conversaId,tipo:historico.fonte.tipo,nome:historico.fonte.nome}});
+    }
+  }catch{return NextResponse.json({erro:'Falha ao consultar o atendimento vinculado.'},{status:503});}
   const telefone = normalizarTelefone(ctx.oportunidade.telefone ?? '');
 
   const saidas = ctx.oportunidade.lead_id
@@ -121,6 +133,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const ctx = await contexto(id);
   if ('erro' in ctx) return ctx.erro;
+  try{
+    const conversaId=await conversaDaOportunidade(ctx.admin,ctx.perfil.conta_id!,ctx.oportunidade.id);
+    // Usa o mesmo envio da Inbox: autorização, janela e idempotência idênticas.
+    if(conversaId)return responderConversa(req,{params:Promise.resolve({id:conversaId})});
+  }catch{return NextResponse.json({erro:'Falha ao consultar o atendimento vinculado.'},{status:503});}
   const contaId = ctx.perfil.conta_id!;
   const b = await req.json().catch(() => ({}) as any);
   const texto = String(b.texto ?? '').trim();

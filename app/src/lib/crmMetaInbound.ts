@@ -69,8 +69,12 @@ export async function gravarMensagemMeta(admin:SupabaseClient,m:MensagemMetaEntr
   conta_id:fonte.conta_id,conversa_id:conversa.id,direcao:'entrada',
   texto:m.texto,mensagem_externa_id:m.mensagemId,
  });
- if(errInsert?.code==='23505')return 'duplicada';
- if(errInsert)throw Error('Falha ao registrar mensagem Meta.');
+  if(errInsert&&errInsert.code!=='23505')throw Error('Falha ao registrar mensagem Meta.');
+  const negocio=await admin.rpc('crm_criar_negocio_primeira_conversa_social',{
+    p_conta:fonte.conta_id,p_fonte:fonte.id,p_conversa:conversa.id,
+  });
+  if(negocio.error)throw Error('Falha ao vincular contato e negócio Meta.');
+  if(errInsert?.code==='23505')return 'duplicada';
  const now=new Date().toISOString();
  const [{error:errConversa},{error:errFonte}]=await Promise.all([
   admin.from('crm_conversas_externas').update({atualizado_em:now})

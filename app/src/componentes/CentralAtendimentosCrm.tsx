@@ -26,10 +26,10 @@ const STATUS: Record<StatusAtendimento, string> = {
 };
 type Filtro = 'todos' | StatusAtendimento | 'sem_atendente' | 'meus';
 
-export default function CentralAtendimentosCrm({ telefoneInicial }: { telefoneInicial?: string }) {
+export default function CentralAtendimentosCrm({ telefoneInicial,conversaInicial }: { telefoneInicial?: string;conversaInicial?:string }) {
   const [conversas, setConversas] = useState<ConversaAtendimento[]>([]);
   const [externas,setExternas]=useState<ConversaExternaLista[]>([]);
-  const [conversaExternaId,setConversaExternaId]=useState<string|null>(null);
+  const [conversaExternaId,setConversaExternaId]=useState<string|null>(conversaInicial??null);
   const [atendentes, setAtendentes] = useState<Atendente[]>([]);
   const [podeAtribuir, setPodeAtribuir] = useState(false);
   const [telefone, setTelefone] = useState<string | null>(null);
