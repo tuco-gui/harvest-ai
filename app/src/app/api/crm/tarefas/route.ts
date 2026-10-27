@@ -16,15 +16,20 @@ async function sessaoCrmAvancado() {
   return { perfil, admin } as const;
 }
 
-export async function GET() {
+export async function GET(req:Request) {
   const ctx = await sessaoCrmAvancado();
   if ('resposta' in ctx) return ctx.resposta;
   const { perfil, admin } = ctx;
+  const idRaw=new URL(req.url).searchParams.get('oportunidade_id');
+  const oportunidadeId=idRaw===null?null:Number(idRaw);
+  if(idRaw!==null&&(!/^\d+$/.test(idRaw)||!Number.isSafeInteger(oportunidadeId)||(oportunidadeId??0)<1))
+    return NextResponse.json({erro:'Oportunidade inválida.'},{status:400});
   let query = admin.from('oportunidades')
     .select('id,empresa,contato,owner_id,estagio')
     .eq('conta_id', perfil.conta_id)
     .order('atualizado_em', { ascending: false }).limit(500);
   if (!isAdmin(perfil.papel)) query = query.eq('owner_id', perfil.id);
+  if(oportunidadeId!==null)query=query.eq('id',oportunidadeId);
   const { data: oportunidades, error: erroOps } = await query;
   if (erroOps) return NextResponse.json({ erro: 'Não foi possível carregar as oportunidades.' }, { status: 503 });
   const ids = (oportunidades ?? []).map(o => o.id);
@@ -40,7 +45,7 @@ export async function GET() {
   const visiveis = (tarefas ?? []).flatMap(t => {
     const op = porId.get(t.oportunidade_id);
     if (!op) return [];
-    return [{ ...t, empresa: op.empresa || 'Sem empresa', contato: op.contato || '',
+    return [{ ...t, empresa: op.empresa || op.contato || 'Negócio sem nome', contato: op.contato || '',
       owner_id: op.owner_id ?? null }];
   });
   return NextResponse.json({ tarefas: visiveis, oportunidades: oportunidades ?? [], limite: 500 });

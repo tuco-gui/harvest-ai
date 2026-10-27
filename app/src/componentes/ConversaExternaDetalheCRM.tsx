@@ -1,6 +1,7 @@
 'use client';
 import {useCallback,useEffect,useState} from 'react';
 import Link from 'next/link';
+import CentralTarefasCrm from '@/componentes/CentralTarefasCrm';
 type Atendente={id:string;nome:string};
 type Fonte={id:string;nome:string;tipo:string;status:string;funil_id:number};
 type Conversa={id:string;nome:string|null;visitante_id:string;status:string;responsavel_id:string|null;contato_id?:number|null};
@@ -117,5 +118,7 @@ export default function ConversaExternaDetalheCRM({id,podeAtribuir,atendentes,ao
    <button type="button" className="btn-primario" onClick={()=>void salvarAtendimento()}
      disabled={salvando}>{salvando?'Salvando…':'Salvar atendimento'}</button>
   </div>
- </div>;
+   {oportunidade&&<CentralTarefasCrm key={oportunidade.id} compacto oportunidadeId={oportunidade.id}
+     owners={atendentes} perfilId="" podeEditar={true}/>}
+  </div>;
 }
