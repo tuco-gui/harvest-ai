@@ -82,12 +82,16 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
    }}
    finally{if(!signal?.aborted)setCarregando(false);}
  },[entidade,pagina,buscaRemota,estado]);
- useEffect(()=>{
+  useEffect(()=>{
   const controller=new AbortController();
   setCarregando(true);
   const timer=setTimeout(()=>void carregar(controller.signal),entidade==='produtos'?250:0);
   return ()=>{clearTimeout(timer);controller.abort();};
- },[carregar,entidade]);
+  },[carregar,entidade]);
+ useEffect(()=>{
+  if(entidade==='contatos'&&!carregando&&/^#cadastro-\d+$/.test(window.location.hash))
+   document.getElementById(window.location.hash.slice(1))?.scrollIntoView({block:'center'});
+ },[entidade,carregando]);
  const filtrados=entidade==='produtos'?registros:registros.filter(r=>
   [r.nome,r.email??'',r.telefone??'',r.sku??'',r.cnpj??'']
    .some(v=>v.toLocaleLowerCase('pt-BR').includes(busca.toLocaleLowerCase('pt-BR'))));
@@ -112,7 +116,7 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
    [entidade,oportunidadesRelacionadas],
  );
  const normal = (v:string|null|undefined) => (v||'').trim().toLocaleLowerCase('pt-BR');
- const pendentes = pessoasDosNegocios.filter(p => !registros.some(r =>
+  const pendentes = pessoasDosNegocios.filter(p => !registros.some(r => p.cadastroId===r.id ||
    normal(r.nome)===normal(p.nome) &&
    ((p.email && normal(r.email)===normal(p.email)) ||
     (p.telefone && p.telefone.replace(/\D/g,'')===r.telefone?.replace(/\D/g,'')))));
@@ -230,11 +234,13 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
   <section className="crm-cadastros-grade">
     {carregando&&<p>Carregando…</p>}
     {!carregando&&filtrados.length===0&&<p className="ajuda">Nenhum registro encontrado.</p>}
-     {!carregando&&filtrados.map(x=><article key={x.id} className="crm-cadastro-card">
+     {!carregando&&filtrados.map(x=><article key={x.id} id={'cadastro-'+x.id} className="crm-cadastro-card">
       <strong>{x.nome}</strong>
       {entidade==='produtos'?<p>R$ {Number(x.preco??0).toLocaleString('pt-BR',{minimumFractionDigits:2})} · {x.sku||'Sem SKU'}</p>
        :<p>{x.email||x.telefone||'Sem contato informado'}</p>}
        {entidade==='contatos'&&x.empresa_id&&<p>Empresa: {empresas.find(a=>a.id===x.empresa_id)?.nome||'Empresa vinculada'}</p>}
+       {entidade==='contatos'&&oportunidadesRelacionadas.filter(o=>o.contato_id===x.id).map(o=>
+        <Link key={o.id} href={'/crm?oportunidade='+encodeURIComponent(String(o.id))}>Abrir negócio #{o.id} · {o.empresa||o.contato}</Link>)}
        {entidade==='produtos'&&<p>{x.ativo?'Ativo':'Retirado do catálogo'}</p>}
       <button type="button" onClick={()=>editar(x)}>Editar cadastro</button>
       {entidade==='produtos'&&x.ativo&&<button type="button" disabled={salvando}

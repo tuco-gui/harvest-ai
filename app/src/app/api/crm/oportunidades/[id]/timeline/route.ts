@@ -3,8 +3,10 @@ import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import { isAdmin } from '@/lib/crmControleAcesso';
 import { normalizarTelefone } from '@/lib/telefone';
+import { conversaDaOportunidade } from '@/lib/crmConversaOportunidade';
+import { GET as lerConversa } from '@/app/api/crm/conversas-externas/[id]/route';
 import {
-  montarTimeline, type AtividadeTimeline, type EntradaTimeline, type SaidaTimeline,
+    montarTimeline, type AtividadeTimeline, type EntradaTimeline, type SaidaTimeline, type EventoTimeline,
 } from '@/lib/crmTimeline';
 
 /**
@@ -63,10 +65,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     (saidas.data ?? []) as SaidaTimeline[],
     mapaAutores,
   );
+  let conversaId:string|null=null;
+  try{
+    conversaId=await conversaDaOportunidade(admin,perfil.conta_id,opId);
+    if(conversaId){
+      const resposta=await lerConversa(_req,{params:Promise.resolve({id:conversaId})});
+      if(!resposta.ok)return resposta;
+      const social=await resposta.json();
+      const canal=social.fonte.tipo==='instagram_dm'?'Instagram':social.fonte.tipo==='facebook_messenger'?'Messenger':'Webchat';
+      eventos.push(...social.mensagens.map((m:{id:string;direcao:'entrada'|'saida';texto:string;criado_em:string;status_envio:string}):EventoTimeline=>({
+        id:'social-'+m.id,origem:m.direcao,titulo:canal+(m.direcao==='entrada'?' recebido':' enviado'),
+        texto:m.texto,data:m.criado_em,status:m.direcao==='entrada'?'Recebida':m.status_envio,
+        vencimento:null,autor:m.direcao==='entrada'?social.conversa.nome:null,
+      })));
+      eventos.sort((a,b)=>Date.parse(b.data)-Date.parse(a.data)||a.id.localeCompare(b.id));
+      eventos.splice(250);
+    }
+  }catch{return NextResponse.json({erro:'Falha ao consultar o histórico do atendimento.'},{status:503});}
   return NextResponse.json({
     oportunidadeId: opId, eventos, atualizadoEm: new Date().toISOString(),
     totalExibido: eventos.length, limitePorFonte: 150,
-    aviso: telefone
+    conversaId,
+    aviso: conversaId?'Histórico associado ao atendimento deste negócio pelo vínculo de origem.':telefone
       ? 'Conversas associadas ao número de telefone deste negócio. Confira a identidade em casos de números compartilhados.'
       : 'Este negócio ainda não possui telefone; mostrando atividades e mensagens ligadas ao lead, se houver.',
   });

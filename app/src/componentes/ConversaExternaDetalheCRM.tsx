@@ -1,8 +1,9 @@
 'use client';
 import {useCallback,useEffect,useState} from 'react';
+import Link from 'next/link';
 type Atendente={id:string;nome:string};
 type Fonte={id:string;nome:string;tipo:string;status:string;funil_id:number};
-type Conversa={id:string;nome:string|null;visitante_id:string;status:string;responsavel_id:string|null};
+type Conversa={id:string;nome:string|null;visitante_id:string;status:string;responsavel_id:string|null;contato_id?:number|null};
 type Mensagem={id:string;direcao:'entrada'|'saida';texto:string;criado_em:string;status_envio?:'pendente'|'enviado'|'falhou'};
 export default function ConversaExternaDetalheCRM({id,podeAtribuir,atendentes,aoSalvar}:{
  id:string;podeAtribuir:boolean;atendentes:Atendente[];aoSalvar:()=>void;
@@ -16,14 +17,16 @@ export default function ConversaExternaDetalheCRM({id,podeAtribuir,atendentes,ao
  const [carregando,setCarregando]=useState(true);
  const [salvando,setSalvando]=useState(false);
  const [erro,setErro]=useState('');
- const [aviso,setAviso]=useState('');
+  const [aviso,setAviso]=useState('');
+  const [oportunidade,setOportunidade]=useState<{id:number;funil_id:number|null}|null>(null);
  const carregar=useCallback(async(ctl?:AbortSignal)=>{
    try{
     const r=await fetch('/api/crm/conversas-externas/'+id,{cache:'no-store',signal:ctl});
     const d=await r.json();
     if(!r.ok)throw Error(d.erro||'Conversa indisponível.');
     if(ctl?.aborted)return;
-    setConversa(d.conversa);setFonte(d.fonte);setMensagens(d.mensagens??[]);
+     setConversa(d.conversa);setFonte(d.fonte);setMensagens(d.mensagens??[]);
+     setOportunidade(d.oportunidade??null);
     setStatus(d.conversa.status);setResponsavel(d.conversa.responsavel_id??'');
     setErro('');
    }catch(e){if(!ctl?.aborted)setErro(e instanceof Error?e.message:'Falha ao carregar conversa.');}
@@ -71,7 +74,12 @@ export default function ConversaExternaDetalheCRM({id,podeAtribuir,atendentes,ao
   <header><div><strong>{conversa?.nome||'Visitante do site'}</strong>
    <span>{fonte?.nome||'Canal externo'} · {fonte?.tipo==='webchat'?'Webchat':
     fonte?.tipo==='instagram_dm'?'Instagram Direct':'Messenger'}</span>
-  </div></header>
+   </div>
+   <nav aria-label="Vínculos do atendimento">
+    <Link href={'/inbox?conversa='+encodeURIComponent(id)}>Abrir na Inbox</Link>
+    {oportunidade&&<Link href={'/crm?oportunidade='+oportunidade.id+(oportunidade.funil_id?'&funil='+oportunidade.funil_id:'')}>Abrir negócio #{oportunidade.id}</Link>}
+    {conversa?.contato_id&&<Link href={'/crm/contatos#cadastro-'+conversa.contato_id}>Abrir contato</Link>}
+   </nav></header>
   <div className="crm-atendimento-mensagens">
    {!mensagens.length&&<p className="crm-atendimentos-vazio">Nenhuma mensagem registrada.</p>}
    {mensagens.map(m=><article key={m.id} className={'crm-atendimento-mensagem '+m.direcao}>

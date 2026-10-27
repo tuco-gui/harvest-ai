@@ -785,6 +785,12 @@ a:hover{color:var(--ink)}
 .crm-atendimento-detalhe>header span{font-size:11px;color:var(--ink-3)}
 .crm-atendimento-links{display:flex;align-items:center;gap:14px}
 .crm-atendimento-links a{color:var(--ink);font-weight:600;font-size:11px;text-decoration:underline;text-underline-offset:3px}
+.crm-conversa-externa{display:flex;flex-direction:column;min-width:0}
+.crm-conversa-externa>header{padding:14px 18px;border-bottom:1px solid var(--rule)}
+.crm-conversa-externa>header strong,.crm-conversa-externa>header span{display:block}
+.crm-conversa-externa>header span{margin-top:4px;font-size:12px;color:var(--muted)}
+.crm-conversa-externa>header nav{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;font-size:12px}
+.crm-conversa-externa>header nav a{text-underline-offset:3px}
 .crm-atendimento-mensagens{display:flex;flex:1;min-height:170px;overflow-y:auto;flex-direction:column;gap:9px;padding:16px 19px}
 .crm-atendimento-mensagem{width:fit-content;max-width:min(75%,550px);padding:11px 13px;border-radius:10px;background:var(--surface);border:1px solid var(--rule)}
 .crm-atendimento-mensagem.saida{align-self:flex-end;background:color-mix(in srgb,var(--red) 5%,var(--surface))}

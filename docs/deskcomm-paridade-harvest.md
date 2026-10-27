@@ -1,6 +1,6 @@
 # Migração Harvest ↔ DeskcommCRM — contrato de execução
 
-Decisão: preservar Harvest em produção e implementar paridade DeskcommCRM por módulos, sem trocar o banco/rotas num único deploy. O destino pode adotar o DeskcommCRM como núcleo apenas após migração integral e validação, mantendo as funcionalidades de prospecção do Harvest. O nome e marca ao cliente continuam Harvest.
+Missão: trazer a experiência e as funcionalidades do DeskcommCRM para o Harvest com paridade funcional, reutilizando e adaptando seu código MIT. Preservar Harvest em produção e migrar por módulos; não substituir dados/workspaces por uma instalação vazia. O nome e marca ao cliente continuam Harvest/Figueira. Uma correção prioritária não encerra esta missão.
 
 ## Fontes inspecionadas em 26/10/2026
 
@@ -60,3 +60,38 @@ Decisão: preservar Harvest em produção e implementar paridade DeskcommCRM por
 - SQL: nenhuma alteração. Reversão: restaurar a imagem anterior; nenhum dado precisa ser revertido.
 - Verificação automatizada: `tests/unit/crm-catalogo-busca.test.ts` (validação e escape do filtro) e `tests/unit/crm-catalogo-rota.test.ts` (handler real com banco simulado: 301 produtos, outro tenant, busca após o limite anterior, filtros, paginação, contrato legado, autorização e indisponibilidade do banco). O teste de rota não substitui validação autenticada de UI em produção.
 - Resultado local: 38 arquivos de testes unitários aprovados, `tsc --noEmit` e `npm run build` aprovados. O helper `crmCatalogoBusca.ts` atingiu 100% de linhas, ramos e funções no relatório de cobertura Node; essa medida é do helper, não da aplicação inteira. Incremento implementado na branch `feat/deskcomm-catalogo-paginado`; produção permanece no deploy validado de `88a2995`.
+- Publicação: PR #41 integrado em `48888fd`; deploy automático `40592089743` concluído com sucesso.
+
+## Fonte local e inventário real — 27/10/2026
+
+Clone: `~/projects/DeskcommCRM`, `main` em `f13d26f6b00d65730f101e92fac50e3205b97211`, árvore limpa. O checkout Git parcial foi completado com o arquivo oficial do mesmo commit, após falhas de transporte do clone. `LICENSE`, `AGENTS.md` e `CLAUDE.md` lidos; a licença está preservada em `THIRD_PARTY_NOTICES.md`.
+
+Estados abaixo comparam caminhos reais, não equivalência presumida por nome de módulo. **Parcial** não significa paridade concluída.
+
+| Superfície Deskcomm (`app/app/`) | Implementação Harvest | Estado / diferenças ainda abertas |
+|---|---|---|
+| `inbox/`, `components/inbox/CRMSidePanel.tsx`, `lib/channels/zernio/ingest.ts` | `CentralAtendimentosCrm`, `ConversaExternaDetalheCRM`, rotas `crm/conversas-externas` | Parcial: integração social→negócio→contato implementada nesta rodada; faltam equivalência de mídia, citações, reações, filas, demandas e tempo real |
+| `pipelines/`, `kanban/`, `leads/`, `crm/` | `CrmPipeline`, `FunilDetalhe`, `api/funis`, `api/crm/oportunidades` | Parcial: quadro, etapas, responsáveis, etiquetas e campos existem; faltam operações avançadas e equivalência da ficha/painel lateral |
+| `contacts/`, `people/`, `companies/` | `crm/contatos`, `CadastrosCRM`, `crm_empresas`, `crm_contatos` | Parcial: identidade social agora usa vínculo explícito, sem empresa inferida; fusão auditada e customer 360 completo pendentes |
+| `products/`, `lib/catalogo/` | `crm/cadastros/produtos` | CRUD, CSV, retirada/reativação, busca e paginação entregues; fotos, categorias/marcas e propostas ainda pendentes |
+| `tasks/`, `activities/` | `crm/tarefas`, `crm_atividades`, timeline | Parcial: tarefas com prazo/responsável e vínculo ao negócio; falta criação a partir do atendimento e equivalência de agenda |
+| `agenda/`, `lib/agenda/` | Prazos em tarefas/atividades | Agenda dedicada, disponibilidade, serviços, reservas, recorrência e Google Calendar/Meet pendentes |
+| `pipelines/` + `lib/automation/` | `lib/automacoes.ts`, `lib/eventos.ts`, editor de automações | Parcial: regras por evento existem; editor/motor completos, gatilhos temporais, reexecução e trilha por execução pendentes |
+| `ai/`, `lib/agent-engine/`, `lib/ai/` | `agentes`, `lib/agentes.ts`, `lib/ia.ts` | Parcial: preservar agentes atuais; RAG, versões publicadas, fila de turnos, orçamento, ferramentas e handoff completo pendentes |
+| `connections/`, `integrations/`, `settings/`, `team/` | `configuracoes`, `IntegracoesCRM`, `equipe`, `usuarios`, workspaces | Parcial: WhatsApp, Meta e Zernio existentes preservados; comparar preferências, RBAC/MFA e todas as conexões |
+| `metrics/`, `analise/`, `ads/`, `radar/` | Métricas no CRM e status Harvest | Dashboards/custos/atribuição e radar equivalentes pendentes |
+| `campaigns/`, `prospecting/`, `imports/`, `templates/` | `campanhas`, `Prospeccao`, importações e IA Harvest | Diferencial protegido; complementar o que Deskcomm oferece, sem remover os fluxos existentes |
+| `proposals/`, `comandas/`, `faturamento/`, `honorarios/` | Itens de oportunidades | Propostas PDF, pedidos/comandas e operação financeira não migrados |
+| `lgpd/`, `audit/`, `calls/`, `webhooks/`, `extensions/`, `integracao-dados/` | Proteções/opt-out, histórico e webhooks existentes | LGPD completa, auditoria unificada, chamadas, extensões, integrações de dados e demais capacidades não demonstradas como equivalentes |
+
+## Prioridade do vídeo: atendimento social e oportunidade #26
+
+- Causa comprovada: `crm_vinculos_conversa_negocio` já ligava #26 à conversa `d502d1b8-cae2-4712-8b84-d77eb542ee1f`; a API/UI da ficha lia apenas WhatsApp e exigia telefone. `empresa_id` era NULL: o texto do perfil estava no campo legado de título `empresa`, não em um cadastro `crm_empresas`.
+- Referência funcional real: `lib/channels/zernio/ingest.ts` (identidade social/contato/conversa) e `components/inbox/CRMSidePanel.tsx` + `tests/unit/inbox-abrir-no-funil.test.tsx` (navegação por IDs, não nome).
+- Implementação: a ficha reutiliza os handlers/componente de conversa externa; mesmo histórico, mesma autorização por workspace/atendente, mesma janela de 24h e chave de idempotência. Instagram e Messenger respondem pela conta de origem, sem telefone e sem fallback silencioso para WhatsApp. Timeline inclui as mensagens sociais; links permitem ir entre Inbox, negócio e contato.
+- SQL `051_contatos_atendimentos_sociais.sql`: contato ancorado na identidade da conversa/fonte; FK composta impede vínculo entre tenants; contato e oportunidade criados sob trava transacional; configuração `criar_lead_automatico` respeitada; novos negócios sociais têm `empresa=''`, `empresa_id=NULL` e `telefone=NULL`.
+- Histórico: backfill só preenche vínculos de contato ausentes. Não cria negócios retroativos, não altera nomes/títulos antigos, não mescla por nome e não apaga mensagens. Três conversas históricas ficaram com contato; #26 e seu atendimento compartilham contato #11, preservando a mensagem já existente.
+- Backup anterior na VPS: `/root/backups/harvest-pre051-20261027.dump`, SHA-256 `18291fc19da353c17be5fc0054e17e503d97ff9b3876a8f357d9652ff3667574`. Arquivo lido integralmente por `pg_restore --file=/dev/null`; definição anterior da RPC em `harvest-pre051-funcao-20261027.sql`. Isto valida a leitura do arquivo, não uma recuperação completa em servidor separado.
+- Regressão PostgreSQL real: `scripts/test-crm-social-sql.mjs` aplica migração + cenários em uma transação e termina em ROLLBACK. Cenários: sem inbound, sem telefone, sem empresa, reentrega idempotente, configuração desativada, homônimos distintos e fronteira de tenant. Migração aplicada depois do teste.
+- Jornada autenticada local sobre dados existentes: `scripts/verify-crm-social-browser.mjs --local` aprovou histórico #26, timeline, contato, composer Instagram habilitado sem telefone e navegação até a Inbox. Envio interceptado no navegador; nenhuma mensagem de teste foi enviada ao cliente. Sessão temporária encerrada, credenciais só em memória.
+- Rollback de app: imagem anterior. O schema aditivo pode permanecer; para restaurar a regra anterior, reaplicar a definição da RPC salva no backup. Não excluir contatos/vínculos já criados.

@@ -2,6 +2,7 @@ import type { Oportunidade } from './twenty';
 
 export type ContatoCrm = {
   chave: string;
+  cadastroId?:number|null;
   nome: string;
   empresa: string;
   telefone: string | null;
@@ -38,7 +39,7 @@ export function contatosDasOportunidades(ops: Oportunidade[]): ContatoCrm[] {
     if (email) contagemEmails.set(email, (contagemEmails.get(email) ?? 0) + 1);
     const identidade = normalizarTexto(nome);
     // Se dois cadastros tiverem mesmo telefone, mas nomes diferentes, NÃO mesclar.
-    const chave = identidade && (email || telefone)
+    const chave = op.contato_id ? 'contato:'+op.contato_id : identidade && (email || telefone)
       ? `${identidade}:${email ? 'e:' + email : 't:' + telefone}`
       : `op:${op.id}`;
     const existente = grupos.get(chave);
@@ -53,7 +54,7 @@ export function contatosDasOportunidades(ops: Oportunidade[]): ContatoCrm[] {
       continue;
     }
     grupos.set(chave, {
-      chave, nome: nome || op.empresa || 'Contato sem nome',
+      chave, cadastroId:op.contato_id??null,nome: nome || op.empresa || 'Contato sem nome',
       empresa: op.empresa || '—',
       telefone: op.telefone, email: op.email,
       owner_id: op.owner_id,

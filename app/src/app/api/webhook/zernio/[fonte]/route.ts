@@ -15,7 +15,9 @@ export async function POST(req:Request,{params}:Context){
  catch{return new Response('Unavailable',{status:503});}
  if(!timingSafeEqual(Buffer.from(sig,'hex'),Buffer.from(esperado,'hex')))
   return new Response('Unauthorized',{status:401});
- const p=JSON.parse(raw) as Record<string,any>;
+  let p:Record<string,any>;
+  try{p=JSON.parse(raw);}catch{return new Response('Invalid JSON',{status:400});}
+  if(!p||typeof p!=='object')return new Response('Invalid payload',{status:400});
  if(p.event==='webhook.test')return Response.json({ok:true});
  if(p.event!=='message.received')return Response.json({ok:true});
  const platform=p.account?.platform,accountId=p.account?.id,m=p.message;

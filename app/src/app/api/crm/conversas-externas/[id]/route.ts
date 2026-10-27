@@ -4,11 +4,11 @@ import {enviarRespostaMeta} from '@/lib/crmMetaEnvio';
 import {zernio} from '@/lib/crmZernio';
 type Ctx={params:Promise<{id:string}>};
 async function carregar(id:string){
- const c=await contexto();if('erro'in c)return {erro:c.erro};
+ const c=await contexto();if('erro'in c)return {erro:c.erro!};
  if(!/^[0-9a-f-]{36}$/i.test(id))return {erro:NextResponse.json({erro:'Conversa inválida.'},{status:400})} as const;
  const {admin,perfil}=c;
  const {data:conversa,error}=await admin.from('crm_conversas_externas')
-  .select('id,fonte_id,nome,visitante_id,status,responsavel_id,criado_em,atualizado_em,zernio_conversation_id')
+   .select('id,fonte_id,nome,visitante_id,status,responsavel_id,criado_em,atualizado_em,zernio_conversation_id,contato_id')
   .eq('id',id).eq('conta_id',perfil.conta_id).maybeSingle();
  if(error)return {erro:NextResponse.json({erro:'Falha ao consultar conversa.'},{status:503})} as const;
  if(!conversa)return {erro:NextResponse.json({erro:'Conversa não encontrada.'},{status:404})} as const;
@@ -20,14 +20,26 @@ async function carregar(id:string){
  if(!fonte)return {erro:NextResponse.json({erro:'Fonte não encontrada.'},{status:404})} as const;
  return {perfil,admin,conversa,fonte} as const;
 }
-export async function GET(_req:Request,{params}:Ctx){
- const c=await carregar((await params).id);if('erro'in c)return c.erro;
+export async function GET(_req:Request,{params}:Ctx):Promise<Response>{
+ const c=await carregar((await params).id);if('erro'in c)return c.erro!;
  const {data:mensagens,error}=await c.admin.from('crm_mensagens_externas')
   .select('id,texto,direcao,criado_em,status_envio')
   .eq('conta_id',c.perfil.conta_id).eq('conversa_id',c.conversa.id)
-  .order('criado_em',{ascending:true}).limit(200);
- if(error)return NextResponse.json({erro:'Falha ao ler histórico.'},{status:503});
- return NextResponse.json({conversa:c.conversa,fonte:c.fonte,mensagens:mensagens??[]});
+   .order('criado_em',{ascending:false}).limit(200);
+  if(error)return NextResponse.json({erro:'Falha ao ler histórico.'},{status:503});
+  const {data:vinculo,error:erroVinculo}=await c.admin.from('crm_vinculos_conversa_negocio')
+   .select('oportunidade_id').eq('conta_id',c.perfil.conta_id).eq('conversa_id',c.conversa.id).maybeSingle();
+  if(erroVinculo)return NextResponse.json({erro:'Falha ao consultar vínculo do CRM.'},{status:503});
+  let oportunidade=null;
+  if(vinculo){
+   let q=c.admin.from('oportunidades').select('id,empresa,contato,estagio,contato_id,funil_id')
+    .eq('conta_id',c.perfil.conta_id).eq('id',vinculo.oportunidade_id);
+   if(!isAdmin(c.perfil.papel))q=q.eq('owner_id',c.perfil.id);
+   const result=await q.maybeSingle();
+   if(result.error)return NextResponse.json({erro:'Falha ao ler negócio vinculado.'},{status:503});
+   oportunidade=result.data;
+  }
+  return NextResponse.json({conversa:c.conversa,fonte:c.fonte,oportunidade,mensagens:(mensagens??[]).reverse()});
 }
 export async function PATCH(req:Request,{params}:Ctx){
  const c=await carregar((await params).id);if('erro'in c)return c.erro;
@@ -84,7 +96,7 @@ export async function POST(req:Request,{params}:Ctx){
   .select('id,criado_em').eq('conta_id',c.perfil.conta_id)
   .eq('conversa_id',c.conversa.id).eq('direcao','entrada')
   .order('criado_em',{ascending:false}).limit(1).maybeSingle();
- if(errEntrada||!entrada||Date.now()-Date.parse(entrada.criado_em)>24*3600*1000)
+  if(errEntrada||!entrada||!Number.isFinite(Date.parse(entrada.criado_em))||Date.now()-Date.parse(entrada.criado_em)>24*3600*1000)
   return NextResponse.json({erro:'Fora da janela de 24h. Aguarde nova mensagem do contato.'},{status:409});
  if(c.fonte.zernio_account_id){
   if(!c.conversa.zernio_conversation_id)

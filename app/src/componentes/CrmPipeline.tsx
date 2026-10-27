@@ -12,6 +12,7 @@ import CamposOportunidadeCRM from '@/componentes/CamposOportunidadeCRM';
 import GerenciadorEtiquetasCRM from '@/componentes/GerenciadorEtiquetasCRM';
 import FunilDetalhe from '@/componentes/FunilDetalhe';
 import SeletorEtiquetasCRM from '@/componentes/SeletorEtiquetasCRM';
+import ConversaExternaDetalheCRM from '@/componentes/ConversaExternaDetalheCRM';
 
 type Owner = { id: string; nome: string };
 type Campanha = { id: number; nome: string };
@@ -81,6 +82,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
   const [aba, setAba] = useState<'conversa' | 'atividades' | 'timeline'>('conversa');
   const [abaDados,setAbaDados]=useState<'principal'|'campos'>('principal');
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+  const [conversaExterna,setConversaExterna]=useState<{id:string;tipo:string;nome:string}|null>(null);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [carregandoContexto, setCarregandoContexto] = useState(false);
   const [textoMensagem, setTextoMensagem] = useState('');
@@ -128,6 +130,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
       if (mr.ok) {
         const md = await mr.json();
         setMensagens(md.mensagens ?? []);
+        setConversaExterna(md.conversaExterna??null);
       }
       // Atualizar estágio se o backend moveu (ex: contatado→respondeu via inbound).
       if (or2.ok) {
@@ -214,6 +217,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     if(vinculo!=null) setCanalId(canais.some(c=>c.id===vinculo)?String(vinculo):'');
     else setCanalId(String(canais[0]?.id??''));
     setFicha(op);setAba('conversa');setAbaDados('principal');setErro(null);setCarregandoContexto(true);
+    setConversaExterna(null);setMensagens([]);setTextoMensagem('');
     const [mr, ar, fullR] = await Promise.all([
       fetch(`/api/crm/oportunidades/${op.id}/mensagens`),
       fetch(`/api/crm/oportunidades/${op.id}/atividades`),
@@ -221,6 +225,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
     ]);
     const [md, ad, fd] = await Promise.all([json(mr), json(ar), json(fullR)]);
     setMensagens(mr.ok ? md.mensagens ?? [] : []);
+    setConversaExterna(mr.ok?md.conversaExterna??null:null);
     setAtividades(ar.ok ? ad.atividades ?? [] : []);
     if (fullR.ok && fd.oportunidade) setFicha(fd.oportunidade);
     if (!mr.ok || !ar.ok) setErro(md.erro ?? ad.erro ?? 'Não consegui carregar todo o histórico.');
@@ -599,7 +604,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
            onChange={tags => setNova({...nova,tags})}/>}</div>
          <button type="button" onClick={() => setNovaAberta(false)}>×</button></header>
         <form className="crm-form-grid" onSubmit={criarOportunidade}>
-          <label className="campo-largo">Empresa<input autoFocus required value={nova.empresa} onChange={(e) => setNova({ ...nova, empresa: e.target.value })} /></label>
+          <label className="campo-largo">Nome do negócio<input autoFocus required value={nova.empresa} onChange={(e) => setNova({ ...nova, empresa: e.target.value })} /></label>
           <label>Contato<input value={nova.contato} onChange={(e) => setNova({ ...nova, contato: e.target.value })} /></label>
           <label>Telefone<input value={nova.telefone} onChange={(e) => setNova({ ...nova, telefone: e.target.value })} /></label>
           <label>E-mail<input type="email" value={nova.email} onChange={(e) => setNova({ ...nova, email: e.target.value })} /></label>
@@ -633,7 +638,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
                 onClick={()=>setAbaDados('campos')}>Campos e produtos</button>
             </nav>}
             {abaDados==='principal'||!avancado ? <form className="crm-ficha-dados" onSubmit={salvarFicha}><div className="crm-form-grid">
-            <label className="campo-largo">Empresa<input value={ficha.empresa} onChange={(e) => setFicha({ ...ficha, empresa: e.target.value })} /></label>
+            <label className="campo-largo">Nome do negócio<input value={ficha.empresa} onChange={(e) => setFicha({ ...ficha, empresa: e.target.value })} /></label>
             <label>Contato<input value={ficha.contato} onChange={(e) => setFicha({ ...ficha, contato: e.target.value })} /></label>
             <label>Telefone<input value={ficha.telefone ?? ''} onChange={(e) => setFicha({ ...ficha, telefone: e.target.value })} /></label>
             <label>E-mail<input value={ficha.email ?? ''} onChange={(e) => setFicha({ ...ficha, email: e.target.value })} /></label>
@@ -653,8 +658,11 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
           <div className="crm-ficha-contexto"><nav className="crm-abas"><button type="button" className={aba === 'conversa' ? 'ativa' : ''} onClick={() => setAba('conversa')}>Conversa</button><button type="button" className={aba === 'atividades' ? 'ativa' : ''} onClick={() => setAba('atividades')}>Atividades <span>{atividades.filter((a) => !a.concluida).length}</span></button>{avancado && <button type="button" className={aba === 'timeline' ? 'ativa' : ''} onClick={() => setAba('timeline')}>Histórico completo</button>}</nav>
             {carregandoContexto ? <div className="crm-contexto-vazio">Carregando histórico…</div> : aba === 'conversa' ? <div className="crm-conversa">
-              <div className="crm-mensagens">{!mensagens.length && <div className="crm-contexto-vazio"><strong>Nenhuma conversa ainda</strong><p>Envie a primeira mensagem por um canal conectado.</p></div>}{mensagens.map((m) => <article key={m.id} className={`crm-mensagem ${m.direcao}`}><p>{m.texto}</p><footer><time>{dataFmt(m.data)}</time></footer>{m.erro && <small>{m.erro}</small>}</article>)}</div>
-              <form className="crm-compositor" onSubmit={enviarMensagem}><textarea value={textoMensagem} onChange={(e) => setTextoMensagem(e.target.value)} placeholder={ficha.telefone ? 'Digite uma mensagem…' : 'Cadastre um telefone para conversar'} disabled={!ficha.telefone || !canais.length || !(podeEditar || podeEditarPropria(ficha))} /><div><select value={canalId} onChange={(e) => setCanalId(e.target.value)} disabled={!canais.length || !(podeEditar || podeEditarPropria(ficha))}><option value="">{canais.length ? 'Escolha o canal' : 'Nenhum canal conectado'}</option>{canais.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.numero ? ` · ${c.numero}` : ''}</option>)}</select>{(podeEditar || podeEditarPropria(ficha)) && <button className="btn-primario" disabled={enviando || !textoMensagem.trim() || !canalId}>{enviando ? 'Enviando…' : 'Enviar'}</button>}</div></form>
+              {conversaExterna?<ConversaExternaDetalheCRM key={conversaExterna.id} id={conversaExterna.id}
+                podeAtribuir={papel==='admin'||papel==='super_admin'} atendentes={owners} aoSalvar={()=>{}}/>:<>
+               <div className="crm-mensagens">{!mensagens.length && <div className="crm-contexto-vazio"><strong>Nenhuma conversa ainda</strong><p>Envie a primeira mensagem por um canal conectado.</p></div>}{mensagens.map((m) => <article key={m.id} className={`crm-mensagem ${m.direcao}`}><p>{m.texto}</p><footer><time>{dataFmt(m.data)}</time></footer>{m.erro && <small>{m.erro}</small>}</article>)}</div>
+               <form className="crm-compositor" onSubmit={enviarMensagem}><textarea value={textoMensagem} onChange={(e) => setTextoMensagem(e.target.value)} placeholder={ficha.telefone ? 'Digite uma mensagem…' : 'Cadastre um telefone para conversar'} disabled={!ficha.telefone || !canais.length || !(podeEditar || podeEditarPropria(ficha))} /><div><select value={canalId} onChange={(e) => setCanalId(e.target.value)} disabled={!canais.length || !(podeEditar || podeEditarPropria(ficha))}><option value="">{canais.length ? 'Escolha o canal' : 'Nenhum canal conectado'}</option>{canais.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.numero ? ` · ${c.numero}` : ''}</option>)}</select>{(podeEditar || podeEditarPropria(ficha)) && <button className="btn-primario" disabled={enviando || !textoMensagem.trim() || !canalId}>{enviando ? 'Enviando…' : 'Enviar'}</button>}</div></form>
+              </>}
             </div> : aba === 'timeline' && avancado ? <LinhaDoTempoCrm oportunidadeId={ficha.id} telefone={ficha.telefone} /> : <div className="crm-atividades">{(podeEditar || podeEditarPropria(ficha)) && <form onSubmit={adicionarAtividade} className="crm-nova-atividade"><select value={novaAtividade.tipo} onChange={(e) => setNovaAtividade({ ...novaAtividade, tipo: e.target.value })}><option value="tarefa">Tarefa</option><option value="nota">Nota</option><option value="ligacao">Ligação</option><option value="reuniao">Reunião</option><option value="email">E-mail</option></select><input value={novaAtividade.titulo} onChange={(e) => setNovaAtividade({ ...novaAtividade, titulo: e.target.value })} placeholder="O que precisa ser feito?" /><input type="datetime-local" value={novaAtividade.vence_em} onChange={(e) => setNovaAtividade({ ...novaAtividade, vence_em: e.target.value })} /><button className="btn-primario">Adicionar</button></form>}<ul>{atividades.map((a) => <li key={a.id} className={a.concluida ? 'concluida' : ''}><button type="button" className="crm-check" onClick={() => void alternarAtividade(a)}>{a.concluida ? '✓' : ''}</button><div><span className="crm-tipo">{a.tipo}</span><strong>{a.titulo}</strong>{a.descricao && <p>{a.descricao}</p>}<small>{a.vence_em ? `Prazo ${dataFmt(a.vence_em)}` : `Registrado ${dataFmt(a.criado_em)}`}</small></div></li>)}</ul>{!atividades.length && <div className="crm-contexto-vazio">Nenhuma atividade registrada.</div>}</div>}
           </div>
         </div>
