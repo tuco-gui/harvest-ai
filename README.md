@@ -191,15 +191,24 @@ necessárias.
 
 ## Publicar
 
-`git push` em `app/**` dispara o build da imagem no GitHub Actions
-(`.github/workflows/imagem.yml`). O build **não** roda no VPS de propósito:
-compilar Next.js pede 1,5–3 GB de RAM em pico. Depois do build:
+`git push` em `app/**` na `main` dispara validação, build e publicação da
+imagem (`.github/workflows/imagem.yml`). Depois do push, o mesmo workflow
+implanta automaticamente o **digest** daquele commit no serviço Swarm
+`harvest_harvest`, espera o Swarm convergir, testa `/entrar` e reverte para a
+imagem anterior se o smoke falhar. O build **não** roda no VPS de propósito:
+compilar Next.js pede 1,5–3 GB de RAM em pico.
+
+O deploy exige os secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` e
+`DEPLOY_KNOWN_HOSTS`; até eles existirem, a imagem é publicada e o deploy é
+ignorado com aviso. Fallback manual:
 
 ```bash
-docker service update --image ghcr.io/<org>/harvest-ai:latest --force harvest_harvest
+docker service update --with-registry-auth \
+  --image ghcr.io/<org>/harvest-ai@sha256:<digest> \
+  --force harvest_harvest
 ```
 
-Detalhes em `docs/deploy.md`.
+Detalhes e rollback em `docs/deploy.md`.
 
 ## O que já funciona
 

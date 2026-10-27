@@ -1,0 +1,37 @@
+name: Validar deploy Harvest
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/imagem.yml'
+      - '.github/workflows/validar-deploy.yml'
+      - 'tests/unit/deploy-imagem.test.ts'
+      - 'docs/deploy.md'
+      - 'README.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/imagem.yml'
+      - '.github/workflows/validar-deploy.yml'
+      - 'tests/unit/deploy-imagem.test.ts'
+      - 'docs/deploy.md'
+      - 'README.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validar contrato de build e deploy
+        run: node --experimental-strip-types tests/unit/deploy-imagem.test.ts

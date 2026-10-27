@@ -1,20 +1,49 @@
-name: Publicar imagem
+name: Publicar e implantar imagem
 
-# Constrói o app e publica no ghcr.io. O build NÃO pode acontecer no VPS:
-# compilar Next.js pede 1,5–3 GB de RAM em pico e lá sobram ~3,9 GB.
+# Constrói o app fora do VPS e publica no ghcr.io. O build NÃO pode acontecer
+# no servidor: compilar Next.js pede 1,5–3 GB de RAM em pico e lá sobram ~3,9 GB.
+# Depois do push, o job de implantação troca somente a imagem do serviço Swarm
+# `harvest_harvest`, espera a convergência, faz smoke test e reverte para a
+# imagem anterior se algo falhar.
 
 on:
   push:
     branches: [main]
-    paths: ['app/**', '.github/workflows/imagem.yml']
+    paths:
+      - 'app/**'
+      - '.github/workflows/imagem.yml'
+      - 'tests/unit/deploy-imagem.test.ts'
   workflow_dispatch:
 
+concurrency:
+  group: publicar-imagem-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  publicar:
+  validar:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validar contrato de build e implantação
+        run: node --experimental-strip-types tests/unit/deploy-imagem.test.ts
+
+  publicar:
+    needs: validar
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      imagem: ${{ steps.build.outputs.digest }}
 
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +57,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Construir e publicar
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ./app
@@ -42,3 +72,176 @@ jobs:
             NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  implantar:
+    needs: publicar
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: Production
+      url: https://harvest.figueiramarketing.com.br
+    env:
+      IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}
+      IMAGE_DIGEST: ${{ needs.publicar.outputs.imagem }}
+      SERVICE: ${{ vars.HARVEST_SWARM_SERVICE || 'harvest_harvest' }}
+      HEALTHCHECK_URL: ${{ vars.HARVEST_HEALTHCHECK_URL || 'https://harvest.figueiramarketing.com.br/entrar' }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      GHCR_ACTOR: ${{ github.actor }}
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Conferir configuração do deploy
+        if: env.DEPLOY_HOST == ''
+        shell: bash
+        run: |
+          echo "::notice title=Deploy automático desativado::Configure DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY e DEPLOY_KNOWN_HOSTS para ativar."
+          {
+            echo "### Deploy automático não executado"
+            echo "A imagem foi publicada, mas o serviço Swarm não foi atualizado."
+            echo "Configure os secrets de deploy e rode o workflow novamente."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validar credenciais e destino
+        if: env.DEPLOY_HOST != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS IMAGE_DIGEST; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name não configurado."
+              exit 1
+            fi
+          done
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Digest de imagem inválido: $IMAGE_DIGEST"
+            exit 1
+          fi
+          if [[ ! "$SERVICE" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::Nome de serviço Swarm inválido: $SERVICE"
+            exit 1
+          fi
+          if [[ ! "$DEPLOY_PORT" =~ ^[0-9]+$ ]]; then
+            echo "::error::DEPLOY_PORT inválido."
+            exit 1
+          fi
+
+      - name: Preparar chave SSH
+        if: env.DEPLOY_HOST != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/harvest_deploy"
+          chmod 600 "$HOME/.ssh/harvest_deploy"
+          ssh-keygen -y -f "$HOME/.ssh/harvest_deploy" >/dev/null
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Implantar no Swarm com rollback
+        if: env.DEPLOY_HOST != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh_opts=(
+            -i "$HOME/.ssh/harvest_deploy"
+            -p "$DEPLOY_PORT"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o ConnectTimeout=15
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=4
+          )
+
+          remote_sh() {
+            ssh "${ssh_opts[@]}" "$remote" "$@"
+          }
+
+          previous="$(remote_sh "docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' '$SERVICE'")"
+          if [ -z "$previous" ]; then
+            echo "::error::Serviço Swarm '$SERVICE' não encontrado."
+            exit 1
+          fi
+          echo "Imagem em produção antes do deploy: $previous"
+          echo "Imagem deste deploy: $image"
+
+          rollback() {
+            echo "::warning::Falha no deploy; restaurando a imagem anterior."
+            if timeout 600 ssh "${ssh_opts[@]}" "$remote" \
+              "docker service update --quiet --with-registry-auth --image '$previous' --force '$SERVICE'"; then
+              echo "::warning::Rollback concluído para $previous"
+            else
+              echo "::error::Rollback falhou. Intervenção manual necessária."
+            fi
+          }
+
+          logout() {
+            ssh "${ssh_opts[@]}" "$remote" "docker logout ghcr.io" >/dev/null 2>&1 || true
+          }
+
+          printf '%s' "$GHCR_TOKEN" | ssh "${ssh_opts[@]}" "$remote" \
+            "docker login ghcr.io --username '$GHCR_ACTOR' --password-stdin"
+
+          if ! timeout 600 ssh "${ssh_opts[@]}" "$remote" \
+            "docker service update --quiet --with-registry-auth --image '$image' --force '$SERVICE'"; then
+            echo "::error::O Swarm não concluiu a atualização."
+            rollback
+            logout
+            exit 1
+          fi
+
+          current="$(remote_sh "docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' '$SERVICE'")"
+          if [ "$current" != "$image" ]; then
+            echo "::error::O serviço está em '$current', esperado '$image'."
+            rollback
+            logout
+            exit 1
+          fi
+
+          task_state="$(remote_sh "docker service ps --filter desired-state=running --format '{{.CurrentState}}' '$SERVICE' | head -n 1")"
+          case "$task_state" in
+            Running*) echo "Tarefa Swarm em execução: $task_state" ;;
+            *)
+              echo "::error::Nenhuma tarefa em execução após o deploy: ${task_state:-sem tarefa}"
+              rollback
+              logout
+              exit 1
+              ;;
+          esac
+
+          ok=0
+          for attempt in $(seq 1 30); do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$HEALTHCHECK_URL" || true)"
+            if [ "$code" = "200" ]; then
+              ok=1
+              echo "Smoke test OK: $HEALTHCHECK_URL respondeu 200 na tentativa $attempt."
+              break
+            fi
+            echo "Smoke test tentativa $attempt/30: HTTP ${code:-sem resposta}"
+            sleep 5
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Smoke test falhou em $HEALTHCHECK_URL."
+            rollback
+            logout
+            exit 1
+          fi
+
+          logout
+
+          {
+            echo "### Harvest implantado"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Imagem: \`${image}\`"
+            echo "- Serviço: \`${SERVICE}\`"
+            echo "- Rollback automático: \`${previous}\`"
+            echo "- Smoke: \`${HEALTHCHECK_URL}\` → 200"
+          } >> "$GITHUB_STEP_SUMMARY"
