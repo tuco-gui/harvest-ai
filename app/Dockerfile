@@ -24,6 +24,7 @@ WORKDIR /app
 ENV NODE_ENV=production PORT=3000 NEXT_TELEMETRY_DISABLED=1
 RUN addgroup -g 1001 -S nodejs && adduser -S next -u 1001
 COPY --from=build /app/public ./public
+COPY --from=build /app/THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
 COPY --from=build --chown=next:nodejs /app/.next/standalone ./
 COPY --from=build --chown=next:nodejs /app/.next/static ./.next/static
 USER next

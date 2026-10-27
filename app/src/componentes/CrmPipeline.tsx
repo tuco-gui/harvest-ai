@@ -475,6 +475,7 @@ export default function CrmPipeline({ oportunidades, owners, campanhas, canais, 
 
       <div className="crm-barra" aria-label="Controles do pipeline">
         {avancado && <Link className="crm-atalho-tarefas" href="/crm/tarefas">Tarefas e prazos</Link>}
+        {avancado && <Link className="crm-atalho-tarefas" href="/crm/agenda">Agenda</Link>}
          {avancado && podeEditar && <details className="crm-pipeline-menu">
            <summary title="Opções do pipeline">···</summary>
            <div><button type="button" onClick={()=>void abrirEditorDoFunil()}

@@ -16,8 +16,8 @@ const FILTROS: { id: FiltroTarefa; nome: string }[] = [
 ];
 
 export default function CentralTarefasCrm({
-  owners, perfilId, podeEditar,
-}: { owners: Owner[]; perfilId: string; podeEditar: boolean }) {
+  owners, perfilId, podeEditar, oportunidadeId, compacto=false,
+}: { owners: Owner[]; perfilId: string; podeEditar: boolean; oportunidadeId?:number;compacto?:boolean }) {
   const [tarefas, setTarefas] = useState<TarefaCrm[]>([]);
   const [oportunidades, setOportunidades] = useState<OportunidadeResumo[]>([]);
   const [filtro, setFiltro] = useState<FiltroTarefa>('abertas');
@@ -29,14 +29,14 @@ export default function CentralTarefasCrm({
   const [mensagem, setMensagem] = useState('');
   const [novoAberto, setNovoAberto] = useState(false);
   const [emEdicao, setEmEdicao] = useState<number | null>(null);
-  const [nova, setNova] = useState({ oportunidade_id: '', titulo: '', descricao: '', vence_em: '' });
+  const [nova, setNova] = useState({ oportunidade_id: oportunidadeId?String(oportunidadeId):'', titulo: '', descricao: '', vence_em: '' });
   const nomeOwner = (id: string | null) => owners.find(x => x.id === id)?.nome
     ?? (id ? 'Responsável da oportunidade' : 'Sem responsável');
 
   async function carregar() {
     setCarregando(true);
     try {
-      const resposta = await fetch('/api/crm/tarefas', { cache: 'no-store' });
+      const resposta = await fetch('/api/crm/tarefas'+(oportunidadeId?'?oportunidade_id='+oportunidadeId:''), { cache: 'no-store' });
       const d = await resposta.json();
       if (!resposta.ok) throw new Error(d.erro ?? 'Falha ao consultar tarefas.');
       setOportunidades(d.oportunidades ?? []);
@@ -50,7 +50,7 @@ export default function CentralTarefasCrm({
     }
   }
 
-  useEffect(() => { void carregar(); }, []);
+  useEffect(() => { void carregar(); }, [oportunidadeId]);
 
   const visiveis = useMemo(() => filtrarTarefas(tarefas, filtro, busca, owner),
     [tarefas, filtro, busca, owner]);
@@ -125,7 +125,7 @@ export default function CentralTarefasCrm({
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro ?? 'Não foi possível criar a tarefa.');
-      setNova({ oportunidade_id: '', titulo: '', descricao: '', vence_em: '' });
+      setNova({ oportunidade_id: oportunidadeId?String(oportunidadeId):'', titulo: '', descricao: '', vence_em: '' });
       setNovoAberto(false); setEmEdicao(null);
       setMensagem(emEdicao ? 'Tarefa atualizada.' : 'Tarefa criada e vinculada à oportunidade.');
       await carregar();
@@ -134,32 +134,33 @@ export default function CentralTarefasCrm({
     } finally { setEnviando(false); }
   }
 
+  const Container=compacto?'section':'main';
   return (
-    <main className="pagina pagina-larga crm-tarefas">
-      <div className="crm-tarefas-caminho"><Link href="/crm">CRM</Link><span> / </span>Tarefas</div>
+    <Container className={compacto?'crm-tarefas crm-tarefas-compactas':'pagina pagina-larga crm-tarefas'} aria-label={compacto?'Tarefas deste negócio':undefined}>
+      {!compacto&&<div className="crm-tarefas-caminho"><Link href="/crm">CRM</Link><span> / </span>Tarefas · <Link href="/crm/agenda">Abrir agenda</Link></div>}
       <header className="crm-tarefas-header">
         <div>
           <p className="label">CRM · OPERACIONAL</p>
-          <h1>Central de tarefas</h1>
-          <p className="ajuda">Prazos e próximos passos vinculados às oportunidades do funil.</p>
+          {compacto?<h3>Tarefas deste negócio</h3>:<h1>Central de tarefas</h1>}
+          <p className="ajuda">{compacto?'Registre o próximo passo combinado neste atendimento.':'Prazos e próximos passos vinculados às oportunidades do funil.'}</p>
         </div>
         {podeEditar && <button type="button" className="btn-primario" onClick={() => {
           setNovoAberto(v => !v); setEmEdicao(null);
-          setNova({ oportunidade_id: '', titulo: '', descricao: '', vence_em: '' }); setErro('');
+          setNova({ oportunidade_id: oportunidadeId?String(oportunidadeId):'', titulo: '', descricao: '', vence_em: '' }); setErro('');
         }}>{novoAberto ? 'Fechar' : '+ Nova tarefa'}</button>}
       </header>
 
-      <section className="crm-tarefas-kpis" aria-label="Resumo das tarefas">
+      {!compacto&&<section className="crm-tarefas-kpis" aria-label="Resumo das tarefas">
         <button type="button" onClick={() => setFiltro('abertas')}><span>Em aberto</span><strong>{abertas.length}</strong></button>
         <button type="button" onClick={() => setFiltro('atrasadas')}><span>Atrasadas</span><strong>{atrasadas.length}</strong></button>
         <button type="button" onClick={() => setFiltro('hoje')}><span>Para hoje</span><strong>{paraHoje.length}</strong></button>
         <button type="button" onClick={() => setFiltro('concluidas')}><span>Concluídas</span><strong>{tarefas.length - abertas.length}</strong></button>
-      </section>
+      </section>}
 
       {novoAberto && <form className="crm-tarefas-form" onSubmit={criar}>
         <h2>{emEdicao ? 'Editar tarefa' : 'Nova tarefa'}</h2>
         <label>Oportunidade
-          <select required disabled={emEdicao !== null} value={nova.oportunidade_id}
+          <select required disabled={emEdicao !== null||Boolean(oportunidadeId)} value={nova.oportunidade_id}
             onChange={e => setNova(n => ({ ...n, oportunidade_id: e.target.value }))}>
             <option value="">Selecionar negócio</option>
             {oportunidades.map(o => <option key={o.id} value={o.id}>
@@ -194,11 +195,11 @@ export default function CentralTarefasCrm({
         </div>
         <input aria-label="Buscar tarefas" placeholder="Buscar título, empresa ou contato"
           value={busca} onChange={e => setBusca(e.target.value)}/>
-        <select aria-label="Filtrar responsável" value={owner} onChange={e => setOwner(e.target.value)}>
+        {!compacto&&<select aria-label="Filtrar responsável" value={owner} onChange={e => setOwner(e.target.value)}>
           <option value="">Todos os responsáveis</option>
           <option value={perfilId}>Minhas oportunidades</option>
           {owners.filter(o => o.id !== perfilId).map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
-        </select>
+        </select>}
         <button type="button" onClick={() => void carregar()} disabled={carregando} aria-label="Atualizar tarefas">
           {carregando ? 'Atualizando…' : 'Atualizar'}
         </button>
@@ -243,6 +244,6 @@ export default function CentralTarefasCrm({
           </article>;
         })}
       </section>
-    </main>
+    </Container>
   );
 }

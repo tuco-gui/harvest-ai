@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import EncaminhamentoChatwootCRM from '@/componentes/EncaminhamentoChatwootCRM';
 import ConversaExternaDetalheCRM from '@/componentes/ConversaExternaDetalheCRM';
+import CentralTarefasCrm from '@/componentes/CentralTarefasCrm';
 import SeletorEtiquetasCRM from '@/componentes/SeletorEtiquetasCRM';
 import { estadoSla, NOMES_PRIORIDADE, PRIORIDADES, type Prioridade } from '@/lib/crmEtiquetas';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -459,6 +460,8 @@ export default function CentralAtendimentosCrm({ telefoneInicial,conversaInicial
               </button>
             </div>
           </div>
+          {detalhe?.oportunidade&&<CentralTarefasCrm key={detalhe.oportunidade.id} compacto
+            oportunidadeId={detalhe.oportunidade.id} owners={atendentes} perfilId="" podeEditar={true}/>}
         </>}
       </section>
     </div>
