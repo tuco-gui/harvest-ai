@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { EstadoConexaoIA } from '@/lib/conexaoIAWorkspace';
+import { FLUXO_BDR_IMOBILIARIO_BASE, validarFluxoAgente, type FluxoAgente } from '@/lib/fluxoAgente';
 import {
   CATALOGO_AGENTES, TIPOS_AGENTE, type TipoAgente,
   validarConfiguracaoAgente, type TurnoLaboratorio,
@@ -27,6 +28,8 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
   const [aviso, setAviso] = useState('');
   const [erro, setErro] = useState('');
   const [mensagem, setMensagem] = useState('');
+  const [fluxo, setFluxo] = useState<FluxoAgente>(() => structuredClone(FLUXO_BDR_IMOBILIARIO_BASE));
+  const [mostrarFluxo, setMostrarFluxo] = useState(false);
   const [conversas, setConversas] = useState<Partial<Record<TipoAgente, TurnoLaboratorio[]>>>({});
 
   useEffect(() => {
@@ -224,6 +227,34 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
                 onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar agente'}</button>}
             </section>
 
+            {tipo === 'bdr' && <section style={card} aria-label="Editor de fluxo do BDR">
+              <h2 style={{ fontSize: 16, marginBottom: 8 }}>Fluxo conversacional</h2>
+              <p className="ajuda" style={{ marginBottom: 12 }}>Prévia editável do fluxo. Ainda não salva nem ativa automações; as instruções do agente permanecem independentes.</p>
+              <button type="button" style={btn} aria-expanded={mostrarFluxo} onClick={() => setMostrarFluxo(v => !v)}>
+                {mostrarFluxo ? 'Ocultar etapas' : 'Configurar etapas do BDR'}
+              </button>
+              {mostrarFluxo && <div style={{ marginTop: 14 }}>
+                <label htmlFor="fluxo-objetivo" style={{ display: 'block', marginBottom: 6 }}>Objetivo comercial</label>
+                <textarea id="fluxo-objetivo" style={{ ...campo, minHeight: 75 }} value={fluxo.objetivo}
+                  onChange={e => setFluxo(prev => ({ ...prev, objetivo: e.target.value }))}/>
+                {fluxo.blocos.map((bloco, indice) => <div key={bloco.id}
+                    style={{ border: '1px solid var(--rule)', borderRadius: 6, padding: 12, marginTop: 12 }}>
+                  <strong style={{ display: 'block', marginBottom: 7 }}>{indice + 1}. {bloco.etapa}</strong>
+                  <label htmlFor={'etapa-' + bloco.id} style={{ display: 'block', marginBottom: 5 }}>Instrução da etapa</label>
+                  <textarea id={'etapa-' + bloco.id} style={{ ...campo, minHeight: 80 }} maxLength={1500}
+                    value={bloco.instrucao} onChange={e => setFluxo(prev => ({
+                      ...prev, blocos: prev.blocos.map(b => b.id === bloco.id ? { ...b, instrucao: e.target.value } : b)
+                    }))}/>
+                </div>)}
+                <p className="ajuda" style={{ marginTop: 12 }}>Obrigatório: respeitar opt-out, pausar ao assumir um humano e confirmar visitas somente pelo corretor.</p>
+                <p className="ajuda" role="status">
+                  {validarFluxoAgente(fluxo).length ? 'Ajustes necessários: ' + validarFluxoAgente(fluxo).join(' ') : 'Estrutura válida para revisão. Não publicada.'}
+                </p>
+                <button type="button" style={{ ...btn, marginTop: 10 }} onClick={() => setFluxo(structuredClone(FLUXO_BDR_IMOBILIARIO_BASE))}>
+                  Restaurar modelo imobiliário
+                </button>
+              </div>}
+            </section>}
             {editavel && <section style={card} aria-label="Teste manual">
               <h2 style={{ fontSize: 16, marginBottom: 6 }}>Simular conversa</h2>
               <p className="ajuda" style={{ marginBottom: 8 }}>A conversa continua a partir das respostas anteriores. Histórico temporário, disponível apenas nesta tela.</p>
