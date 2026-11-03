@@ -30,6 +30,7 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
   const [mensagem, setMensagem] = useState('');
   const [fluxo, setFluxo] = useState<FluxoAgente>(() => structuredClone(FLUXO_BDR_IMOBILIARIO_BASE));
   const [mostrarFluxo, setMostrarFluxo] = useState(false);
+  const [salvandoFluxo, setSalvandoFluxo] = useState(false);
   const [conversas, setConversas] = useState<Partial<Record<TipoAgente, TurnoLaboratorio[]>>>({});
 
   useEffect(() => {
@@ -38,10 +39,10 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
       .then(async r => {
         const j = await r.json();
         if (!r.ok) throw new Error(j.erro ?? 'Não foi possível carregar os agentes.');
-        return j as { agentes: AgenteTela[]; conexaoIa: EstadoConexaoIA };
+        return j as { agentes: AgenteTela[]; conexaoIa: EstadoConexaoIA; fluxos?: { tipo: string; configuracao: FluxoAgente }[] };
       })
       .then(j => {
-        if (ativo) { setAgentes(j.agentes); setConexaoIa(j.conexaoIa); }
+        if (ativo) { setAgentes(j.agentes); setConexaoIa(j.conexaoIa); const saved = j.fluxos?.find(f => f.tipo === 'bdr'); if (saved?.configuracao && validarFluxoAgente(saved.configuracao).length === 0) setFluxo(saved.configuracao); }
       })
       .catch(e => { if (ativo) setErro(e.message); })
       .finally(() => { if (ativo) setCarregando(false); });
@@ -73,6 +74,19 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
       setAviso('Configuração salva nesta workspace. Nenhuma mensagem foi enviada.');
     } catch (e: any) { setErro(e.message); }
     finally { setSalvando(false); }
+  }
+
+  async function salvarFluxo() {
+    const erros = validarFluxoAgente(fluxo);
+    if (erros.length || !editavel) { setErro(erros.join(' ') || 'Sem permissão para editar.'); return; }
+    setSalvandoFluxo(true); setErro(''); setAviso('');
+    try {
+      const r = await fetch('/api/agentes', { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ tipo: 'bdr', fluxo }) });
+      const j = await r.json();
+      if (!r.ok) throw Error(j.erro || 'Falha ao salvar fluxo.');
+      setAviso('Fluxo salvo na workspace, sem ativar automações ou enviar WhatsApp.');
+    } catch (e: any) { setErro(e.message); }
+    finally { setSalvandoFluxo(false); }
   }
 
   function novaConversa() {
@@ -250,6 +264,10 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
                 <p className="ajuda" role="status">
                   {validarFluxoAgente(fluxo).length ? 'Ajustes necessários: ' + validarFluxoAgente(fluxo).join(' ') : 'Estrutura válida para revisão. Não publicada.'}
                 </p>
+                {editavel && <button type="button" style={{ ...btn, marginTop: 10, marginRight: 10, background: 'var(--red)', color: '#fff' }}
+                  disabled={salvandoFluxo || validarFluxoAgente(fluxo).length > 0} onClick={salvarFluxo}>
+                  {salvandoFluxo ? 'Salvando...' : 'Salvar fluxo'}
+                </button>}
                 <button type="button" style={{ ...btn, marginTop: 10 }} onClick={() => setFluxo(structuredClone(FLUXO_BDR_IMOBILIARIO_BASE))}>
                   Restaurar modelo imobiliário
                 </button>
