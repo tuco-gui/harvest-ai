@@ -3,6 +3,7 @@ import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
 import { tipoAgenteValido, validarConfiguracaoAgente, CATALOGO_AGENTES, TIPOS_AGENTE } from '@/lib/agentes';
 import { carregarConexaoIA } from '@/lib/conexaoIAWorkspace';
+import { validarFluxoAgente, FLUXO_BDR_IMOBILIARIO_BASE, type FluxoAgente } from '@/lib/fluxoAgente';
 
 async function contexto() {
   const perfil = await perfilAtual();
@@ -31,7 +32,9 @@ export async function GET() {
   // retornamos provedor/modelo, NUNCA a chave, e sempre da workspace ativa.
   try {
     const { estado } = await carregarConexaoIA(c.admin, c.perfil.conta_id!);
-    return NextResponse.json({ agentes, conexaoIa: estado });
+    const { data: fluxos, error: erroFluxos } = await c.admin.from('agentes_fluxos').select('tipo,configuracao').eq('conta_id', c.perfil.conta_id!);
+    if (erroFluxos) return NextResponse.json({ erro: 'Configuração de fluxos indisponível. Migração pendente.' }, { status: 503 });
+    return NextResponse.json({ agentes, conexaoIa: estado, fluxos: fluxos ?? [] });
   } catch {
     return NextResponse.json({
       erro: 'Não foi possível consultar a conexão de IA em Configurações.',
@@ -60,4 +63,21 @@ export async function PATCH(req: Request) {
   }, { onConflict: 'conta_id,tipo' }).select('id,conta_id,tipo,nome,instrucao,ativo,atualizado_em').single();
   if (error) return NextResponse.json({ erro: 'Não foi possível salvar o agente.' }, { status: 500 });
   return NextResponse.json({ agente: data });
+}
+
+/** Configuração do fluxo. Nunca ativa robô nem dispara mensagens. */
+export async function PUT(req: Request) {
+  const c = await contexto();
+  if ('erro' in c) return NextResponse.json({ erro: c.erro }, { status: c.status });
+  if (c.perfil.papel === 'operador') return NextResponse.json({ erro: 'Somente administradores podem configurar fluxos.' }, { status: 403 });
+  const b = await req.json().catch(() => null);
+  if (!b || b.tipo !== 'bdr' || !b.fluxo || typeof b.fluxo !== 'object') return NextResponse.json({ erro: 'Fluxo inválido.' }, { status: 400 });
+  const fluxo = b.fluxo as FluxoAgente;
+  const erros = validarFluxoAgente(fluxo);
+  if (erros.length) return NextResponse.json({ erro: erros.join(' ') }, { status: 400 });
+  const { data, error } = await c.admin.from('agentes_fluxos').upsert({
+    conta_id: c.perfil.conta_id, tipo: 'bdr', configuracao: fluxo, atualizado_em: new Date().toISOString(),
+  }, { onConflict: 'conta_id,tipo' }).select('tipo,configuracao').single();
+  if (error) return NextResponse.json({ erro: 'Não foi possível salvar o fluxo.' }, { status: 500 });
+  return NextResponse.json({ fluxo: data?.configuracao ?? FLUXO_BDR_IMOBILIARIO_BASE, publicado: false });
 }
