@@ -20,6 +20,7 @@ export function normalizarWebhookChatwoot(body: Obj) {
     telefone:typeof contato.phone_number==='string'?contato.phone_number:'',
     nome:typeof contato.name==='string'?contato.name:null,timestamp:date.toISOString(),
     sourceId:typeof m.source_id==='string'&&m.source_id.length<=300?m.source_id:null,
+    atribuidaHumano:Number.isSafeInteger(conv.meta?.assignee?.id) && conv.meta.assignee.id>0,
     humano:(outgoing && (m.sender?.type==='user'||body.sender?.type==='user')) ||
       (atualizado && Number.isSafeInteger(conv.meta?.assignee?.id) && conv.meta.assignee.id>0),
   };

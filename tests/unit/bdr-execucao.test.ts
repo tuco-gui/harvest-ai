@@ -19,11 +19,16 @@ function banco() {
   const tables:Record<string,any[]>={bdr_config:[cfg],bdr_sessoes:[sessao],bdr_execucoes:[],
     inbound_eventos:[{id:1,conta_id:conta,canal_id:1,telefone:sessao.telefone,mensagem:'Tenho interesse no Alea',nome_contato:'Teste',recebido_em:'2026-11-06T14:59:00Z'}],
     agentes_workspace:[{conta_id:conta,tipo:'bdr',ativo:true,instrucao:'Atenda consultivamente.'}],
-    opt_outs:[],conta_supressao:[],crm_atendimentos_canais:[],prospecta_mensagens:[],historico_contato:[],
+    opt_outs:[],conta_supressao:[],crm_atendimentos_canais:[],bdr_pausas:[],prospecta_mensagens:[],historico_contato:[],
     contas:[{id:conta,ativo:true,ambiente:'producao',modulos_habilitados:['crm','crm_avancado','agentes']}],
     whatsapp_canais:[{id:1,conta_id:conta,ativo:true,provider:'waha'}]};
+  let aoLerConfig:(()=>void)|null=null;
   const admin:any={
     rpc:async(name:string,p:any)=>{
+      if(name==='bdr_cancelar_saida'){
+        const e=tables.bdr_execucoes.find(e=>e.id===p.p_execucao&&e.conta_id===p.p_conta&&e.status==='reservado');
+        if(!e)return {data:false,error:null};e.status='cancelado';sessao.envio_pendente=false;return {data:true,error:null};
+      }
       assert.equal(name,'bdr_reservar');
       if(sessao.conta_id!==p.p_conta||sessao.id!==p.p_sessao||sessao.versao!==p.p_versao||sessao.envio_pendente||sessao.bloqueado_ate)return {data:false,error:null};
       sessao.bloqueado_ate='reservado';return {data:true,error:null};
@@ -34,9 +39,10 @@ function banco() {
         eq(k:string,v:any){filtros.push(r=>r[k]===v);return q;},neq(k:string,v:any){filtros.push(r=>r[k]!==v);return q;},
         order(){return q;},limit(){return q;},single(){unico=true;return q;},maybeSingle(){unico=true;return q;},
         then(resolve:(r:any)=>void){
+          if(tabela==='bdr_config')aoLerConfig?.();
           const rows=tables[tabela];assert(rows,`tabela inesperada: ${tabela}`);
           if(novo){
-            if(tabela==='bdr_execucoes'&&rows.some(r=>r.chave===novo.chave&&r.sessao_id===novo.sessao_id))return resolve({data:null,error:{code:'23505'}});
+            if(tabela==='bdr_execucoes'&&rows.some(r=>r.chave===novo.chave&&r.sessao_id===novo.sessao_id&&r.status!=='cancelado'))return resolve({data:null,error:{code:'23505'}});
             const row={id:`${tabela}-${rows.length+1}`,...novo};rows.push(row);return resolve({data:unico?{...row}:[{...row}],error:null});
           }
           const matches=rows.filter(r=>filtros.every(f=>f(r)));
@@ -44,7 +50,7 @@ function banco() {
           resolve({data:unico?(matches[0]?{...matches[0]}:null):matches.map(r=>({...r})),error:null});
         }};return q;
     }};
-  return {admin,cfg,sessao,tables,run:()=>executarSessaoBDR(admin,{...cfg},{...sessao})};
+  return {admin,cfg,sessao,tables,antesDoCheck:(f:()=>void)=>{aoLerConfig=f;},run:()=>executarSessaoBDR(admin,{...cfg},{...sessao})};
 }
 test('runtime BDR real: simulação persistida não usa transporte e tick repetido não duplica turno',async()=>{
   enviados=0;chamadasIA=0;const b=banco();await b.run();await b.run();
@@ -95,5 +101,16 @@ test('runtime: opt-out externo, conta removida, fora da allowlist e quiet hours 
     mock.timers.setTime(new Date('2026-11-06T23:00:00Z').getTime());
     const e=banco();e.cfg.modo='homologacao';await e.run();assert.equal(e.tables.bdr_execucoes.length,0);
     assert.equal(enviados,0);
+  }finally{mock.timers.reset();}
+});
+test('reserva conhecida como não enviada é cancelada e a nova entrada pode ser atendida',async()=>{
+  mock.timers.enable({apis:['Date'],now:new Date('2026-11-06T15:00:00Z')});enviados=0;
+  try{
+    const b=banco();b.cfg.modo='homologacao';
+    let mudou=false;b.antesDoCheck(()=>{if(!mudou){mudou=true;b.sessao.versao++;b.sessao.ultima_entrada_id=2;}});
+    await b.run();assert.equal(enviados,0);assert.equal(b.sessao.envio_pendente,false);
+    assert.equal(b.tables.bdr_execucoes[0].status,'cancelado');
+    b.tables.inbound_eventos.push({...b.tables.inbound_eventos[0],id:2,mensagem:'Prazo de 6 meses'});
+    await b.run();assert.equal(enviados,1);assert.equal(b.sessao.processada_entrada_id,2);
   }finally{mock.timers.reset();}
 });

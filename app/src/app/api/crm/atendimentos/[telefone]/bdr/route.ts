@@ -54,6 +54,10 @@ export async function PATCH(req: Request,{params}:{params:Promise<{telefone:stri
     sessao_id:c.s.id,chave:`${b.acao}:${crypto.randomUUID()}`,tipo:b.acao,status:'registrado',
     previa:b.evidencia.trim(),autor_id:c.perfil.id});
   if (erroLog) return NextResponse.json({erro:'Falha ao registrar evidência.'},{status:503});
+  if(b.acao==='liberar'){
+    const {data:liberado,error}=await c.admin.rpc('bdr_liberar',{p_conta:c.perfil.conta_id,p_sessao:c.s.id,p_versao:c.s.versao});
+    return error||!liberado?NextResponse.json({erro:'Estado mudou. Releia a conversa antes de liberar.'},{status:409}):NextResponse.json({ok:true});
+  }
   const patch = b.acao==='liberar'?{estado:'em_qualificacao',processada_entrada_id:null,versao:c.s.versao+1,turno_pendente:true,
     proxima_execucao:new Date().toISOString()}:
     b.acao==='consentimento'?{consentimento_followup:b.consentimento===true,versao:c.s.versao+1,

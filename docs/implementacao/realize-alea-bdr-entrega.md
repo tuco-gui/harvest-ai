@@ -2,6 +2,8 @@
 
 Fonte de aceite: [PR #45](https://github.com/tuco-gui/harvest-ai/pull/45), documento `realize-alea-bdr-whatsapp-superlogica.md`. Esta entrega acrescenta código ao Harvest existente. **Não representa homologação externa nem aprovação para responder a leads reais.**
 
+**Correções atuais do PR #46:** consultar [evidências da revisão](realize-alea-bdr-revisao-pr46.md). O bridge adapta explicitamente `cliente/telefone/email` para `Nome/WhatsApp/E-mail`, confere o cutover dos três workflows publicados e exige consulta LEADS antes de escrever ou confirmar cadastro.
+
 ## Escolha por módulo
 
 | Módulo | Alternativas verificadas | Escolha e motivo |
@@ -48,7 +50,8 @@ Workflows preservados:
 Importações propostas, **inativas**:
 
 - `n8n/realize-bdr-tick.json`: tick para uma workspace explicitamente indicada.
-- `n8n/realize-superlogica-bridge.json`: header-auth obrigatório; valida tenant/imóvel/chave; chama o child existente para escrita e outro workflow para consulta LEADS. Falha ambígua nunca volta ao caminho de escrita.
+- `n8n/realize-superlogica-bridge.json`: header-auth obrigatório; valida tenant/imóvel/chave e as versões publicadas dos três workflows; consulta LEADS antes de escrever; adapta os campos do child. Falha ambígua nunca volta ao caminho de escrita.
+- `n8n/realize-cutover-plan.json` e `scripts/realize-cutover.mjs`: plano e transformação offline dos três workflows existentes. Substituem a chamada direta por captura Harvest, preservando planilha/protocolo/resposta, e removem retries cegos do POST do child. Não publicam ou ativam nada.
 
 A integração institucional da Figueira com o n8n já está operacional, conforme confirmado pelo responsável. A leitura anterior de capabilities do Cofre não deve ser interpretada como indisponibilidade dessa integração e não exige outro MCP. Os novos exports permanecem somente como arquivos versionados, inativos, para revisão. A conferência operacional será feita separadamente pela integração existente, incluindo suporte de entrada por subworkflow, formato real de saída do child e autenticação Header Auth do bridge.
 
@@ -80,13 +83,13 @@ Use `source_channel: minichat` no chat. Também são preservados `gclid`, `fbcli
 O bridge deve retornar somente resultado sanitizado, obtido da resposta CRM validada:
 
 ```json
-{"status":"cadastrado","confirmado_crm":true,"id_superlogica":"<se retornado pela API>"}
+{"status":"cadastrado","confirmado_crm":true,"id_superlogica":"<ID retornado pela consulta>","origem_confirmacao":"api_leads","codigo_anuncio":"CA0653_MMOL","tenant_id":"<UUID autorizado>","idempotency_key":"<UUID do registro Harvest>"}
 ```
 
-- HTTP 200/`ok` do webhook ou protocolo da planilha **não** confirma cadastro CRM.
+- HTTP 200/`ok`, `success` do n8n, `SIMULADO`, protocolo da planilha ou um booleano `confirmado_crm` do child **não** confirmam cadastro CRM. O Harvest confere também origem da confirmação, imóvel, tenant, chave e ID.
 - Falha comprovadamente anterior ao POST: `{"status":"nao_enviado","post_executado":false}` permite retry com backoff.
 - Timeout/HTTP incerto/retorno desconhecido: `reconciliar`. Próxima chamada é `acao: consultar`, nunca novo POST automático.
-- O workflow de leitura LEADS, indicado por `REALIZE_SUPERLOGICA_LEADS_WORKFLOW_ID` no n8n, usa sua própria credencial. Sem API/consulta confirmada, mantém `reconciliar` para revisão; não inventa endpoint ou suporte PUT/PATCH.
+- O workflow de leitura LEADS, indicado por `REALIZE_SUPERLOGICA_LEADS_WORKFLOW_ID` no n8n, usa sua própria credencial e precisa devolver consulta completa e identidade/imóvel verificados. Sem leitura disponível não há POST; após resultado ambíguo, mantém `reconciliar` para revisão. Não inventa endpoint ou suporte PUT/PATCH.
 - Chave idempotente da escrita é o UUID estável do registro Harvest. Alias de entrada contém canal/protocolo. Telefone/e-mail convergentes reaproveitam a pessoa dentro da workspace e do imóvel; identificadores conflitantes exigem revisão.
 - `lead_id_harvest` fica vinculado quando existe lead em `prospecta_leads`; formulários com e-mail apenas possuem o UUID do registro e seu protocolo, sem fabricar telefone/conversa.
 
@@ -122,7 +125,7 @@ Não importar/reabordar históricos nesta entrega. Formulários passam a ser reg
 
 Na pasta `app`: `npm ci`, `npm run test:bdr`, `npx tsc --noEmit`, `npm run build`.
 
-Na raiz: `node --experimental-strip-types --experimental-test-module-mocks --test --test-concurrency=1 tests/unit/*.test.ts tests/*.test.js app/tests/unit/*.test.ts`.
+Na raiz: `node --experimental-strip-types --experimental-test-module-mocks --test --test-concurrency=1 tests/unit/*.test.ts tests/unit/*.test.mjs tests/*.test.js app/tests/unit/*.test.ts`.
 
 Para controlar recursos, executar essas etapas uma por vez com `NODE_OPTIONS=--max-old-space-size=1024` e `UV_THREADPOOL_SIZE=1`. No build usar também `HARVEST_BUILD_CPUS=1`, opção explícita de `next.config.mjs` para limitar workers. O tracing do Next fica restrito à pasta `app`, evitando adotar lockfiles de outros projetos no diretório pai. O CI de revisão existente (`validar-agentes.yml`) inclui o teste BDR e os mesmos limites; não publica imagem nem faz deploy.
 
@@ -132,7 +135,7 @@ Três testes estáticos antigos de `crm-operacional.test.js` já falhavam no `HE
 
 Após atualizar a base, o teste do editor recebeu extensão `.ts` no import para execução pelo runner nativo; o teste de conversas sociais recebeu mock bloqueante do sender compartilhado. As mesmas asserções de segurança e preservação de histórico permanecem ativas.
 
-### Resultado da revalidação final — 2026-11-06
+### Resultado da publicação inicial — 2026-11-06
 
 - Suíte geral ampliada após atualizar a base: **70/70 testes aprovados**, incluindo os quatro cenários do editor de fluxos BDR e as regressões de agenda/contatos sociais.
 - `npm run test:bdr`: **14/14 aprovados**, incluindo migration PostgreSQL/WASM, execução real do orquestrador com adapters mockados, concorrência, histórico e resultado incerto.
@@ -142,3 +145,10 @@ Após atualizar a base, o teste do editor recebeu extensão `.ts` no import para
 - Homologação externa, pareamento Realize e aprovação de produção continuam pendentes conforme a matriz acima. Conferência operacional n8n separada, usando a integração existente. Nenhum novo MCP, importação de workflow, merge, deploy ou habilitação de respostas reais foi executado nesta entrega de código.
 
 Rollback operacional: desativar tick no n8n e retornar configuração BDR para `simulacao`/`crm_habilitado=false`; preservar filas/ledger e revisar saídas incertas antes de qualquer retomada. Não apagar o histórico. O rollback de código deve manter a migration aditiva para auditoria.
+
+### Revalidação após revisão do PR #46
+
+- Suíte geral: **77/77 aprovada**; BDR/SQL/contratos: **22/22 aprovados**.
+- TypeScript e build de produção aprovados, sequencialmente, com heap limitado e `HARVEST_BUILD_CPUS=1`.
+- Migration 054 validada no PostgreSQL atual do Harvest, em transação com `ROLLBACK` e confirmação de ausência de `bdr_config` após o teste. Detalhes e hash no documento de evidências.
+- Workflows existentes apenas consultados; patches/export novo continuam inativos e versionados. Atendimento automático permanece bloqueado. A configuração Vercel desta branch impede novos previews automáticos durante a revisão.

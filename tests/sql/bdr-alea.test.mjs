@@ -16,8 +16,11 @@ test('PostgreSQL real: RLS, isolamento, dedupe concorrente, primeira origem, sto
         telefone text,nome_contato text,mensagem text,lead_id bigint);
       CREATE TABLE prospecta_mensagens(id bigserial PRIMARY KEY);
       CREATE TABLE crm_vinculos(conta_id uuid PRIMARY KEY REFERENCES contas(id));
+      CREATE TABLE crm_atendimentos_canais(conta_id uuid,canal_id bigint,telefone text,responsavel_id uuid);
       CREATE TABLE chatwoot_inboxes(id bigint PRIMARY KEY,conta_id uuid REFERENCES contas(id),
         chatwoot_account_id int,chatwoot_inbox_id int,ativo boolean DEFAULT true);`);
+    const atendimentos=await readFile(new URL('../../sql/043_atendimentos_independentes_por_canal.sql',import.meta.url),'utf8');
+    await db.exec(atendimentos.match(/CREATE OR REPLACE FUNCTION public\.crm_validar_atendimento_canal\(\)[\s\S]*?END \$\$;/)[0]);
     await db.exec(await readFile(new URL('../../sql/054_realize_bdr.sql',import.meta.url),'utf8'));
     const a='11111111-1111-4111-8111-111111111111',b='22222222-2222-4222-8222-222222222222';
     await db.query('INSERT INTO contas VALUES ($1),($2)',[a,b]);

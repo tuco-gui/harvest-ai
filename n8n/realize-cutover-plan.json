@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "status": "revisao_sem_ativacao",
+  "observado_em": "2026-11-06",
+  "workflows": [
+    {"id":"CZ3gAStDKp75yJtm","versao_observada":"dcee769f-1eb0-4c64-a81d-e97517fcd3bb","substituir_no":"9129069e-ecff-4ad9-b4ec-51f562ba8008","destino":"Harvest /api/webhook/bdr acao=capturar source_channel=lp"},
+    {"id":"pqVU7Tceb9Xv8dHs","versao_observada":"ff17a1cd-bb47-4dba-914f-ba26126ec476","substituir_no":"3bea5a77-e26f-4d25-8862-353d9709bf30","destino":"Harvest /api/webhook/bdr acao=capturar source_channel=minichat"},
+    {"id":"njZxxrVJrrl6l96i","versao_observada":"bef46edf-0589-4be4-8ea1-a6d131130b42","alterar_no":"618f1476-aa5f-47c9-ae90-9fd3fcae76f0","retryOnFail":false,"fullResponse":true}
+  ],
+  "transformacao_offline": "scripts/realize-cutover.mjs:prepararCutover",
+  "preservar": ["ids existentes","planilha","protocolo","resposta LP/chat","referencias de credenciais protegidas"],
+  "sequencia_obrigatoria": [
+    "Exportar novamente os tres workflows pela integracao existente e conferir divergencias",
+    "Pausar entradas em janela controlada e aguardar terminar/drenar execucoes antigas, incluindo childs assincronos, retries e execucoes em espera",
+    "Preparar os tres patches offline; manter todos inativos ate revisar os contratos",
+    "Selecionar referencias de credenciais existentes, sem copiar valores ou criar outro MCP",
+    "Publicar child sem retry e duas origens com captura Harvest no lugar da chamada direta",
+    "Conferir versoes publicadas e executar validarEscritorUnico; configurar consulta LEADS completa e documentada",
+    "Somente apos homologacao operacional liberar o cadastro CRM; nao habilitar respostas automaticas"
+  ]
+}

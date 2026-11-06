@@ -15,7 +15,7 @@ CREATE TABLE public.bdr_config (
  contatos_teste text[] NOT NULL DEFAULT '{}',
  atualizado_em timestamptz NOT NULL DEFAULT now(),
  CHECK(modo<>'producao' OR (aprovado_em IS NOT NULL AND aprovado_por IS NOT NULL
-   AND length(evidencia_homologacao)>20 AND responsavel_crm_confirmado AND crm_habilitado))
+   AND evidencia_homologacao IS NOT NULL AND length(evidencia_homologacao)>20 AND responsavel_crm_confirmado AND crm_habilitado))
 );
 CREATE TABLE public.bdr_sessoes (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -73,13 +73,61 @@ CREATE TABLE public.bdr_execucoes (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  conta_id uuid NOT NULL, sessao_id uuid NOT NULL,
  chave text NOT NULL, tipo text NOT NULL CHECK(tipo IN('resposta','followup','assumir','liberar','visita_confirmada','consentimento')),
- status text NOT NULL CHECK(status IN('simulado','reservado','enviado','incerto','registrado')),
+ status text NOT NULL CHECK(status IN('simulado','reservado','enviado','incerto','registrado','cancelado')),
  mensagem_id bigint REFERENCES public.prospecta_mensagens(id),
  previa text, autor_id uuid REFERENCES public.perfis(id),
  criado_em timestamptz NOT NULL DEFAULT now(),
  FOREIGN KEY(conta_id,sessao_id) REFERENCES public.bdr_sessoes(conta_id,id),
- UNIQUE(conta_id,sessao_id,chave)
+ CHECK(length(chave)>0)
 );
+CREATE UNIQUE INDEX bdr_execucao_ativa ON public.bdr_execucoes(conta_id,sessao_id,chave) WHERE status<>'cancelado';
+-- Ownership existe mesmo antes do primeiro inbound/sessão BDR.
+CREATE TABLE public.bdr_pausas (
+ conta_id uuid NOT NULL REFERENCES public.contas(id) ON DELETE CASCADE,
+ canal_id bigint NOT NULL REFERENCES public.whatsapp_canais(id) ON DELETE CASCADE,
+ telefone text NOT NULL CHECK(telefone ~ '^55[0-9]{10,11}$'),
+ humano boolean NOT NULL DEFAULT true,
+ atualizado_em timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(conta_id,canal_id,telefone)
+);
+CREATE TRIGGER bdr_pausa_workspace BEFORE INSERT OR UPDATE OF conta_id,canal_id ON public.bdr_pausas
+ FOR EACH ROW EXECUTE FUNCTION public.crm_validar_atendimento_canal();
+
+CREATE FUNCTION public.bdr_cancelar_saida(p_conta uuid,p_execucao uuid) RETURNS boolean
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE s uuid;
+BEGIN
+ UPDATE bdr_execucoes SET status='cancelado' WHERE conta_id=p_conta AND id=p_execucao AND status='reservado'
+  RETURNING sessao_id INTO s;
+ IF NOT FOUND THEN RETURN false; END IF;
+ UPDATE bdr_sessoes SET envio_pendente=false WHERE conta_id=p_conta AND id=s;
+ RETURN true;
+END $$;
+
+CREATE FUNCTION public.bdr_assumir(p_conta uuid,p_canal bigint,p_telefone text) RETURNS void
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_conta::text||':'||p_canal||':'||p_telefone,52));
+ INSERT INTO bdr_pausas(conta_id,canal_id,telefone,humano) VALUES(p_conta,p_canal,p_telefone,true)
+  ON CONFLICT(conta_id,canal_id,telefone) DO UPDATE SET humano=true,atualizado_em=now();
+ UPDATE bdr_sessoes SET estado='humano_assumiu',versao=versao+1,proximo_followup=NULL,atualizado_em=now()
+  WHERE conta_id=p_conta AND canal_id=p_canal AND telefone=p_telefone AND estado<>'opt_out';
+END $$;
+
+CREATE FUNCTION public.bdr_liberar(p_conta uuid,p_sessao uuid,p_versao bigint) RETURNS boolean
+ LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE s record;
+BEGIN
+ SELECT * INTO s FROM bdr_sessoes WHERE conta_id=p_conta AND id=p_sessao;
+ IF NOT FOUND THEN RETURN false; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(p_conta::text||':'||s.canal_id||':'||s.telefone,52));
+ UPDATE bdr_sessoes SET estado='em_qualificacao',versao=versao+1,processada_entrada_id=NULL,
+  turno_pendente=true,proxima_execucao=now(),atualizado_em=now()
+  WHERE conta_id=p_conta AND id=p_sessao AND versao=p_versao AND estado<>'opt_out' AND NOT envio_pendente;
+ IF NOT FOUND THEN RETURN false; END IF;
+ UPDATE bdr_pausas SET humano=false,atualizado_em=now() WHERE conta_id=p_conta AND canal_id=s.canal_id AND telefone=s.telefone;
+ RETURN true;
+END $$;
 
 CREATE FUNCTION public.bdr_validar_workspace() RETURNS trigger LANGUAGE plpgsql SET search_path=public,pg_temp AS $$
 BEGIN
@@ -157,7 +205,10 @@ BEGIN
     VALUES(p_conta,coalesce(nullif(e.nome_contato,''),'Contato WhatsApp'),e.telefone,'inbox','respondeu') RETURNING id INTO v_lead;
   END IF;
   INSERT INTO public.bdr_sessoes(conta_id,canal_id,telefone,lead_id,ultima_entrada_id,estado)
-   VALUES(p_conta,e.canal_id,e.telefone,v_lead,p_evento,coalesce(p_estado,'novo')) RETURNING id INTO v_id;
+   VALUES(p_conta,e.canal_id,e.telefone,v_lead,p_evento,CASE WHEN p_estado='opt_out' THEN 'opt_out'
+    WHEN EXISTS(SELECT 1 FROM bdr_pausas WHERE conta_id=p_conta AND canal_id=e.canal_id AND telefone=e.telefone AND humano)
+     OR EXISTS(SELECT 1 FROM crm_atendimentos_canais WHERE conta_id=p_conta AND canal_id=e.canal_id AND telefone=e.telefone AND responsavel_id IS NOT NULL)
+    THEN 'humano_assumiu' ELSE coalesce(p_estado,'novo') END) RETURNING id INTO v_id;
  ELSE
   v_id:=s.id; v_lead:=s.lead_id;
   UPDATE public.bdr_sessoes SET ultima_entrada_id=p_evento,versao=versao+1,
@@ -213,7 +264,7 @@ CREATE FUNCTION public.bdr_kpis(p_conta uuid) RETURNS jsonb LANGUAGE sql SECURIT
 $$;
 
 DO $$ DECLARE t text; BEGIN
- FOREACH t IN ARRAY ARRAY['bdr_config','bdr_sessoes','bdr_execucoes','superlogica_registros','superlogica_entradas','crm_vinculos','chatwoot_inboxes'] LOOP
+  FOREACH t IN ARRAY ARRAY['bdr_config','bdr_sessoes','bdr_execucoes','bdr_pausas','superlogica_registros','superlogica_entradas','crm_vinculos','chatwoot_inboxes'] LOOP
   EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY',t);
   EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC,anon,authenticated',t);
   EXECUTE format('GRANT ALL ON public.%I TO service_role',t);
@@ -221,5 +272,7 @@ DO $$ DECLARE t text; BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.superlogica_capturar(uuid,text,text,text,text,jsonb,bigint),public.bdr_reservar(uuid,uuid,bigint),public.bdr_receber(uuid,bigint,text),public.bdr_kpis(uuid) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.superlogica_capturar(uuid,text,text,text,text,jsonb,bigint),public.bdr_reservar(uuid,uuid,bigint),public.bdr_receber(uuid,bigint,text),public.bdr_kpis(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.bdr_cancelar_saida(uuid,uuid),public.bdr_assumir(uuid,bigint,text),public.bdr_liberar(uuid,uuid,bigint) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.bdr_cancelar_saida(uuid,uuid),public.bdr_assumir(uuid,bigint,text),public.bdr_liberar(uuid,uuid,bigint) TO service_role;
 NOTIFY pgrst,'reload schema';
 COMMIT;

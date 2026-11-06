@@ -40,13 +40,13 @@ export async function POST(req: Request) {
   }
   const telefone = normalizarTelefone(e.telefone);
   if (!telefone) return NextResponse.json({ok:true,ignorado:true});
-  if (e.humano) {
+  if (e.humano || e.atribuidaHumano) {
     if (canalId) {
       const {assumirBDR} = await import('@/lib/bdr');
       try { await assumirBDR(admin,vinculo.conta_id,canalId,telefone,null); }
       catch { return NextResponse.json({erro:'Falha ao pausar IA.'},{status:503}); }
     }
-    return NextResponse.json({ok:true,humano:true});
+    if(!e.incoming)return NextResponse.json({ok:true,humano:true});
   }
   const resultado = await processarEventoInbound(admin,{provider:'chatwoot',telefone,
     mensagem:e.conteudo,messageIdExterno:String(e.id),mensagemFisicaId:e.sourceId,

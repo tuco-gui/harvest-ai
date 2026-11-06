@@ -59,7 +59,7 @@ test('bridge n8n: 200 do webhook não confirma CRM; ambiguidade jamais permite r
   try {
     for(const [body,expected] of [
       [{ok:true},'reconciliar'],
-      [{status:'cadastrado',confirmado_crm:true,id_superlogica:'123'},'cadastrado'],
+      [{status:'cadastrado',confirmado_crm:true,id_superlogica:'123'},'reconciliar'],
       [{status:'nao_enviado',post_executado:false},'retry'],
       [{status:'nao_enviado'},'reconciliar'],
     ] as const){

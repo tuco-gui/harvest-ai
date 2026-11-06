@@ -28,8 +28,10 @@ export async function chamarBridgeSuperlogica(payload: Record<string,unknown>): 
       body:JSON.stringify({...payload,codigo_anuncio:CODIGO_ALEA}),signal:AbortSignal.timeout(20_000)});
     if (!r.ok) return {status:'reconciliar',erro:'resposta_bridge_ambigua'};
     const d = await r.json();
-    if (d.status==='cadastrado' && d.confirmado_crm===true)
-      return {status:'cadastrado',id:typeof d.id_superlogica==='string'?d.id_superlogica.slice(0,200):undefined};
+    if (d.status==='cadastrado' && d.confirmado_crm===true && d.origem_confirmacao==='api_leads' &&
+      d.codigo_anuncio===CODIGO_ALEA && d.tenant_id===payload.tenant_id && d.idempotency_key===payload.idempotency_key &&
+      typeof d.id_superlogica==='string' && d.id_superlogica.trim())
+      return {status:'cadastrado',id:d.id_superlogica.slice(0,200)};
     // Somente a garantia explícita de que o POST não ocorreu permite retentar.
     if (d.status==='nao_enviado' && d.post_executado===false) return {status:'retry',erro:'crm_nao_enviado'};
     return {status:'reconciliar',erro:'confirmacao_crm_pendente'};
@@ -58,7 +60,7 @@ export async function sincronizarSuperlogica(admin: SupabaseClient, contaId: str
     const resultado = await chamarBridgeSuperlogica({acao:reg.status_sincronizacao==='reconciliar'?'consultar':'cadastrar',
       tenant_id:contaId,idempotency_key:reg.id,lead_id_harvest:reg.lead_id_harvest,
       cliente:reg.nome,telefone:reg.telefone,email:reg.email,midia:reg.origem.source_channel,
-      comentarioLead:JSON.stringify({origem:reg.origem,pre_atendimento:true})});
+      origem:reg.origem,comentarioLead:JSON.stringify({origem:reg.origem,pre_atendimento:true})});
     // Depois de uma consulta ambígua, continua consulta; nunca retorna ao POST.
     const status = reg.status_sincronizacao==='reconciliar' && resultado.status==='retry'?'reconciliar':resultado.status;
     await admin.from('superlogica_registros').update({status_sincronizacao:status,
