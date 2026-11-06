@@ -12,6 +12,15 @@ on:
       - "sql/034_agentes_figueira_habilitacao.sql"
       - "tests/unit/agentes.test.ts"
       - "tests/unit/conexaoIAWorkspace.test.ts"
+      - "tests/unit/bdr-*.test.ts"
+      - "tests/sql/bdr-alea.test.mjs"
+      - "tests/sql/bdr-schema-atual.test.mjs"
+      - "tests/unit/bdr-superlogica-integracao.test.mjs"
+      - "tests/unit/bdr-leads-paginacao.test.mjs"
+      - "tests/integration/bdr-postgres.sql"
+      - "scripts/realize-*.mjs"
+      - "sql/054_realize_bdr.sql"
+      - "n8n/realize-*.json"
       - "tests/unit/crm-tarefas.test.ts"
       - "tests/unit/crm-contatos.test.ts"
       - "tests/unit/crm-timeline.test.ts"
@@ -58,6 +67,10 @@ jobs:
   validar:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      NODE_OPTIONS: --max-old-space-size=1024
+      UV_THREADPOOL_SIZE: "1"
+      HARVEST_BUILD_CPUS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -124,6 +137,12 @@ jobs:
       - name: Instalar dependencias
         working-directory: app
         run: npm ci
+      - name: Validar BDR Alea, isolamento SQL e bloqueio de respostas reais
+        working-directory: app
+        run: npm run test:bdr
+      - name: Validar editor de fluxos BDR existente
+        working-directory: app
+        run: node --experimental-strip-types --test tests/unit/fluxoAgente.test.ts
       - name: Validar tipos
         working-directory: app
         run: npx tsc --noEmit

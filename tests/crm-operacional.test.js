@@ -10,7 +10,8 @@ test('criação manual não exige lead_id e mantém conta da sessão', () => {
   const rota = ler('app/src/app/api/crm/oportunidades/route.ts');
   assert.match(rota, /const leadId = b\.lead_id \? Number/);
   assert.match(rota, /Informe pelo menos a empresa ou o contato/);
-  assert.match(rota, /crmBackend\(\)\.criar\(perfil\.conta_id/);
+  assert.match(rota, /const backend = await crmBackend\(perfil\.conta_id\)/);
+  assert.match(rota, /backend\.criar\(perfil\.conta_id/);
 });
 
 test('atividades e mensagens validam módulo, oportunidade e tenant', () => {
@@ -20,16 +21,22 @@ test('atividades e mensagens validam módulo, oportunidade e tenant', () => {
   ]) {
     const fonte = ler(arquivo);
     assert.match(fonte, /perfilTemModulo\(admin, perfil, 'crm'\)/);
-    assert.match(fonte, /\.eq\('id', id\)\.eq\('conta_id', perfil\.conta_id\)/);
+    assert.match(fonte, /\.eq\('id', (?:id|numId)\)\.eq\('conta_id', perfil\.conta_id\)/);
   }
 });
 
 test('envio CRM preserva opt-out, whitelist e canal conectado', () => {
   const rota = ler('app/src/app/api/crm/oportunidades/[id]/mensagens/route.ts');
   assert.match(rota, /envioPermitidoNoAmbiente\(ctx\.admin, contaId, telefone\)/);
-  assert.match(rota, /estaSuprimido\(ctx\.admin, contaId, telefone\)/);
+  assert.match(rota, /estaEmOptOut\(ctx\.admin, contaId, telefone\)/);
+  assert.match(rota, /podeSobrescreverOptOut\(ctx\.admin, contaId, ctx\.perfil\.id, ctx\.perfil\.papel\)/);
+  assert.match(rota, /registrarOverride\(ctx\.admin/);
   assert.match(rota, /c\.id === canalId && c\.ativo && c\.status === 'conectado'/);
-  assert.match(rota, /status\.status !== 'WORKING'/);
+  const transporte = ler('app/src/lib/whatsappEnvioCanal.ts');
+  assert.match(rota, /enviarTextoCanal\(ctx\.admin,contaId,canal,telefone,texto\)/);
+  assert.match(transporte, /getStatus\(sessao\)\)\?\.status!=='WORKING'/);
+  assert.match(transporte, /canal\.conta_id!==contaId/);
+  assert(rota.indexOf('await assumirBDR') < rota.indexOf('await enviarTextoCanal'), 'assumir pausa IA antes do envio humano');
   assert.match(rota, /status: entregue \? 'enviado' : 'erro'/);
 });
 

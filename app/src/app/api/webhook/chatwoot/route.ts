@@ -1,130 +1,56 @@
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { processarEventoInbound } from '@/lib/inbound';
-import { jaProcessadoCrossProvider } from '@/lib/dedup';
 import { normalizarTelefone } from '@/lib/telefone';
-
-/**
- * Webhook do Chatwoot — recebe eventos de mensagens (message_created).
- *
- * Chatwoot é source of truth de conversas. WAHA é transporte.
- * Este endpoint processa mensagens inbound do Chatwoot e despacha para
- * o pipeline comum (lib/inbound.ts) com provider='chatwoot'.
- *
- * Segurança: valida CHATWOOT_WEBHOOK_TOKEN (token de verificação configurado
- * no Chatwoot webhook settings).
- *
- * Deduplicação: verifica se a mesma mensagem já chegou via WAHA
- * (cross-provider dedup em lib/dedup.ts).
- */
-
-type ChatwootWebhookPayload = {
-  event?: string;
-  account?: { id?: number };
-  conversation?: { id?: number; inbox_id?: number; status?: string };
-  message?: {
-    id?: number;
-    content?: string;
-    message_type?: string;
-    created_at?: number;
-    private?: boolean;
-  };
-  contact?: { id?: number; name?: string; phone_number?: string; email?: string };
-  channel?: { id?: number; name?: string };
-};
-
-function validarToken(req: Request): boolean {
-  const token = process.env.CHATWOOT_WEBHOOK_TOKEN;
-  if (!token) {
-    // Sem token configurado — rejeitar tudo (falha fechada)
-    console.error('[chatwoot-webhook] CHATWOOT_WEBHOOK_TOKEN não configurado');
-    return false;
-  }
-  const received = req.headers.get('x-webhook-token') ?? '';
-  return received === token;
-}
-
-function resolverContaId(
-  accountId: number | undefined,
-): string | null {
-  // Por enquanto, mapear account_id Chatwoot → conta_id Harvest
-  // FUTURE: usar tabela de mapeamento chatwoot_accounts se multi-tenant
-  if (accountId === 1) return 'c8aaa6f0-33d6-46e2-b45f-c40e49e41037'; // Figueira QA
-  return null;
-}
+import { normalizarWebhookChatwoot } from '@/lib/inboundChatwoot';
 
 export async function POST(req: Request) {
-  if (!validarToken(req)) {
-    return NextResponse.json({ ok: false, erro: 'token inválido' }, { status: 401 });
-  }
-
-  let body: ChatwootWebhookPayload;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ ok: false, erro: 'payload inválido' }, { status: 400 });
-  }
-
-  // Apenas processar message_created de mensagens incoming
-  if (body.event !== 'message_created') {
-    return NextResponse.json({ ok: true, ignorado: true, motivo: `evento '${body.event}' ignorado` });
-  }
-  if (body.message?.message_type !== 'incoming') {
-    return NextResponse.json({ ok: true, ignorado: true, motivo: `message_type '${body.message?.message_type}' ignorado` });
-  }
-  if (body.message?.private) {
-    return NextResponse.json({ ok: true, ignorado: true, motivo: 'mensagem privada ignorada' });
-  }
-
+  const token = process.env.CHATWOOT_WEBHOOK_TOKEN;
+  const recebido = Buffer.from(req.headers.get('x-webhook-token')??'');
+  const esperado = Buffer.from(token??'');
+  if (!token || recebido.length!==esperado.length || !timingSafeEqual(recebido,esperado))
+    return NextResponse.json({erro:'Token inválido.'},{status:401});
+  const body = await req.json().catch(()=>null);
+  if (!body) return NextResponse.json({erro:'Payload inválido.'},{status:400});
+  if (!['message_created','conversation_updated'].includes(body.event)) return NextResponse.json({ok:true,ignorado:true});
+  const e = normalizarWebhookChatwoot(body);
+  if (!e || e.privada || (!e.incoming&&!e.humano)) return NextResponse.json({ok:true,ignorado:true});
   const admin = supabaseAdmin();
-  const contaId = resolverContaId(body.account?.id);
-  if (!contaId) {
-    return NextResponse.json({ ok: true, ignorado: true, motivo: 'conta não resolvida' });
+  // Exatamente um tenant/inbox, sem ID institucional fixo e sem lookup por telefone.
+  const {data:inboxes,error} = await admin.from('chatwoot_inboxes')
+    .select('conta_id,whatsapp_canal_id').eq('chatwoot_account_id',e.accountId)
+    .eq('chatwoot_inbox_id',e.inboxId).eq('ativo',true).limit(2);
+  if (error) return NextResponse.json({erro:'Vínculo indisponível.'},{status:503});
+  if (inboxes?.length!==1) return NextResponse.json({ok:true,ignorado:true,motivo:'vinculo_ausente_ou_ambiguo'});
+  const vinculo = inboxes[0];
+  const {data:crm,error:errCrm} = await admin.from('crm_vinculos').select('ativo')
+    .eq('conta_id',vinculo.conta_id).eq('chatwoot_account_id',e.accountId).eq('ativo',true).maybeSingle();
+  if (errCrm || !crm) return NextResponse.json({ok:true,ignorado:true});
+  let canalId: number|null = null; let funilId: number|null = null;
+  if (vinculo.whatsapp_canal_id) {
+    const {data:canal,error:errCanal} = await admin.from('whatsapp_canais').select('id')
+      .eq('conta_id',vinculo.conta_id).eq('id',vinculo.whatsapp_canal_id).eq('ativo',true).maybeSingle();
+    if (errCanal || !canal) return NextResponse.json({erro:'Canal inválido.'},{status:409});
+    canalId = canal.id;
+    const {data:funis,error:errFunis} = await admin.from('funis').select('id')
+      .eq('conta_id',vinculo.conta_id).eq('canal_padrao_id',canalId).eq('ativo',true).limit(2);
+    if (errFunis) return NextResponse.json({erro:'Funil indisponível.'},{status:503});
+    if (funis?.length===1) funilId=funis[0].id;
   }
-
-  const telefone = normalizarTelefone(body.contact?.phone_number ?? '');
-  if (!telefone) {
-    return NextResponse.json({ ok: true, ignorado: true, motivo: 'telefone inválido' });
+  const telefone = normalizarTelefone(e.telefone);
+  if (!telefone) return NextResponse.json({ok:true,ignorado:true});
+  if (e.humano || e.atribuidaHumano) {
+    if (canalId) {
+      const {assumirBDR} = await import('@/lib/bdr');
+      try { await assumirBDR(admin,vinculo.conta_id,canalId,telefone,null); }
+      catch { return NextResponse.json({erro:'Falha ao pausar IA.'},{status:503}); }
+    }
+    if(!e.incoming)return NextResponse.json({ok:true,humano:true});
   }
-
-  const messageIdExterno = body.message?.id ? String(body.message.id) : null;
-  if (!messageIdExterno) {
-    return NextResponse.json({ ok: true, ignorado: true, motivo: 'message_id ausente' });
-  }
-
-  // Deduplicação cross-provider
-  const timestamp = body.message?.created_at
-    ? new Date(body.message.created_at * 1000).toISOString()
-    : new Date().toISOString();
-
-  const duplicado = await jaProcessadoCrossProvider(admin, {
-    contaId,
-    providerAtual: 'chatwoot',
-    conversationId: body.conversation?.id ?? null,
-    inboxId: body.conversation?.inbox_id ?? null,
-    timestamp,
-  });
-  if (duplicado) {
-    console.log(`[chatwoot-webhook] duplicado cross-provider: msg=${messageIdExterno} conv=${body.conversation?.id}`);
-    return NextResponse.json({ ok: true, duplicado: true });
-  }
-
-  // Normalizar e processar via pipeline comum
-  const resultado = await processarEventoInbound(admin, {
-    provider: 'chatwoot',
-    telefone,
-    mensagem: body.message?.content ?? null,
-    messageIdExterno,
-    timestamp,
-    nomeContato: body.contact?.name ?? null,
-    tipoMensagem: 'texto',
-    fromMe: false,
-    payloadBruto: body,
-  }, contaId);
-
-  if (!resultado.ok) {
-    const status = resultado.erro === 'conta_nao_resolvida' ? 200 : 500;
-    return NextResponse.json(resultado, { status });
-  }
-  return NextResponse.json(resultado);
+  const resultado = await processarEventoInbound(admin,{provider:'chatwoot',telefone,
+    mensagem:e.conteudo,messageIdExterno:String(e.id),mensagemFisicaId:e.sourceId,
+    timestamp:e.timestamp,nomeContato:e.nome,tipoMensagem:e.conteudo?'texto':'midia',
+    fromMe:false,payloadBruto:body},vinculo.conta_id,canalId,funilId);
+  return NextResponse.json(resultado,{status:resultado.ok?200:503});
 }
