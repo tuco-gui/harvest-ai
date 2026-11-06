@@ -16,6 +16,7 @@ on:
       - "tests/sql/bdr-alea.test.mjs"
       - "tests/sql/bdr-schema-atual.test.mjs"
       - "tests/unit/bdr-superlogica-integracao.test.mjs"
+      - "tests/unit/bdr-leads-paginacao.test.mjs"
       - "tests/integration/bdr-postgres.sql"
       - "scripts/realize-*.mjs"
       - "sql/054_realize_bdr.sql"

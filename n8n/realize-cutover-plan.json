@@ -8,6 +8,8 @@
     {"id":"njZxxrVJrrl6l96i","versao_observada":"bef46edf-0589-4be4-8ea1-a6d131130b42","alterar_no":"618f1476-aa5f-47c9-ae90-9fd3fcae76f0","retryOnFail":false,"fullResponse":true}
   ],
   "transformacao_offline": "scripts/realize-cutover.mjs:prepararCutover",
+  "readiness_obrigatorio": "HARVEST_POSTGRES_CONTAINER=<container atual> node scripts/realize-cutover-readiness.mjs",
+  "consulta_leads_existente": "tDi9BFIJgcfudUkh",
   "preservar": ["ids existentes","planilha","protocolo","resposta LP/chat","referencias de credenciais protegidas"],
   "sequencia_obrigatoria": [
     "Exportar novamente os tres workflows pela integracao existente e conferir divergencias",
