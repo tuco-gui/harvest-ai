@@ -79,7 +79,7 @@ export function validarMensagemWhatsApp(textoBruto: string): { ok: true; texto: 
  *  provedor quando a chamada falha — quem chama decide o que mostrar.
  *  `modeloCustom` sobrescreve o modelo padrão quando a conta digitou um. */
 export async function gerarComIA(
-  provedor: ProvedorIA, chave: string, system: string, user: string, modeloCustom?: string | null,
+  provedor: ProvedorIA, chave: string, system: string, user: string, modeloCustom?: string | null, maxTokens = 220,
 ): Promise<string> {
   const modelo = modeloCustom?.trim() || MODELOS[provedor];
 
@@ -90,7 +90,7 @@ export async function gerarComIA(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chave}` },
       body: JSON.stringify({
-        model: modelo, temperature: 0.8, max_tokens: 220,
+        model: modelo, temperature: 0.8, max_tokens: maxTokens,
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
       }),
       signal: AbortSignal.timeout(40_000),
@@ -129,7 +129,7 @@ export async function gerarComIA(
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
-          generationConfig: { temperature: 0.8, maxOutputTokens: 220 },
+          generationConfig: { temperature: 0.8, maxOutputTokens: maxTokens },
         }),
         signal: AbortSignal.timeout(40_000),
       },
@@ -145,7 +145,7 @@ export async function gerarComIA(
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': chave, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: modelo, max_tokens: 220, temperature: 0.8, system, messages: [{ role: 'user', content: user }] }),
+    body: JSON.stringify({ model: modelo, max_tokens: maxTokens, temperature: 0.8, system, messages: [{ role: 'user', content: user }] }),
     signal: AbortSignal.timeout(40_000),
   });
   if (!r.ok) throw new Error(await mensagemErro(r));

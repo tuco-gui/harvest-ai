@@ -20,6 +20,8 @@ export type EventoInboundNormalizado = {
   mensagem: string | null;
   /** Id da mensagem no provider — base da idempotência (provider + este campo). */
   messageIdExterno: string;
+  /** ID físico fornecido pelo conector Chatwoot; nunca deduzido por tempo/texto. */
+  mensagemFisicaId?: string | null;
   /** ISO 8601. Do provider quando disponível; senão, momento do recebimento. */
   timestamp: string;
   /** Nome/contato exibido pelo WhatsApp, quando o provider mandar. */

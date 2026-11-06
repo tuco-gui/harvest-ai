@@ -1,0 +1,10 @@
+{
+  "name": "REALIZE — Harvest BDR | Tick (importar desativado)",
+  "active": false,
+  "nodes": [
+    {"id":"tick","name":"A cada minuto","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[0,0],"parameters":{"rule":{"interval":[{"field":"minutes","minutesInterval":1}]}}},
+    {"id":"harvest","name":"Processar somente workspace autorizada","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[260,0],"parameters":{"method":"POST","url":"={{ $env.HARVEST_API_URL + '/api/webhook/bdr' }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Authorization","value":"={{ 'Bearer ' + $env.BDR_N8N_TOKEN }}"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={{ { acao: 'processar', tenant_id: $env.BDR_TICK_WORKSPACE_ID } }}","options":{"timeout":290000}},"retryOnFail":false}
+  ],
+  "connections":{"A cada minuto":{"main":[[{"node":"Processar somente workspace autorizada","type":"main","index":0}]]}},
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"none","saveDataErrorExecution":"none"}
+}

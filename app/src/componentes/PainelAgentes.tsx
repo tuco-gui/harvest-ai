@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import PainelBdrAlea from '@/componentes/PainelBdrAlea';
 import type { EstadoConexaoIA } from '@/lib/conexaoIAWorkspace';
 import { FLUXO_BDR_IMOBILIARIO_BASE, validarFluxoAgente, type FluxoAgente } from '@/lib/fluxoAgente';
 import {
@@ -161,9 +162,11 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
         <h1>Agentes de IA</h1>
         <p className="ajuda">
           Configure e experimente cinco agentes nesta workspace. A simulação é manual:
-          nenhum agente envia mensagens ou altera o CRM.
+          o laboratório abaixo não envia mensagens. O BDR Alea possui piloto operacional separado, com bloqueio por workspace e homologação.
         </p>
       </header>
+
+      {editavel && tipo==='bdr' && <PainelBdrAlea/>}
 
       {carregando && <p className="ajuda">Carregando agentes…</p>}
       {erro && <p className="erro" role="alert">{erro}</p>}

@@ -93,6 +93,7 @@ export async function processarEventoInbound(
       telefone: evento.telefone,
       mensagem: evento.mensagem,
       message_id_externo: evento.messageIdExterno,
+      mensagem_fisica_id: evento.mensagemFisicaId ?? (evento.provider==='waha'||evento.provider==='evolution'?evento.messageIdExterno:null),
       tipo_mensagem: evento.tipoMensagem,
       nome_contato: evento.nomeContato,
       lead_id: leadId,

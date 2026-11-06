@@ -17,6 +17,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { processarAutomacoes } from './automacoes';
+import { receberEventoBDR } from './bdrInbound';
 
 export type TipoEvento =
   | 'mensagem_recebida'
@@ -52,7 +53,13 @@ export async function emitirEvento(
   admin: SupabaseClient,
   evento: EventoNegocio,
 ): Promise<void> {
-  console.log(`[eventos] emitir: ${evento.tipo} conta=${evento.contaId} op=${evento.oportunidadeId} tel=${evento.telefone}`);
+  console.log(`[eventos] emitir: ${evento.tipo} conta=${evento.contaId} op=${evento.oportunidadeId}`);
+
+  // Orquestração especializada, sem transporte ou efeitos externos no dispatcher.
+  if (evento.eventoInboundId) {
+    try { await receberEventoBDR(admin,evento.contaId,evento.eventoInboundId); }
+    catch { console.error('[eventos] falha ao persistir contexto BDR'); }
+  }
 
   // Resolver classificação para eventos inbound
   let classificacao: 'resposta' | 'negativa' | 'optout' = 'resposta';

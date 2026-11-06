@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import EncaminhamentoChatwootCRM from '@/componentes/EncaminhamentoChatwootCRM';
+import ContextoBdrAlea from '@/componentes/ContextoBdrAlea';
 import ConversaExternaDetalheCRM from '@/componentes/ConversaExternaDetalheCRM';
 import CentralTarefasCrm from '@/componentes/CentralTarefasCrm';
 import SeletorEtiquetasCRM from '@/componentes/SeletorEtiquetasCRM';
@@ -402,6 +403,7 @@ export default function CentralAtendimentosCrm({ telefoneInicial,conversaInicial
              </button>}
            </div>
            <div className="crm-atendimento-editor">
+            {canalFiltro!==null&&<ContextoBdrAlea key={selecionada.telefone+':'+canalFiltro} telefone={selecionada.telefone} canalId={canalFiltro}/>}
             <h2>Gerenciar atendimento</h2>
             <div className="crm-atendimento-campos">
               <label>Situação

@@ -85,11 +85,16 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}) as any);
   const admin = supabaseAdmin();
   const acao = String(b.acao ?? 'configurar');
+  // IDs remotos são a fronteira entre tenants e usam um token institucional.
+  // Só o administrador da instalação pode criar/remover esses vínculos.
+  if (perfil.papel!=='super_admin') {
+    return NextResponse.json({erro:'Vínculos de infraestrutura Chatwoot exigem administrador da instalação.'},{status:403});
+  }
 
   // --- Configurar account_id ---
   if (acao === 'configurar') {
     const chatwootAccountId = Number(b.chatwootAccountId);
-    if (!Number.isInteger(chatwootAccountId)) {
+    if (!Number.isSafeInteger(chatwootAccountId) || chatwootAccountId<1) {
       return NextResponse.json({ erro: 'chatwootAccountId inválido.' }, { status: 400 });
     }
 
@@ -112,7 +117,7 @@ export async function POST(req: Request) {
     const tipoCanal = String(b.tipoCanal ?? 'outro').trim().toLowerCase();
     const nome = String(b.nome ?? '').trim();
 
-    if (!Number.isInteger(inboxId)) {
+    if (!Number.isSafeInteger(inboxId) || inboxId<1) {
       return NextResponse.json({ erro: 'chatwootInboxId inválido.' }, { status: 400 });
     }
     const tiposValidos = ['whatsapp', 'instagram', 'facebook', 'telegram', 'sms', 'email', 'widget', 'api', 'line', 'outro'];
@@ -131,12 +136,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ erro: 'Configure o Chatwoot Account ID primeiro.' }, { status: 400 });
     }
 
+    const disponiveis = await listarInboxes(vinculo.chatwoot_account_id).catch(()=>null);
+    if (!disponiveis?.some(i=>i.id===inboxId))
+      return NextResponse.json({erro:'Inbox não confirmada na conta Chatwoot vinculada.'},{status:409});
+    const whatsappCanalId=b.whatsappCanalId??null;
+    if (whatsappCanalId!==null) {
+      if (!Number.isSafeInteger(whatsappCanalId)||whatsappCanalId<1)
+        return NextResponse.json({erro:'Canal WhatsApp inválido.'},{status:400});
+      const {data:canal,error:errCanal}=await admin.from('whatsapp_canais').select('id')
+        .eq('conta_id',perfil.conta_id).eq('id',whatsappCanalId).eq('ativo',true).maybeSingle();
+      if(errCanal||!canal)return NextResponse.json({erro:'Canal não pertence à workspace.'},{status:403});
+    }
+
     const { data: inbox, error } = await admin
       .from('chatwoot_inboxes')
       .upsert({
         conta_id: perfil.conta_id,
         chatwoot_account_id: vinculo.chatwoot_account_id,
         chatwoot_inbox_id: inboxId,
+        whatsapp_canal_id:whatsappCanalId,
         tipo_canal: tipoCanal,
         nome: nome || `Inbox ${inboxId}`,
         ativo: true,

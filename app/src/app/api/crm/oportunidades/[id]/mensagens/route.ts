@@ -4,8 +4,8 @@ import { perfilTemModulo } from '@/lib/autorizacao';
 import { normalizarTelefone } from '@/lib/telefone';
 import { envioPermitidoNoAmbiente } from '@/lib/ambienteEnvio';
 import { estaEmOptOut, podeSobrescreverOptOut, registrarOverride } from '@/lib/optout';
-import { carregarCanais, sessaoWahaDoCanal } from '@/lib/whatsappCanais';
-import { getOrCreateSession, sendText as wahaSendText } from '@/lib/waha';
+import { carregarCanais } from '@/lib/whatsappCanais';
+import { enviarTextoCanal } from '@/lib/whatsappEnvioCanal';
 import { registrarTentativaContato } from '@/lib/historicoContato';
 import { podeAcessarOportunidade } from '@/lib/crmControleAcesso';
 import { crmBackend } from '@/lib/twenty';
@@ -188,34 +188,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   let entregue = false;
   let falha: string | null = null;
-  if (canal.provider === 'waha') {
-    const sessao = sessaoWahaDoCanal(canal);
+  const {data:cfgBdr,error:erroCfgBdr} = await ctx.admin.from('bdr_config').select('conta_id')
+    .eq('conta_id',contaId).eq('canal_id',canal.id).maybeSingle();
+  if (erroCfgBdr && erroCfgBdr.code!=='42P01' && erroCfgBdr.code!=='PGRST205')
+    return NextResponse.json({erro:'Não foi possível verificar controle da IA.'},{status:503});
+  if (cfgBdr) {
     try {
-      const status = await getOrCreateSession(sessao);
-      if (status.status !== 'WORKING') falha = 'O canal WAHA não está conectado.';
-      else entregue = await wahaSendText(sessao, telefone, texto);
-      if (!entregue && !falha) falha = 'O WAHA não confirmou o envio.';
-    } catch {
-      falha = 'Não consegui falar com o WAHA.';
-    }
-  } else {
-    const { data: cred } = await ctx.admin.from('conta_credenciais').select('evolution_url, evolution_instancia, evolution_key')
-      .eq('conta_id', contaId).maybeSingle();
-    if (!cred?.evolution_url || !cred?.evolution_instancia || !cred?.evolution_key) {
-      falha = 'Evolution não configurada para esta conta.';
-    } else {
-      try {
-        const resposta = await fetch(`${String(cred.evolution_url).replace(/\/+$/, '')}/message/sendText/${cred.evolution_instancia}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json', apikey: cred.evolution_key },
-          body: JSON.stringify({ number: telefone, text: texto }), signal: AbortSignal.timeout(30_000),
-        });
-        entregue = resposta.ok;
-        if (!entregue) falha = `Evolution respondeu ${resposta.status}.`;
-      } catch {
-        falha = 'Não consegui falar com a Evolution.';
-      }
-    }
+      const {assumirBDR} = await import('@/lib/bdr');
+      await assumirBDR(ctx.admin,contaId,canal.id,telefone,ctx.perfil.id);
+    } catch { return NextResponse.json({erro:'Não foi possível pausar a IA.'},{status:503}); }
   }
+  try { entregue = await enviarTextoCanal(ctx.admin,contaId,canal,telefone,texto); }
+  catch { falha = 'O canal não confirmou o envio. Verifique a conexão antes de repetir.'; }
+  if (!entregue && !falha) falha = 'O provider não confirmou o envio.';
 
   let mensagemId: number | null = null;
   if (ctx.oportunidade.lead_id) {

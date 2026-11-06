@@ -106,6 +106,18 @@ export async function PATCH(req: Request) {
   const {data:recente,error:errRecente}=await buscaRecente.order('recebido_em',{ascending:false}).limit(1).maybeSingle();
   if (errRecente || !recente) return NextResponse.json({ erro: 'Não foi possível calcular o prazo.' }, { status: 503 });
   const prazo = prazoTriagem(recente.recebido_em, valido.prioridade);
+  if (canalId!==null && responsavelId) {
+    const {assumirBDR} = await import('@/lib/bdr');
+    // Workspace sem BDR não depende da migration nova.
+    const {data:cfg,error:erroCfg} = await admin.from('bdr_config').select('conta_id')
+      .eq('conta_id',perfil.conta_id).eq('canal_id',canalId).maybeSingle();
+    if (erroCfg && erroCfg.code!=='42P01' && erroCfg.code!=='PGRST205')
+      return NextResponse.json({erro:'Não foi possível verificar controle de IA.'},{status:503});
+    if (cfg) {
+      try { await assumirBDR(admin,perfil.conta_id!,canalId,telefone,perfil.id); }
+      catch { return NextResponse.json({erro:'Não foi possível pausar a IA.'},{status:503}); }
+    }
+  }
   const { data, error } = await admin.from(tabela).upsert({
     conta_id: perfil.conta_id, telefone, ...(canalId===null?{}:{canal_id:canalId}),
     status: valido.status,

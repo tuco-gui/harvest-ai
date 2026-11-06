@@ -1,0 +1,24 @@
+{
+  "name": "REALIZE — Harvest | Bridge Superlógica (contrato, desativado)",
+  "active": false,
+  "nodes": [
+    {"id":"webhook","name":"Harvest autenticado","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0],"parameters":{"httpMethod":"POST","path":"realize-harvest-superlogica","authentication":"headerAuth","responseMode":"responseNode","options":{}}},
+    {"id":"validar","name":"Validar tenant e contrato","type":"n8n-nodes-base.code","typeVersion":2,"position":[240,0],"parameters":{"jsCode":"const b = $json.body;\nconst allowed = ($env.REALIZE_SUPERLOGICA_WORKSPACES || '').split(',').map(x => x.trim());\nif (!b || !allowed.includes(b.tenant_id) || b.codigo_anuncio !== 'CA0653_MMOL' || !/^[0-9a-f-]{36}$/i.test(b.idempotency_key || '') || !['cadastrar','consultar'].includes(b.acao)) throw new Error('contrato_recusado');\nreturn [{json:b}];"}},
+    {"id":"acao","name":"Cadastro ou consulta separada","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[480,0],"parameters":{"conditions":{"options":{"caseSensitive":true,"typeValidation":"strict","version":2},"conditions":[{"id":"cadastrar","leftValue":"={{ $json.acao }}","rightValue":"cadastrar","operator":{"type":"string","operation":"equals"}}],"combinator":"and"},"options":{}}},
+    {"id":"cadastro","name":"Workflow Realize existente — escrita ZAPIER","type":"n8n-nodes-base.executeWorkflow","typeVersion":1,"position":[740,-100],"parameters":{"source":"database","workflowId":"njZxxrVJrrl6l96i","options":{"waitForSubWorkflow":true}},"retryOnFail":false,"onError":"continueRegularOutput"},
+    {"id":"consulta","name":"Consulta LEADS autorizada configurada","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[740,140],"parameters":{"conditions":{"options":{"typeValidation":"strict","version":2},"conditions":[{"id":"consulta_configurada","leftValue":"={{ Boolean($env.REALIZE_SUPERLOGICA_LEADS_WORKFLOW_ID) }}","rightValue":true,"operator":{"type":"boolean","operation":"true","singleValue":true}}],"combinator":"and"},"options":{}}},
+    {"id":"leads","name":"Workflow de leitura LEADS — nunca ZAPIER","type":"n8n-nodes-base.executeWorkflow","typeVersion":1,"position":[1000,100],"parameters":{"source":"database","workflowId":"={{ $env.REALIZE_SUPERLOGICA_LEADS_WORKFLOW_ID }}","options":{"waitForSubWorkflow":true}},"retryOnFail":false,"onError":"continueRegularOutput"},
+    {"id":"normalizar","name":"Somente confirmação CRM explícita","type":"n8n-nodes-base.code","typeVersion":2,"position":[1260,0],"parameters":{"jsCode":"const d = $json;\n// O child existente deve devolver o contrato após validação DOCUMENTADA da resposta CRM.\n// Um HTTP 200, protocolo de planilha ou execução n8n não são confirmação.\nif (d.confirmado_crm === true && d.status === 'cadastrado' && d.codigo_anuncio === 'CA0653_MMOL') {\n return [{json:{status:'cadastrado',confirmado_crm:true,id_superlogica:typeof d.id_superlogica === 'string' ? d.id_superlogica : null}}];\n}\n// Falha anterior ao POST pode ser repetida; resposta ambígua exige LEADS.\nif (d.status === 'nao_enviado' && d.post_executado === false) return [{json:{status:'nao_enviado',post_executado:false}}];\nreturn [{json:{status:'reconciliar',confirmado_crm:false}}];"}},
+    {"id":"resposta","name":"Retornar apenas resultado sanitizado","type":"n8n-nodes-base.respondToWebhook","typeVersion":1.4,"position":[1520,0],"parameters":{"respondWith":"json","responseBody":"={{ $json }}","options":{}}}
+  ],
+  "connections":{
+    "Harvest autenticado":{"main":[[{"node":"Validar tenant e contrato","type":"main","index":0}]]},
+    "Validar tenant e contrato":{"main":[[{"node":"Cadastro ou consulta separada","type":"main","index":0}]]},
+    "Cadastro ou consulta separada":{"main":[[{"node":"Workflow Realize existente — escrita ZAPIER","type":"main","index":0}],[{"node":"Consulta LEADS autorizada configurada","type":"main","index":0}]]},
+    "Workflow Realize existente — escrita ZAPIER":{"main":[[{"node":"Somente confirmação CRM explícita","type":"main","index":0}]]},
+    "Consulta LEADS autorizada configurada":{"main":[[{"node":"Workflow de leitura LEADS — nunca ZAPIER","type":"main","index":0}],[{"node":"Somente confirmação CRM explícita","type":"main","index":0}]]},
+    "Workflow de leitura LEADS — nunca ZAPIER":{"main":[[{"node":"Somente confirmação CRM explícita","type":"main","index":0}]]},
+    "Somente confirmação CRM explícita":{"main":[[{"node":"Retornar apenas resultado sanitizado","type":"main","index":0}]]}
+  },
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"none","saveDataErrorExecution":"none"}
+}
