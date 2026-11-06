@@ -135,6 +135,9 @@ jobs:
       - name: Validar BDR Alea, isolamento SQL e bloqueio de respostas reais
         working-directory: app
         run: npm run test:bdr
+      - name: Validar editor de fluxos BDR existente
+        working-directory: app
+        run: node --experimental-strip-types --test tests/unit/fluxoAgente.test.ts
       - name: Validar tipos
         working-directory: app
         run: npx tsc --noEmit

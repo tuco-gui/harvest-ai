@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { FLUXO_BDR_IMOBILIARIO_BASE, validarFluxoAgente } from '../../src/lib/fluxoAgente';
+import { FLUXO_BDR_IMOBILIARIO_BASE, validarFluxoAgente } from '../../src/lib/fluxoAgente.ts';
 
 describe('fluxo do agente BDR', () => {
   it('aceita o modelo imobiliario com handoff', () => {

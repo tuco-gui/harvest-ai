@@ -38,6 +38,7 @@ const hook=registerHooks({resolve(specifier,context,next){
  if(specifier==='@/lib/supabase/server')return data('export const perfilAtual=async()=>globalThis.__socialTeste.perfil();export const supabaseAdmin=()=>globalThis.__socialTeste.db;');
  if(specifier==='@/lib/crmControleAcesso')return data('export const podeAcessarOportunidade=async()=>({ok:globalThis.__socialTeste.acesso(),erro:"Sem permissão"});');
  if(specifier==='@/lib/autorizacao')return data('export const perfilTemModulo=async()=>true;');
+ if(specifier==='@/lib/whatsappEnvioCanal')return data('export const enviarTextoCanal=()=>{throw Error("Não enviar WhatsApp para conversa social")};');
  if(specifier==='@/app/api/crm/conversas-externas/[id]/route')return data('export const GET=(...a)=>globalThis.__socialTeste.ler(...a);export const POST=(...a)=>globalThis.__socialTeste.enviar(...a);');
  if(specifier==='@/lib/crmConversaOportunidade')return next(new URL('../../app/src/lib/crmConversaOportunidade.ts',import.meta.url).href,context);
  if(specifier.startsWith('@/lib/'))return data('export const normalizarTelefone=()=>null;export const envioPermitidoNoAmbiente=()=>{throw Error("Não enviar WhatsApp")};export const estaEmOptOut=()=>null;export const podeSobrescreverOptOut=()=>null;export const registrarOverride=()=>null;export const carregarCanais=()=>[];export const sessaoWahaDoCanal=()=>null;export const getOrCreateSession=()=>null;export const sendText=()=>null;export const registrarTentativaContato=()=>null;export const crmBackend=()=>null;');

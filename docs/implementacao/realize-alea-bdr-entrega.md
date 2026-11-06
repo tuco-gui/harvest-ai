@@ -14,6 +14,8 @@ Fonte de aceite: [PR #45](https://github.com/tuco-gui/harvest-ai/pull/45), docum
 
 Deskcomm consultado no commit `fa4268a8ad9e62ab2a6d827e6e2db4750f7e961d`: `lib/agent-engine/agent/human-handoff.ts`, `lib/agent-engine/agent/schedule-followup.ts` e árvore de Inbox/agentes. Foram usados como referência de fluxo e avaliação de dependências; não há trecho substancial copiado nesta entrega. A experiência permanece uma aplicação Harvest, com os controles junto da conversa.
 
+A branch foi atualizada sobre a `main` em `6df13d0`, preservando agenda/tarefas, contatos sociais e o editor de fluxos BDR por workspace. As dependências Playwright e PGlite foram mantidas juntas. O editor declarativo existente continua disponível; a configuração do piloto Alea não habilita respostas reais nem substitui esse editor.
+
 ## Arquivos e fluxos
 
 - `sql/054_realize_bdr.sql`: configuração desligada por padrão; sessões por workspace/canal/telefone; ledger; mapeamento Superlógica; aliases de protocolo; reservas atômicas; RLS server-only; KPIs agregados. Numeração atualizada para preservar as migrations sociais/fluxos já presentes na `main`.
@@ -120,7 +122,7 @@ Não importar/reabordar históricos nesta entrega. Formulários passam a ser reg
 
 Na pasta `app`: `npm ci`, `npm run test:bdr`, `npx tsc --noEmit`, `npm run build`.
 
-Na raiz: `node --experimental-strip-types --experimental-test-module-mocks --test --test-concurrency=1 tests/unit/*.test.ts tests/*.test.js`.
+Na raiz: `node --experimental-strip-types --experimental-test-module-mocks --test --test-concurrency=1 tests/unit/*.test.ts tests/*.test.js app/tests/unit/*.test.ts`.
 
 Para controlar recursos, executar essas etapas uma por vez com `NODE_OPTIONS=--max-old-space-size=1024` e `UV_THREADPOOL_SIZE=1`. No build usar também `HARVEST_BUILD_CPUS=1`, opção explícita de `next.config.mjs` para limitar workers. O tracing do Next fica restrito à pasta `app`, evitando adotar lockfiles de outros projetos no diretório pai. O CI de revisão existente (`validar-agentes.yml`) inclui o teste BDR e os mesmos limites; não publica imagem nem faz deploy.
 
@@ -128,12 +130,14 @@ O teste SQL usa PostgreSQL via PGlite/WASM em memória, com schema mínimo fiel 
 
 Três testes estáticos antigos de `crm-operacional.test.js` já falhavam no `HEAD` anterior (factory Twenty assíncrona, variável `numId`, opt-out com override). Foram atualizados para os contratos existentes e para a extração do sender compartilhado, preservando checks de tenant/opt-out/whitelist/conexão e acrescentando ordem de pausa antes do envio humano.
 
+Após atualizar a base, o teste do editor recebeu extensão `.ts` no import para execução pelo runner nativo; o teste de conversas sociais recebeu mock bloqueante do sender compartilhado. As mesmas asserções de segurança e preservação de histórico permanecem ativas.
+
 ### Resultado da revalidação final — 2026-11-06
 
-- Suíte geral: **60/60 testes aprovados**.
+- Suíte geral ampliada após atualizar a base: **70/70 testes aprovados**, incluindo os quatro cenários do editor de fluxos BDR e as regressões de agenda/contatos sociais.
 - `npm run test:bdr`: **14/14 aprovados**, incluindo migration PostgreSQL/WASM, execução real do orquestrador com adapters mockados, concorrência, histórico e resultado incerto.
-- TypeScript do estado final: **aprovado**, com `tsc --noEmit --incremental false`; aproximadamente 6,3 segundos, máximo RSS 775 MiB.
-- Build de produção do estado final: **aprovado**, com `HARVEST_BUILD_CPUS=1 npm run build`; aproximadamente 22,8 segundos, máximo RSS 879 MiB, 75 páginas estáticas geradas.
+- TypeScript do estado final: **aprovado**, com `tsc --noEmit --incremental false`; aproximadamente 6 segundos, máximo RSS 789 MiB.
+- Build de produção do estado final: **aprovado**, com `HARVEST_BUILD_CPUS=1 npm run build`; aproximadamente 23,4 segundos, máximo RSS 823 MiB, 77 páginas estáticas geradas. Restam avisos CSS preexistentes de compatibilidade de `start`/`end` do Autoprefixer, sem erro de compilação.
 - Investigação antes da execução: a carga de um minuto havia caído de mais de 700 para aproximadamente 5; a memória permanecia comprimida. A lista de processos não tinha compiladores antigos do Harvest e mostrava consumo de aplicações desktop. A estratégia foi limitar heap/workers e rodar TypeScript, build, testes gerais e testes SQL/BDR sequencialmente. Nenhum processo de outro aplicativo foi encerrado; as medições das novas execuções reportaram zero swaps para os comandos medidos.
 - Homologação externa, pareamento Realize e aprovação de produção continuam pendentes conforme a matriz acima. Conferência operacional n8n separada, usando a integração existente. Nenhum novo MCP, importação de workflow, merge, deploy ou habilitação de respostas reais foi executado nesta entrega de código.
 
