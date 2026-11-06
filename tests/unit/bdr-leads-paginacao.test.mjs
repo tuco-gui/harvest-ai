@@ -68,5 +68,6 @@ test('patch do workflow LEADS mantém credencial instalada e diagnóstico, com e
   const original={...artifact,nodes:[...artifact.nodes,{id:'diagnostico',name:'Diagnóstico existente',parameters:{valor:'preservar'}}],active:true};
   const result=prepararLeadsPaginacao(original);
   assert.equal(result.active,false);assert.equal(result.nodes.find(n=>n.id==='diagnostico').parameters.valor,'preservar');
-  assert.equal(result.nodes.find(n=>n.id==='2fa596d9-6b0e-4188-a90e-bc96dbd0b221').credentials.httpHeaderAuth.id,'C0adNbEFeHge9Tjp');
+  assert.deepEqual(result.nodes.find(n=>n.id==='2fa596d9-6b0e-4188-a90e-bc96dbd0b221').credentials,
+    original.nodes.find(n=>n.id==='2fa596d9-6b0e-4188-a90e-bc96dbd0b221').credentials);
 });
