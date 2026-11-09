@@ -40,6 +40,16 @@ test('adaptação explícita passa pelo preparador real do child, inclusive nome
     return {codigo_anuncio:'CA0653_MMOL',cliente:nome,telefone,email};};
   assert.throws(()=>preparar(p));assert.deepEqual(preparar(mapped),{codigo_anuncio:'CA0653_MMOL',cliente:p.cliente,telefone:p.telefone,email:p.email});
 });
+test('renda, termo UTM e gclid são preservados na adaptação sem novo campo CRM',()=>{
+  const input={...p,origem:{utm_source:'google',utm_campaign:'alea_botucatu_search_leads',
+    renda_familiar:'R$ 3.001 a R$ 5.000',utm_term:'casas alea botucatu',gclid:'teste-gclid'}};
+  const mapped=adaptarLeadParaChild(input);
+  assert.equal(mapped['Renda familiar'],'R$ 3.001 a R$ 5.000');
+  assert.equal(mapped.Termo,'casas alea botucatu');
+  assert.equal(mapped.gclid,'teste-gclid');
+  assert.deepEqual(code('Adaptar contrato do child existente',input),mapped);
+});
+
 test('cutover preserva planilha/resposta/credenciais e recusa escritor legado, misto ou com retry',()=>{
   const original=observados(),copia=structuredClone(original);
   assert.throws(()=>validarEscritorUnico(original));
