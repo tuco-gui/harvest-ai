@@ -3,7 +3,7 @@ import { CODIGO_ALEA } from './bdrPolitica.ts';
 
 export type CapturaLead = { chave: string; nome: string; telefone: string | null; email: string | null;
   origem: Record<string,string>; leadId?: number | null };
-const FONTES = ['source_channel','utm_source','utm_medium','utm_campaign','gclid','fbclid','anuncio','referral'];
+const FONTES = ['source_channel','utm_source','utm_medium','utm_campaign','utm_term','renda_familiar','gclid','fbclid','anuncio','referral'];
 export function origemImutavel(input: Record<string, unknown>): Record<string,string> {
   return Object.fromEntries(FONTES.filter(k=>typeof input[k]==='string')
     .map(k=>[k,String(input[k]).slice(0,500)]));
@@ -60,7 +60,16 @@ export async function sincronizarSuperlogica(admin: SupabaseClient, contaId: str
     const resultado = await chamarBridgeSuperlogica({acao:reg.status_sincronizacao==='reconciliar'?'consultar':'cadastrar',
       tenant_id:contaId,idempotency_key:reg.id,lead_id_harvest:reg.lead_id_harvest,
       cliente:reg.nome,telefone:reg.telefone,email:reg.email,midia:reg.origem.source_channel,
-      origem:reg.origem,comentarioLead:JSON.stringify({origem:reg.origem,pre_atendimento:true})});
+      origem:reg.origem,comentarioLead:[
+        'Alea Botucatu',
+        'Protocolo Harvest: '+String(reg.id),
+        'Renda familiar: '+(reg.origem.renda_familiar || 'não informada'),
+        'Origem: '+(reg.origem.utm_source || reg.origem.source_channel || 'não informada'),
+        'Campanha: '+(reg.origem.utm_campaign || 'não informada'),
+        'Termo UTM: '+(reg.origem.utm_term || 'não informado'),
+        'GCLID: '+(reg.origem.gclid || 'não informado'),
+        'Pré-atendimento Harvest',
+      ].join(' | ')});
     // Depois de uma consulta ambígua, continua consulta; nunca retorna ao POST.
     const status = reg.status_sincronizacao==='reconciliar' && resultado.status==='retry'?'reconciliar':resultado.status;
     await admin.from('superlogica_registros').update({status_sincronizacao:status,
