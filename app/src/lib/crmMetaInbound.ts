@@ -122,7 +122,11 @@ export async function gravarMensagemMeta(admin:SupabaseClient,m:MensagemMetaEntr
  // Não distribuir o mesmo evento entre duas workspaces ou fontes ambíguas.
  if(fontes.length!==1)return 'ignorada';
  const fonte=fontes[0];
-  if(!fonte.meta_token_cifrado)return 'ignorada';
+  // WhatsApp Cloud API recebe evento autenticado pelo HMAC do App Secret no
+  // webhook, associado explicitamente ao phone_number_id da fonte. O token
+  // OAuth por fonte só existe para Instagram/Messenger. Não exigi-lo no inbound
+  // WhatsApp; respostas/outbound seguem bloqueadas sem canal oficial homologado.
+  if(m.plataforma!=='whatsapp_cloud_api'&&!fonte.meta_token_cifrado)return 'ignorada';
   if(!(await recursoDaWorkspace(admin,fonte.conta_id,[tipoCanalRecurso(m.plataforma)])))return 'ignorada';
  let {data:conversa,error:erroConversa}=await admin.from('crm_conversas_externas')
   .select('id').eq('conta_id',fonte.conta_id).eq('fonte_id',fonte.id)
