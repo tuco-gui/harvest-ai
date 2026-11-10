@@ -18,10 +18,12 @@ test('cinco cenários BDR sem envio externo',()=>{
   assert.equal(paradaObrigatoria('Pare de me enviar mensagens, por favor'),'opt_out');
   for(const estado of ['opt_out','humano_assumiu','transferido','aguardando_corretor'] as const)assert(estadoBloqueiaBDR(estado));
 });
-test('pré-homologação bloqueia leads reais; teste exige telefone explícito',()=>{
-  const c={modo:'simulacao',contatos_teste:['5514999999999']};
-  assert(!envioBdrPermitido(c,'5514999999999'));
-  assert(envioBdrPermitido({...c,modo:'homologacao'},'5514999999999'));
+test('pré-homologação bloqueia leads reais; piloto aceita somente o telefone autorizado',()=>{
+  const c={modo:'simulacao',contatos_teste:['5514999999999','5514997754659']};
+  assert(!envioBdrPermitido(c,'5514997754659'));
+  assert(envioBdrPermitido({...c,modo:'homologacao'},'5514997754659'));
+  assert(envioBdrPermitido({...c,modo:'homologacao'},'+55 (14) 99775-4659'),'normaliza o telefone do piloto');
+  assert(!envioBdrPermitido({...c,modo:'homologacao'},'5514999999999'),'allowlist não amplia o piloto');
   assert(!envioBdrPermitido({...c,modo:'homologacao'},'5514888888888'));
   assert(!envioBdrPermitido({...c,modo:'producao'},'5514888888888'));
   assert(envioBdrPermitido({...c,modo:'producao',aprovado_em:'2026-11-06',aprovado_por:'operador-aprovador'},'5514888888888'));

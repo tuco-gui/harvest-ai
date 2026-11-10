@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {supabaseAdmin} from '@/lib/supabase/server';
-import {configuracaoMeta,verificarAssinaturaMeta,tokenVerificacaoMeta} from '@/lib/crmMetaOAuth';
+import {configuracaoMeta,segredoMeta,verificarAssinaturaMeta,tokenVerificacaoMeta} from '@/lib/crmMetaOAuth';
 import {extrairMensagensMeta,gravarMensagemMeta} from '@/lib/crmMetaInbound';
 
 export async function GET(req:Request){
@@ -22,10 +22,13 @@ export async function POST(req:Request){
  catch{return new Response('Invalid JSON',{status:400});}
  if(!p||typeof p!=='object')return new Response('Invalid payload',{status:400});
  const obj=(p as Record<string,unknown>).object;
- if(obj!=='instagram'&&obj!=='page')return NextResponse.json({ok:true,ignorado:true});
- const tipo=obj==='instagram'?'instagram_dm':'facebook_messenger';
- const config=configuracaoMeta(tipo);
- if(!config||!verificarAssinaturaMeta(bruto,req.headers.get('x-hub-signature-256'),config.secret))
+ if(obj!=='instagram'&&obj!=='page'&&obj!=='whatsapp_business_account')
+  return NextResponse.json({ok:true,ignorado:true});
+ const tipo=obj==='instagram'?'instagram_dm':obj==='page'?'facebook_messenger':'whatsapp_cloud_api';
+ // WhatsApp oficial usa o App Secret do app que hospeda o WABA; a conexão
+ // por workspace continua identificada pelo phone_number_id da fonte.
+ const secret=tipo==='whatsapp_cloud_api'?segredoMeta('app'):configuracaoMeta(tipo)?.secret;
+ if(!secret||!verificarAssinaturaMeta(bruto,req.headers.get('x-hub-signature-256'),secret))
   return new Response('Unauthorized',{status:401});
  const mensagens=extrairMensagensMeta(p);
  const admin=supabaseAdmin();

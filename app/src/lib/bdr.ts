@@ -55,6 +55,10 @@ export async function assumirBDR(admin: SupabaseClient, contaId: string, canalId
 export async function executarSessaoBDR(admin: SupabaseClient, cfg: ConfigBDR, s: SessaoBDR) {
   if (estadoBloqueiaBDR(s.estado) || s.envio_pendente) return;
   if(!(await recursoDaWorkspace(admin,s.conta_id,['agentes.bdr'],'simular')))return;
+  // Fora da simulação, só o destinatário autorizado avança: homologação = piloto
+  // único; produção = aprovação registrada. Evita gerar/consumir IA para outros
+  // contatos, que continuam apenas capturados.
+  if(cfg.modo!=='simulacao'&&!envioBdrPermitido(cfg,s.telefone))return;
   const novaEntrada = s.ultima_entrada_id!==s.processada_entrada_id;
   const followup = !novaEntrada && s.consentimento_followup && s.proximo_followup && Date.parse(s.proximo_followup)<=Date.now();
   if (!novaEntrada && !followup) return;
@@ -77,8 +81,11 @@ export async function executarSessaoBDR(admin: SupabaseClient, cfg: ConfigBDR, s
     if (errAgente || !agente?.ativo) throw Error('agente_bdr_inativo');
     if(agente.configuracao){
       const a=agente.configuracao;
-      if(cfg.modo!=='simulacao'||(a.canais?.length&&!a.canais.includes(s.canal_id))||(a.funis?.length&&!a.funis.includes(cfg.funil_id)))return;
-      // Configuração de instância é manual/rascunho até nova homologação operacional.
+      // Simulação e homologação (piloto único) podem operar com configuração de
+      // instância; produção continua bloqueada até nova homologação operacional.
+      if(!['simulacao','homologacao'].includes(cfg.modo)||
+        (a.canais?.length&&!a.canais.includes(s.canal_id))||
+        (a.funis?.length&&!a.funis.includes(cfg.funil_id)))return;
     }
     const {conexao} = await carregarConexaoIA(admin,s.conta_id);
     if (!conexao) throw Error('ia_nao_configurada');

@@ -3,14 +3,57 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import {recursoDaWorkspace} from './servicosWorkspace.ts';
 import {tipoCanalRecurso} from './recursosRotas.ts';
 import type {PlataformaMeta} from './crmMetaOAuth';
+import {capturarLeadSuperlogica} from './superlogica.ts';
+
+export type TipoMetaEntrada=PlataformaMeta|'whatsapp_cloud_api';
 
 export type MensagemMetaEntrada={
- plataforma:PlataformaMeta;contaExternaId:string;remetenteId:string;
- mensagemId:string;texto:string;enviadaPelaConta:boolean;
+ plataforma:TipoMetaEntrada;contaExternaId:string;remetenteId:string;
+ mensagemId:string;texto:string;enviadaPelaConta:boolean;nomeContato?:string|null;
 };
+/**
+ * WhatsApp Cloud API entrega em `entry[].changes[].value`, com
+ * `metadata.phone_number_id` como identidade da fonte. Status de entrega
+ * (`value.statuses`) não são mensagens e são ignorados.
+ */
+function extrairMensagensWhatsApp(p:Record<string,unknown>):MensagemMetaEntrada[]{
+ if(!Array.isArray(p.entry))return [];
+ const eventos:MensagemMetaEntrada[]=[];
+ for(const e of p.entry.slice(0,100)){
+  if(!e||typeof e!=='object')continue;
+  const changes=(e as Record<string,any>).changes;
+  if(!Array.isArray(changes))continue;
+  for(const c of changes.slice(0,100)){
+   const v=c?.value;
+   if(c?.field!=='messages'||!v||v.messaging_product!=='whatsapp')continue;
+   const contaExternaId=String(v.metadata?.phone_number_id??'');
+   if(!/^\d{8,30}$/.test(contaExternaId))continue;
+   const nomes=new Map<string,string>();
+   for(const ct of (Array.isArray(v.contacts)?v.contacts:[]).slice(0,100)){
+    const wa=String(ct?.wa_id??'');
+    const nome=String(ct?.profile?.name??'').trim();
+    if(/^\d{8,30}$/.test(wa)&&nome)nomes.set(wa,nome.slice(0,160));
+   }
+   for(const msg of (Array.isArray(v.messages)?v.messages:[]).slice(0,100)){
+    const mid=typeof msg?.id==='string'?msg.id:'';
+    const remetenteId=String(msg?.from??'');
+    if(!mid||mid.length>255||!/^\d{8,30}$/.test(remetenteId))continue;
+    const texto=msg?.type==='text'?msg.text?.body:
+      msg?.type==='button'?msg.button?.text:
+      msg?.type==='interactive'?(msg.interactive?.button_reply?.title??msg.interactive?.list_reply?.title):'';
+    const limpo=String(texto??'').trim();
+    if(!limpo||limpo.length>4000)continue;
+    eventos.push({plataforma:'whatsapp_cloud_api',contaExternaId,remetenteId,
+      mensagemId:mid,texto:limpo,enviadaPelaConta:false,nomeContato:nomes.get(remetenteId)??null});
+   }
+  }
+ }
+ return eventos;
+}
 export function extrairMensagensMeta(payload:unknown):MensagemMetaEntrada[]{
  if(!payload||typeof payload!=='object')return [];
  const p=payload as Record<string,unknown>;
+ if(p.object==='whatsapp_business_account')return extrairMensagensWhatsApp(p);
  const plataforma:PlataformaMeta|null=p.object==='instagram'?'instagram_dm':
   p.object==='page'?'facebook_messenger':null;
  if(!plataforma||!Array.isArray(p.entry))return [];
@@ -34,11 +77,32 @@ export function extrairMensagensMeta(payload:unknown):MensagemMetaEntrada[]{
  }
  return eventos;
 }
+/**
+ * Inbound WhatsApp oficial também alimenta a captura Superlógica da workspace,
+ * reutilizando o mesmo outbox/bridge da Realize. Só captura contatos nomeados
+ * do funil configurado; não envia resposta e não distribui responsável.
+ */
+async function capturarWhatsAppSuperlogica(
+ admin:SupabaseClient,
+ fonte:{id:string;conta_id:string;funil_id:number},
+ m:MensagemMetaEntrada,
+){
+ const nome=String(m.nomeContato??'').trim();
+ if(nome.length<2)return;
+ if(!(await recursoDaWorkspace(admin,fonte.conta_id,['integracoes.superlogica'],'configurar')))return;
+ const {data:cfg,error}=await admin.from('bdr_config')
+  .select('funil_id').eq('conta_id',fonte.conta_id).eq('funil_id',fonte.funil_id).maybeSingle();
+ if(error||!cfg)return;
+ await capturarLeadSuperlogica(admin,fonte.conta_id,{
+  chave:`meta:${m.mensagemId}`,nome,telefone:m.remetenteId,email:null,
+  origem:{source_channel:'meta',utm_source:'whatsapp'},
+ });
+}
 export async function gravarMensagemMeta(admin:SupabaseClient,m:MensagemMetaEntrada):
  Promise<'gravada'|'duplicada'|'ignorada'>{
  if(m.enviadaPelaConta)return 'ignorada';
  const {data:fontes,error}=await admin.from('crm_fontes_funil')
-  .select('id,conta_id,meta_token_cifrado,status').eq('tipo',m.plataforma)
+  .select('id,conta_id,funil_id,meta_token_cifrado,status').eq('tipo',m.plataforma)
   .eq('identificador_externo',m.contaExternaId)
   .in('status',['aguardando_autorizacao','pronto']).limit(2);
  if(error)throw Error('Falha ao verificar fonte Meta.');
@@ -77,6 +141,9 @@ export async function gravarMensagemMeta(admin:SupabaseClient,m:MensagemMetaEntr
     p_conta:fonte.conta_id,p_fonte:fonte.id,p_conversa:conversa.id,
    }):{error:null};
   if(negocio.error)throw Error('Falha ao vincular contato e negócio Meta.');
+  // Captura idempotente por message_id. Roda também em retry (insert duplicado)
+  // para que uma falha anterior de captura seja reconciliada, nunca duplicada.
+  if(m.plataforma==='whatsapp_cloud_api')await capturarWhatsAppSuperlogica(admin,fonte,m);
   if(errInsert?.code==='23505')return 'duplicada';
  const now=new Date().toISOString();
  const [{error:errConversa},{error:errFonte}]=await Promise.all([

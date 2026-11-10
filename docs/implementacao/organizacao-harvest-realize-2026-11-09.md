@@ -259,3 +259,51 @@ Em `app/`: `npm run test:organizacao` está disponível para a suíte específic
 `npx tsc --noEmit`, `HARVEST_BUILD_CPUS=1 npm run build` e o teste do editor foram
 executados com os mesmos limites de memória/threads. A suíte específica foi incluída
 no workflow de CI, mas não se afirma execução de CI remoto nesta branch não publicada.
+
+## 10. Rodada 10/11/2026 — piloto único e inbound WhatsApp oficial
+
+Branch `feat/servicos-workspace-granulares` publicada no **PR #48**
+(https://github.com/tuco-gui/harvest-ai/pull/48), commits `d90fe8f` e merge `8678057`.
+O PR está `OPEN` e `MERGEABLE`; **não houve merge, deploy, migration aplicada ou
+ativação de resposta real**. O workflow n8n `pqVU7Tceb9Xv8dHs` foi mantido intacto.
+
+### Homologação fail-closed
+
+- `bdrPolitica.ts` define `TELEFONE_HOMOLOGACAO_BDR = '5514997754659'`.
+  Em `modo='homologacao'`, `envioBdrPermitido` só retorna `true` para esse telefone
+  (com normalização de DDI/formatação). `contatos_teste` não amplia o piloto.
+- `bdr.ts` aplica a guarda antes de gerar/consumir IA: fora do piloto, o contato
+  continua capturado, mas não há resposta automática.
+- Configuração de instância passou a ser aceita em `simulacao` e `homologacao`;
+  `producao` com `agente.configuracao` continua bloqueada até nova homologação.
+
+### Inbound WhatsApp Cloud API
+
+- `/api/webhook/meta-mensagens` aceita `object='whatsapp_business_account'` e valida
+  HMAC com o App Secret (`segredoMeta('app')`).
+- `crmMetaInbound.ts` lê `entry[].changes[].value`, usa `metadata.phone_number_id`
+  como identificador da fonte (`crm_fontes_funil.tipo='whatsapp_cloud_api'`), ignora
+  `statuses` e mídia, e captura texto/botão/interativo.
+- Mensagem inbound gera conversa/mensagem idempotentes e chama
+  `capturarLeadSuperlogica` com chave `meta:<message_id>`, reutilizando o outbox/bridge
+  da Realize. O retry da Meta reconcilia captura sem duplicar conversa.
+- Contatos nomeados fora do piloto são capturados; nenhum recebe resposta automática.
+- Sem `bdr_config`/funil correspondente ou sem nome de contato, a captura não ocorre.
+
+### Verificação
+
+- **127 testes unitários/SQL** e **12 testes JS legados** aprovados.
+- `npx tsc --noEmit` e `HARVEST_BUILD_CPUS=1 npm run build` aprovados após o merge.
+- Testes de homologação cobrem: allowlist não amplia o piloto, normalização do telefone,
+  bloqueio de produção com configuração, ausência de IA fora do piloto, retry idempotente
+  e captura de contatos nomeados.
+
+### Pendências para operar de verdade
+
+- Descobrir WABA/`phone_number_id` da Realize e confirmar Cloud API/coexistência exige
+  credencial de banco/produção, ausente nesta sessão.
+- O canal que desapareceu da UI (WAHA/Evolution) não pôde ser inspecionado sem banco.
+- OpenBao segue com AppRole inválido (`HTTP 400 invalid role or secret ID`); correção
+  exige reemissão de `secret_id` por admin/root. SSH direto a `77.37.40.97` é negado.
+- Evidência de distribuição ao Sylvio e migrations 055–058 continuam pendentes.
+- CI do PR (`autenticacao`, `validar`, Vercel) ainda não concluído.
