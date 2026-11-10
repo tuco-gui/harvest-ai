@@ -52,6 +52,7 @@ test('reconciliar lote exige administrador, permanece na workspace e não chama 
  f.db.rpc=async(nome:string,args:any)=>{chamadas.push({nome,args});return {data:null,error:{message:'duplicidade'}};};
  r=await diagnostico.POST(req({acao:'vincular_pendentes'},'POST'));
  assert.equal(r.status,207);assert.equal((await r.json()).pendencias,1);
+ delete f.db.rpc;
 });
 
 test('instanciar modelo não cria agentes institucionais; conhecimento e vínculos ficam no tenant',async()=>{
