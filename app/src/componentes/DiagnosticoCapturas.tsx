@@ -13,9 +13,18 @@ export default function DiagnosticoCapturas(){
  const [dados,setDados]=useState<Dados|null>(null),[erro,setErro]=useState(''),[ocupado,setOcupado]=useState('');
  async function carregar(){const r=await fetch('/api/agentes/bdr/registros',{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.erro);setDados(d);}
  useEffect(()=>{carregar().catch(e=>setErro(e.message));},[]);
+ async function vincularPendentes(){setOcupado('lote');setErro('');try{
+  const r=await fetch('/api/agentes/bdr/registros',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'vincular_pendentes'})});
+  const d=await r.json();if(!r.ok)throw Error(d.erro??'Falha na vinculação do lote.');
+  await carregar();setErro(d.aviso??(`Vinculados ao Harvest: ${d.vinculados??0}.`));
+ }catch(e){setErro(e instanceof Error?e.message:'Falha na reconciliação com o CRM.');}finally{setOcupado('');}}
  async function vincular(id:string){setOcupado(id);setErro('');try{const r=await fetch('/api/agentes/bdr/registros',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({registro_id:id})});const d=await r.json();if(!r.ok)throw Error(d.erro);await carregar();}catch(e){setErro(e instanceof Error?e.message:'Falha ao vincular.');}finally{setOcupado('');}}
- return <section className="secao"><h3>Onde estão os leads?</h3>{erro&&<p role="alert">{erro}</p>}
+ return <section className="secao"><h3>Onde estão os leads?</h3>{erro&&<p role="status">{erro}</p>}
   {dados&&<><p className="ajuda">Todos os números são desta empresa. Superlógica (externo) e Harvest (interno) são sistemas diferentes. {dados.nota}</p><dl style={{display:'flex',gap:18,flexWrap:'wrap'}}>{Object.entries(dados.indicadores).map(([k,v])=><div key={k}><dt>{rotulos[k]??k.replaceAll('_',' ')}</dt><dd>{v??'Não liberado'}</dd></div>)}</dl>
+   <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',margin:'14px 0'}}>
+     <button type="button" className="salvar" disabled={!!ocupado||!dados.registros.some(r=>!r.oportunidade_id)} onClick={()=>void vincularPendentes()}>{ocupado==='lote'?'Vinculando…':'Vincular pendentes ao CRM Harvest (até 20 por vez)'}</button>
+     <span className="ajuda">Exige CRM liberado e migration 058; não envia mensagens nem cria cadastros externos.</span>
+   </div>
    <p className="ajuda">Últimas 100 capturas. Cada linha informa se a pessoa já foi vinculada aos contatos e oportunidades do Harvest. A ação de vínculo não cadastra novamente no Superlógica, não atribui corretores e não altera o atendimento humano.</p>
    <div style={{overflowX:'auto'}}><table className="tabela"><thead><tr><th>Contato capturado</th><th>Superlógica (externo)</th><th>Harvest (lead / contato / oportunidade)</th><th>Vínculo com Harvest</th></tr></thead><tbody>{dados.registros.map(r=><tr key={r.id}><td>{r.nome}<small style={{display:'block'}}>{r.id}</small></td><td>{r.status_sincronizacao}{r.id_superlogica?' · ID '+r.id_superlogica:''}{r.erro_tecnico&&<small style={{display:'block'}}>{r.erro_tecnico}</small>}</td><td>{r.lead_id_harvest??'—'} / {r.contato_id??'—'} / {r.oportunidade_id??'—'}</td><td>{r.oportunidade_id?<span className="selo" data-zap-selo="sim">Já está no Harvest</span>:<button disabled={!!ocupado} onClick={()=>void vincular(r.id)}>{ocupado===r.id?'Vinculando…':'Cadastrar / vincular no Harvest'}</button>}</td></tr>)}</tbody></table></div></>}
  </section>;
