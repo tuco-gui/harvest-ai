@@ -476,7 +476,7 @@ export default function Configuracoes(p: Props) {
           )}
 
           {liberado('inbox.whatsapp')&&<section className="secao" id="integracao-whatsapp">
-            <h2>Conexões de atendimento</h2>
+            <h2>WhatsApp</h2>
              <p className="ajuda">A Inbox foi desenhada para receber diferentes provedores em uma única conversa por canal e workspace. Os itens planejados ainda não recebem nem enviam mensagens.</p>
              <div className="crm-canais-capacidades">
                {CANAIS_HARVEST.map(c=><div key={c.id}>
