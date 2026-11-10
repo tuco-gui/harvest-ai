@@ -59,7 +59,7 @@ export default function PainelBdrAlea() {
      <dl style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,margin:'14px 0'}}>
        {Object.entries(kpis).filter(([k])=>['recebidos','cadastrados_crm','atendidos','encaminhados','qualificados','falhas'].includes(k)).map(([k,v])=><div key={k} style={{border:'1px solid var(--rule)',borderRadius:6,padding:12}}><dt className="ajuda">{rotulos[k]??k}</dt><dd style={{fontSize:24,fontWeight:700,marginTop:6}}>{v}</dd></div>)}
      </dl>
-     <p className="ajuda"><a href="/crm/contatos">Abrir contatos do Harvest</a> · <a href="/crm/oportunidades">Abrir oportunidades do Harvest</a>. Confira abaixo quais capturas já possuem vínculo local antes de considerar os dois CRMs sincronizados.</p>
+     <p className="ajuda"><a href="/crm/contatos">Abrir contatos do Harvest</a> · <a href="/crm">Abrir pipeline e oportunidades do Harvest</a>. Confira abaixo quais capturas já possuem vínculo local antes de considerar os dois CRMs sincronizados.</p>
      <DiagnosticoCapturas/>
      <details style={{marginTop:20}}>
        <summary style={{cursor:'pointer',fontWeight:600}}>Configuração avançada do BDR (administradores)</summary>
