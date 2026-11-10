@@ -46,34 +46,48 @@ export default function PainelBdrAlea() {
     finally {setOcupado(false);}
   }
    if (!disponivel) return aviso?<p role="alert">{aviso}</p>:null;
-   return <section style={{border:'1px solid var(--rule)',padding:18,marginBottom:20,borderRadius:6}} aria-label="Configuração do BDR imobiliário">
-     <h2>BDR imobiliário · configuração da workspace</h2>
-     <p className="ajuda">Ficha e condições aprovadas para o empreendimento atendido. Histórico na Inbox atual. Conecte o WhatsApp em Configurações → Integrações.</p>
-    <p>Modo atual: <strong>{config?.modo??'Não configurado'}</strong> · Superlógica: {config?.crm_habilitado?'habilitado':'aguardando configuração do n8n'}
-      {' · '}Liberação técnica cadastral: {config?.responsavel_crm_confirmado?'registrada (não comprova atribuição a um usuário)':'pendente'}</p>
-    <details open><summary>Ficha, condições comerciais e vínculos</summary>
-      <div style={{display:'grid',gap:12,marginTop:12}}>
-        <p className="ajuda"><a href="/crm/cadastros/produtos">Cadastrar ou editar imóveis no catálogo existente</a>. Use o SKU como código do imóvel e a descrição como ficha/condições aprovadas.</p>
-        <label>Buscar imóvel no catálogo<input value={buscaImovel} onChange={e=>setBuscaImovel(e.target.value)}/></label>
-        <button type="button" onClick={()=>void buscarImoveis()}>Buscar imóveis</button>
-        {imoveis.length>0&&<label>Usar ficha do catálogo<select value="" onChange={e=>{const i=imoveis.find(x=>x.id===Number(e.target.value));if(i){setCodigo(i.sku??'');setBase(i.nome+'\n'+(i.descricao??''));}}}><option value="">Selecione para preparar a ficha</option>{imoveis.map(i=><option key={i.id} value={i.id}>{i.sku??'Sem código'} · {i.nome}</option>)}</select></label>}
-        <label>Código do imóvel<input value={codigo} maxLength={100} onChange={e=>setCodigo(e.target.value)}/></label>
-        <label>Canal da workspace<select value={canal} onChange={e=>{setCanal(e.target.value);setFunil('');}}>
-          <option value="">Selecione</option>{canais.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-        <label>Funil do canal<select value={funil} onChange={e=>setFunil(e.target.value)}>
-          <option value="">Selecione</option>{funis.filter(f=>f.canal_padrao_id===Number(canal)).map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}</select></label>
-        <label>Modo operacional (alteração somente após homologação)<select value={modo} disabled>
-          <option value="simulacao">Simulação · sem envio</option><option value="homologacao">Homologação · somente contatos de teste na Figueira Marketing</option>
-          {modo==='producao'&&<option value="producao">Produção aprovada</option>}
-        </select></label>
-        <p className="ajuda">Trocas de vínculo são validadas no backend. Sessões e capturas existentes impedem migração silenciosa. Editar a ficha não conecta canais nem libera IA.</p>
-        <label>Ficha e condições aprovadas do imóvel<textarea value={base} maxLength={16000} rows={6} onChange={e=>setBase(e.target.value)}/></label>
-        <button type="button" className="btn-primario" disabled={ocupado||!canal||!funil||!codigo||modo!=='simulacao'} onClick={()=>void salvarFicha()}>Salvar ficha e vínculos</button>
-      </div>
-    </details>
-    <p className="ajuda">Contadores abaixo são de integração/atendimento, não a quantidade de contatos ou negócios do pipeline.</p>
-    <dl style={{display:'flex',gap:16,flexWrap:'wrap'}}>{Object.entries(kpis).map(([k,v])=><div key={k}><dt>{k==='cadastrados_crm'?'Cadastros confirmados no Superlógica':k==='recebidos'?'Identidades capturadas (integração/BDR)':k.replaceAll('_',' ')}</dt><dd>{v}</dd></div>)}</dl>
-    {aviso&&<p role="status">{aviso}</p>}
-    <DiagnosticoCapturas/>
-  </section>;
+   const rotulos:Record<string,string>={recebidos:'Contatos identificados na captação',cadastrados_crm:'Confirmados no Superlógica',atendidos:'Conversas respondidas pelo agente',respondidos:'Sessões de atendimento registradas',encaminhados:'Encaminhados para atendimento humano',qualificados:'Qualificados pelo BDR',visitas_confirmadas_humano:'Visitas confirmadas por humano',falhas:'Pendências técnicas ou de sincronização'};
+   return <section className="secao" aria-label="BDR imobiliário da workspace" style={{marginBottom:22}}>
+     <h2>BDR imobiliário</h2>
+     <p className="ajuda">Atendimento e qualificação do empreendimento. O canal, os funis e a conexão com WhatsApp são administrados em <a href="/configuracoes?aba=integracoes#integracao-whatsapp">Configurações → Integrações</a>; os imóveis ficam no <a href="/crm/cadastros/produtos">Catálogo</a>.</p>
+     <div style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'center',padding:'12px 0'}}>
+       <span className="selo" data-zap-selo="nao">{config?.modo==='simulacao'?'IA em simulação, sem respostas automáticas':config?.modo==='homologacao'?'IA em homologação restrita':config?.modo==='producao'?'IA em produção aprovada':'IA não configurada'}</span>
+       <span className="ajuda">CRM externo: Superlógica · {config?.crm_habilitado?'integração configurada':'integração não habilitada'}</span>
+     </div>
+     <h3>Leads e atendimentos</h3>
+     <p className="ajuda">Contagens de naturezas diferentes. <strong>Superlógica</strong> é o CRM externo; <strong>Harvest</strong> é o CRM desta plataforma. Uma captura externa não comprova cadastro de contato ou oportunidade no Harvest.</p>
+     <dl style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,margin:'14px 0'}}>
+       {Object.entries(kpis).filter(([k])=>['recebidos','cadastrados_crm','atendidos','encaminhados','qualificados','falhas'].includes(k)).map(([k,v])=><div key={k} style={{border:'1px solid var(--rule)',borderRadius:6,padding:12}}><dt className="ajuda">{rotulos[k]??k}</dt><dd style={{fontSize:24,fontWeight:700,marginTop:6}}>{v}</dd></div>)}
+     </dl>
+     <p className="ajuda"><a href="/crm/contatos">Abrir contatos do Harvest</a> · <a href="/crm/oportunidades">Abrir oportunidades do Harvest</a>. Confira abaixo quais capturas já possuem vínculo local antes de considerar os dois CRMs sincronizados.</p>
+     <DiagnosticoCapturas/>
+     <details style={{marginTop:20}}>
+       <summary style={{cursor:'pointer',fontWeight:600}}>Configuração avançada do BDR (administradores)</summary>
+       <p className="ajuda">Esta seção não conecta WhatsApp, não altera permissões de envio e não homologa o agente. Não altere canal ou funil de uma operação com histórico sem migração controlada.</p>
+       <div style={{display:'grid',gap:12,marginTop:12,maxWidth:680}}>
+         <label>Canal de atendimento vinculado
+           <select value={canal} onChange={e=>{setCanal(e.target.value);setFunil('');}} disabled={!!config&&modo!=='simulacao'}>
+             <option value="">Selecione um canal configurado em Integrações</option>
+             {canais.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+           </select>
+         </label>
+         <label>Funil associado ao canal
+           <select value={funil} onChange={e=>setFunil(e.target.value)} disabled={!!config&&modo!=='simulacao'}>
+             <option value="">Selecione o funil deste canal</option>
+             {funis.filter(f=>f.canal_padrao_id===Number(canal)).map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+           </select>
+         </label>
+         <p className="ajuda">Situação das respostas: {config?.modo==='simulacao'?'apenas simulação':config?.modo==='homologacao'?'piloto restrito, sujeito aos bloqueios de segurança':'não autorizadas nesta tela'}. A autorização para enviar respostas não pode ser alterada por este formulário.</p>
+         <h3>Informações aprovadas do imóvel</h3>
+         <p className="ajuda">Base de conhecimento usada pelo agente para responder sobre o empreendimento. Cadastre dados reais e autorizados pela imobiliária, como descrição, características, disponibilidade e condições. Sem informação aprovada, o agente deve encaminhar a dúvida a um corretor, sem inventar respostas.</p>
+         <label>Buscar imóvel cadastrado<input value={buscaImovel} onChange={e=>setBuscaImovel(e.target.value)} placeholder="Buscar no catálogo do Harvest"/></label>
+         <button type="button" onClick={()=>void buscarImoveis()}>Buscar imóvel</button>
+         {imoveis.length>0&&<label>Usar informações do catálogo<select value="" onChange={e=>{const i=imoveis.find(x=>x.id===Number(e.target.value));if(i){setCodigo(i.sku??'');setBase(i.nome+'\\n'+(i.descricao??''));}}}><option value="">Escolha um imóvel</option>{imoveis.map(i=><option key={i.id} value={i.id}>{i.sku??'Sem código'} · {i.nome}</option>)}</select></label>}
+         <label>Código do imóvel / empreendimento<input value={codigo} maxLength={100} onChange={e=>setCodigo(e.target.value)} placeholder="Código cadastrado no CRM"/></label>
+         <label>Ficha comercial aprovada<textarea value={base} maxLength={16000} rows={7} style={{width:'100%',minWidth:0}} onChange={e=>setBase(e.target.value)} placeholder="Insira somente informações comerciais aprovadas pelo cliente."/></label>
+         <button type="button" className="salvar" disabled={ocupado||!canal||!funil||!codigo||modo!=='simulacao'} onClick={()=>void salvarFicha()}>{ocupado?'Salvando…':'Salvar informações do imóvel'}</button>
+       </div>
+     </details>
+     {aviso&&<p role="status">{aviso}</p>}
+   </section>;
 }
