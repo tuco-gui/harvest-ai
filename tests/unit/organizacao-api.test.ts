@@ -38,6 +38,22 @@ test('diagnóstico distingue protocolos, identidades confirmadas e zero contatos
  assert.equal(d.indicadores.capturas_recebidas,2);assert.equal(d.indicadores.registros_integracao,1);assert.equal(d.indicadores.integracao_cadastrado,1);
  assert.equal(d.indicadores.contatos_cadastrados,0);assert.equal(d.indicadores.oportunidades_pipeline,0);assert.equal(d.registros.length,1);
 });
+test('reconciliar lote exige administrador, permanece na workspace e não chama Superlógica',async()=>{
+ const chamadas:Array<{nome:string,args:any}>=[];
+ f.db.rpc=async(nome:string,args:any)=>{chamadas.push({nome,args});return {data:{lead_id:21,contato_id:22,oportunidade_id:23},error:null};};
+ const reqLote=req({acao:'vincular_pendentes',conta_id:b,modo:'producao'},'POST');
+ let r=await diagnostico.POST(reqLote);assert.equal(r.status,200);
+ const d=await r.json();assert.equal(d.vinculados,1);assert.equal(d.pendencias,0);
+ assert.equal(chamadas.length,1);assert.equal(chamadas[0].nome,'superlogica_vincular_crm');
+ assert.equal(chamadas[0].args.p_conta,a);assert.equal(chamadas[0].args.p_ator,'admin');
+ assert(!chamadas.some(c=>c.nome.includes('enviar')||c.nome.includes('superlogica_capturar')));
+ papel='operador';assert.equal((await diagnostico.POST(req({acao:'vincular_pendentes'},'POST'))).status,403);
+ papel='admin';
+ f.db.rpc=async(nome:string,args:any)=>{chamadas.push({nome,args});return {data:null,error:{message:'duplicidade'}};};
+ r=await diagnostico.POST(req({acao:'vincular_pendentes'},'POST'));
+ assert.equal(r.status,207);assert.equal((await r.json()).pendencias,1);
+});
+
 test('instanciar modelo não cria agentes institucionais; conhecimento e vínculos ficam no tenant',async()=>{
  const config=configuracaoPadrao('bdr');config.modelo='bdr_imobiliario';config.conhecimento='Ficha aprovada somente da empresa A';config.canais=[24];config.funis=[13];
  const payload={tipo:'bdr',nome:'BDR da empresa A',instrucao:'Atenda usando apenas a base aprovada desta empresa e encaminhe dúvidas ao humano.',ativo:false,configuracao:config};
