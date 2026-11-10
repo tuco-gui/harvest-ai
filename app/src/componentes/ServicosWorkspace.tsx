@@ -28,7 +28,12 @@ export default function ServicosWorkspace({contaId}:{contaId:string}){
   if(tipo.includes('instagram'))for(const k of ['inbox.instagram','inbox.envio','inbox.transferencias','inbox.anexos','integracoes.meta','integracoes.zernio'])habilitar(k);
   if(tipo.includes('messenger'))for(const k of ['inbox.facebook','inbox.envio','inbox.transferencias','inbox.anexos','integracoes.meta'])habilitar(k);
   if(tipo.includes('webchat'))for(const k of ['inbox.webchat','inbox.transferencias','inbox.anexos'])habilitar(k);
-  if(tipo.includes('ia'))for(const k of ['agentes.base','agentes.atendimento','agentes.bdr','integracoes.ia','agentes.instagram'])habilitar(k);
+  if(tipo.includes('ia')){
+   for(const k of ['agentes.base','agentes.atendimento','agentes.bdr','integracoes.ia'])habilitar(k);
+   if(tipo.includes('whatsapp'))habilitar('agentes.whatsapp');
+   if(tipo.includes('instagram'))habilitar('agentes.instagram');
+   if(tipo.includes('messenger'))habilitar('agentes.facebook');
+  }
   setTemporario(false);setMudancas(ps);setAviso('Prévia aplicada. Confira as permissões e registre o motivo antes de salvar. Nenhum canal/agente foi alterado.');
  }
  async function salvar(){if(!dados)return;setOcupado(true);setAviso('');try{
