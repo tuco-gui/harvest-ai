@@ -17,7 +17,7 @@ mock.module('../../app/src/lib/servicosWorkspace.ts', {
   namedExports: { recursoDaWorkspace: async () => true },
 });
 
-const { extrairMensagensMeta, gravarMensagemMeta } =
+const { extrairMensagensMeta, gravarMensagemMeta, chaveCapturaWhatsAppMeta } =
   await import('../../app/src/lib/crmMetaInbound.ts');
 
 function admin() {
@@ -99,7 +99,7 @@ test('captura idempotente alcança o piloto e também outros contatos nomeados',
   assert.deepEqual(chamadas[0], {
     conta: 'conta-1',
     lead: {
-      chave: 'meta:wamid.1', nome: 'Piloto', telefone: '5514997754659', email: null,
+      chave: 'meta-wa:123456789012345:5514997754659', nome: 'Piloto', telefone: '5514997754659', email: null,
       origem: { source_channel: 'meta', utm_source: 'whatsapp' },
     },
   });
@@ -111,6 +111,25 @@ test('captura idempotente alcança o piloto e também outros contatos nomeados',
   });
   assert.equal(chamadas.length, 1, 'contato fora do piloto é capturado sem resposta automática');
   assert.equal(chamadas[0].lead.telefone, '5514888888888');
+});
+
+test('uma conversa com várias mensagens conserva a chave comercial, mas receptores/contatos diferentes não colidem', async () => {
+ const e = extrairMensagensMeta(payload)[0];
+ assert.equal(chaveCapturaWhatsAppMeta(e), 'meta-wa:123456789012345:5514997754659');
+ assert.equal(chaveCapturaWhatsAppMeta({...e,mensagemId:'wamid.99',texto:'Nova pergunta'}),
+   chaveCapturaWhatsAppMeta(e), 'outras mensagens não criam nova entrada comercial');
+ assert.notEqual(chaveCapturaWhatsAppMeta({...e,remetenteId:'5514888888888'}),
+   chaveCapturaWhatsAppMeta(e), 'outro contato gera chave própria');
+ assert.notEqual(chaveCapturaWhatsAppMeta({...e,contaExternaId:'999999999999999'}),
+   chaveCapturaWhatsAppMeta(e), 'outro número receptor não compartilha chave');
+ assert.throws(()=>chaveCapturaWhatsAppMeta({...e,remetenteId:'invalid'}),
+   /identidade_whatsapp_invalida/);
+ chamadas.length = 0;
+ await gravarMensagemMeta(admin(),e);
+ await gravarMensagemMeta(admin(),{...e,mensagemId:'wamid.99',texto:'Outra mensagem'});
+ assert.equal(chamadas.length,2,'o bridge pode reconciliar cada mensagem');
+ assert.equal(chamadas[0].lead.chave,chamadas[1].lead.chave,
+   'as duas mensagens apontam para uma única entrada comercial no banco');
 });
 
 test('retry da Meta reconcilia a captura sem duplicar conversa', async () => {
