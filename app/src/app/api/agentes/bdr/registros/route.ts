@@ -26,7 +26,24 @@ export async function GET(){
 export async function POST(req:Request){
  const c=await contexto();if('erro'in c)return c.erro;
  if(!(await perfilTemRecursos(c.db,c.p,['crm.contatos','crm.oportunidades'],'configurar')))return NextResponse.json({erro:'Cadastros CRM não liberados.'},{status:403});
- const b=await req.json().catch(()=>null);if(!/^[0-9a-f-]{36}$/i.test(b?.registro_id??''))return NextResponse.json({erro:'Captura inválida.'},{status:400});
+ const b=await req.json().catch(()=>null);
+ // Reconciliação explícita: lote limitado, somente capturas da workspace
+ // ainda sem vínculo, preservando responsáveis e negócios existentes.
+ if(b?.acao==='vincular_pendentes'){
+  const {data:pendentes,error:errPendentes}=await c.db.from('superlogica_registros')
+   .select('id').eq('conta_id',c.p.conta_id).is('oportunidade_id',null)
+   .order('criado_em',{ascending:true}).limit(20);
+  if(errPendentes)return NextResponse.json({erro:'Capturas indisponíveis. Verifique a migration 058.'},{status:503});
+  let vinculados=0;let pendencias=0;
+  for(const reg of pendentes??[]){
+   const {error}=await c.db.rpc('superlogica_vincular_crm',{p_conta:c.p.conta_id,p_registro:reg.id,p_ator:c.p.id});
+   if(error)pendencias++;else vinculados++;
+  }
+  return NextResponse.json({ok:pendencias===0,vinculados,pendencias,limite:20,
+   aviso:pendencias?'Algumas capturas exigem revisão de duplicidade, permissões ou migration 058. Nenhuma atribuição externa foi modificada.':'Vínculos locais concluídos sem alterar o Superlógica.'},
+   {status:pendencias?207:200});
+ }
+ if(!/^[0-9a-f-]{36}$/i.test(b?.registro_id??''))return NextResponse.json({erro:'Captura inválida.'},{status:400});
  const {data,error}=await c.db.rpc('superlogica_vincular_crm',{p_conta:c.p.conta_id,p_registro:b.registro_id,p_ator:c.p.id});
  if(error)return NextResponse.json({erro:'Vínculo recusado. Confira duplicidades, backend Twenty ou migration 058; nenhum cadastro parcial foi mantido.'},{status:409});
  return NextResponse.json({ok:true,vinculos:data,atribuicao_externa_alterada:false});
