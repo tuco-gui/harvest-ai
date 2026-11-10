@@ -307,3 +307,73 @@ ativação de resposta real**. O workflow n8n `pqVU7Tceb9Xv8dHs` foi mantido int
   exige reemissão de `secret_id` por admin/root. SSH direto a `77.37.40.97` é negado.
 - Evidência de distribuição ao Sylvio e migrations 055–058 continuam pendentes.
 - CI do PR (`autenticacao`, `validar`, Vercel) ainda não concluído.
+
+
+## 11. Execução efetiva em produção — 10/11/2026 (prevalece sobre os estados anteriores)
+
+**Escopo:** infraestrutura institucional Harvest e workspace do cliente Realize. Esta seção
+atualiza as referências históricas a "PR aberto", "migrations pendentes" e
+"sem acesso ao banco" das seções anteriores; não reescrever o histórico como se
+essas limitações nunca tivessem existido.
+
+### Dados e backup
+
+- Acesso administrativo ao PostgreSQL **Supabase self-hosted da Figueira**, pelo
+  Portainer institucional no ambiente `primary`, container `supabase_db`.
+  Não foram consultadas/exibidas senhas ou tokens.
+- Antes de migrar, backup lógico integral em formato custom `pg_dump -Fc`,
+  com modo privado, verificado por `pg_restore --list`:
+  `/var/lib/postgresql/data/figueira-backups/harvest-pre-pr48-20261110.dump`
+  (19 MB). **Cópia local no mesmo volume/host; não equivale a backup off-site.**
+  Preservar até haver backup externo conferido e período de retenção definido.
+- Migrations `055`, `056`, `057`, `058` executadas em ordem com
+  `ON_ERROR_STOP=1`, usuário proprietário `supabase_admin`, **cada uma com exit 0
+  e COMMIT confirmado**. A tentativa inicial de `055` como role `postgres`
+  falhou por ausência de ownership e foi revertida; repetida com owner autorizado.
+- Preflight: nenhuma duplicidade de `chatwoot_account_id`; contrato de
+  `bdr_receber` compatível com a substituição da migration `056`.
+- Realize: antes, 13 protocolos de entrada, 12 identidades deduplicadas,
+  12 confirmadas no Superlógica, **0** leads/contatos/oportunidades no Harvest.
+  Teste de vínculo com `ROLLBACK` passou. Depois, 12 capturas vinculadas em uma
+  transação ao CRM interno: **12 leads, 12 contatos e 12 oportunidades**;
+  conferidos por contagem no PostgreSQL. Não foi alterado responsável comercial
+  no Superlógica, não foram enviadas mensagens e não houve nova captura externa.
+  Os protocolos continuam podendo ser mais numerosos que as identidades.
+
+### Release e verificações
+
+- PR #48 mesclado por squash na `main` no commit
+  `aff8d513c70c53635b47a7b81f33c8dc3b3a6cb9`.
+- CI pré-merge `Validar agentes Harvest` e `Validar hotfix de autenticacao Harvest`
+  concluídos com sucesso; incluíram TypeScript e build Next.js.
+- GitHub Actions `Publicar e implantar imagem`, run `42846764960`:
+  build GHCR e implantação Swarm **concluídos com sucesso**; deploy inclui
+  healthcheck HTTP e rollback automático em falha.
+- Serviço `harvest_harvest` confirmado no Portainer com imagem
+  `ghcr.io/tuco-gui/harvest-ai@sha256:fbd2903ed7b9cd0168f5c05d61cb39e5b7644d90d8a1065ca244320c572f1591`,
+  atualizada em 2026-11-10T15:43:57Z.
+- Vercel Preview apresentou limite de build do plano. **Não é o servidor de
+  produção do Harvest**: a produção é Swarm na VPS; GitHub Actions de deploy passou.
+
+### Comportamentos ainda não homologados
+
+- BDR Realize permanece em `simulacao`. O código impõe telefone piloto
+  `5514997754659` em homologação, mas **não ativa respostas reais**.
+- O canal WAHA existente na Realize estava com status `desconectado` na leitura
+  de banco. Nenhum QR foi lido, nenhuma sessão foi pareada com o Marcelo;
+  mensagens da Caixa de Entrada da Meta **não foram comprovadas como eventos de API**.
+- Regra de distribuição fixa ao Sylvio no Superlógica ainda sem evidência
+  ponta a ponta; o bloqueio de novos cadastros externos não homologados foi
+  preservado.
+- Novas capturas **não possuem, por esta release, sincronização automática
+  garantida ao CRM interno**: a UI dispõe de vínculo individual e lote limitado.
+  Não tratar os 12 históricos reconciliados como prova de que novos leads
+  surgirão automaticamente no pipeline. Priorizar homologação dessa automação
+  separadamente, sem sacrificar a captura externa.
+
+### Critérios para próxima etapa
+
+Confirmar acesso logado às telas da Realize no Harvest, validar CRM interno (12),
+serviços por conta e Integrações, testar vínculo incremental sem disparo,
+então parear WAHA com QR apenas com operador do número. Não liberar atendimento
+automático nem distribuição comercial antes dos gates correspondentes.
