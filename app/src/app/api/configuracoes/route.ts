@@ -51,6 +51,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ erro: a.error.message }, { status: 500 });
   }
 
+  if(!['modo','mensagens','contexto','intervalo_min','intervalo_max'].some(k=>Object.hasOwn(b,k)))return NextResponse.json({ok:true});
+
   const min = Number(b.intervalo_min) || 30;
   const max = Number(b.intervalo_max) || 60;
   if (min < 5 || min >= max) {

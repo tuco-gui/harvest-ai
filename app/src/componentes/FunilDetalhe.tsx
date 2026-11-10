@@ -427,7 +427,7 @@ export default function FunilDetalhe({
         <h3>Canal de WhatsApp deste funil</h3>
         <p className="ajuda">
           Use um número diferente para cada funil, reaproveitando canais já cadastrados em
-          Configurações → Conexões. Campanhas podem herdar este número ou escolher outro.
+          Configurações → Integrações. Campanhas podem herdar este número ou escolher outro.
           Um canal desconectado nunca é substituído silenciosamente por outro número.
         </p>
         <div className="crm-funil-canal-acoes">
@@ -452,7 +452,7 @@ export default function FunilDetalhe({
             mas nenhum disparo usará outro número automaticamente.</p>}
         {avisoCanal && <p role="status" className="ajuda">{avisoCanal}</p>}
         {!canais.length && <p className="ajuda">
-          Nenhum canal cadastrado nesta workspace. Cadastre o canal em Configurações → Conexões,
+          Nenhum canal cadastrado nesta workspace. Cadastre o canal em Configurações → Integrações,
           sem desconectar números de outras workspaces.
         </p>}
       </section>

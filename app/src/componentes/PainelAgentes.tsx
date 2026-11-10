@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import PainelBdrAlea from '@/componentes/PainelBdrAlea';
 import type { EstadoConexaoIA } from '@/lib/conexaoIAWorkspace';
+import {MODELOS_AGENTES,configuracaoPadrao,type ConfigAgente} from '@/lib/agenteModelos';
 import { FLUXO_BDR_IMOBILIARIO_BASE, validarFluxoAgente, type FluxoAgente } from '@/lib/fluxoAgente';
 import {
   CATALOGO_AGENTES, TIPOS_AGENTE, type TipoAgente,
@@ -17,10 +18,13 @@ type AgenteTela = {
   instrucao: string;
   ativo: boolean;
   atualizado_em: string | null;
+  configuracao?:ConfigAgente|null;
 };
 
 export default function PainelAgentes({ editavel }: { editavel: boolean }) {
   const [agentes, setAgentes] = useState<AgenteTela[]>([]);
+  const [canais,setCanais]=useState<Array<{id:number;nome:string}>>([]);
+  const [funis,setFunis]=useState<Array<{id:number;nome:string}>>([]);
   const [conexaoIa, setConexaoIa] = useState<EstadoConexaoIA | null>(null);
   const [tipo, setTipo] = useState<TipoAgente>('recepcao');
   const [carregando, setCarregando] = useState(true);
@@ -36,6 +40,9 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
 
   useEffect(() => {
     let ativo = true;
+    for(const [url,setter]of [['/api/canais',setCanais],['/api/funis',setFunis]] as const){
+      fetch(url).then(async r=>r.ok?await r.json():null).then(d=>{if(ativo&&d)setter(d.canais??d.funis??[]);}).catch(()=>{});
+    }
     fetch('/api/agentes', { cache: 'no-store' })
       .then(async r => {
         const j = await r.json();
@@ -51,6 +58,8 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
   }, []);
 
   const atual = agentes.find(a => a.tipo === tipo);
+  const config=atual?.configuracao??configuracaoPadrao(tipo);
+  function editarConfig(patch:Partial<ConfigAgente>){editar({configuracao:{...config,...patch}});}
   const historicoAtual = conversas[tipo] ?? [];
   function editar(patch: Partial<AgenteTela>) {
     setAgentes(lista => lista.map(a => a.tipo === tipo ? { ...a, ...patch } : a));
@@ -67,7 +76,7 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
     try {
       const r = await fetch('/api/agentes', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo, nome: atual.nome, instrucao: atual.instrucao, ativo: atual.ativo }),
+        body: JSON.stringify({ tipo, nome: atual.nome, instrucao: atual.instrucao, ativo: atual.ativo,configuracao:config }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro ?? 'Não foi possível salvar.');
@@ -161,8 +170,8 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
         <p className="label">HARVEST AI · LABORATÓRIO</p>
         <h1>Agentes de IA</h1>
         <p className="ajuda">
-          Configure e experimente cinco agentes nesta workspace. A simulação é manual:
-          o laboratório abaixo não envia mensagens. O BDR Alea possui piloto operacional separado, com bloqueio por workspace e homologação.
+          Instancie modelos de função nesta workspace e personalize suas instruções. A simulação é manual:
+          o laboratório não envia mensagens. O BDR Imobiliário é uma especialização reutilizável, sujeita à homologação operacional.
         </p>
       </header>
 
@@ -225,6 +234,11 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
             </section>
             <section style={card} aria-label="Configuração">
               <h2 style={{ fontSize: 16, marginBottom: 14 }}>Configuração</h2>
+              <label>Modelo de função<select value={config.modelo} disabled={!editavel} onChange={e=>{
+                const modelo=e.target.value as keyof typeof MODELOS_AGENTES;const m=MODELOS_AGENTES[modelo];
+                editar({nome:m.nome,instrucao:m.instrucao,ativo:false,configuracao:{...config,modelo}});
+              }}>{Object.entries(MODELOS_AGENTES).filter(([,m])=>m.tipo===tipo).map(([k,m])=><option key={k} value={k}>{m.nome}</option>)}</select></label>
+              <p className="ajuda">Escolher modelo prepara a instância. Só Salvar persiste; não cria agentes em outras empresas.</p>
               <label htmlFor="agente-nome" style={{ display: 'block', marginBottom: 6 }}>Nome do agente</label>
               <input id="agente-nome" style={campo} maxLength={80} value={atual.nome}
                 disabled={!editavel} onChange={e => editar({ nome: e.target.value })}/>
@@ -235,6 +249,18 @@ export default function PainelAgentes({ editavel }: { editavel: boolean }) {
                 maxLength={5000} value={atual.instrucao} disabled={!editavel}
                 onChange={e => editar({ instrucao: e.target.value })}/>
               <p className="ajuda" style={{ marginTop: 6 }}>As instruções são usadas somente nas simulações desta workspace.</p>
+              <label>Conhecimento aprovado<textarea style={campo} rows={5} maxLength={16000} disabled={!editavel} value={config.conhecimento} onChange={e=>editarConfig({conhecimento:e.target.value})}/></label>
+              <label>Canais da instância<select multiple disabled={!editavel} value={config.canais.map(String)} onChange={e=>editarConfig({canais:[...e.target.selectedOptions].map(o=>Number(o.value))})}>
+                {canais.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select></label>
+              <label>Funis da instância<select multiple disabled={!editavel} value={config.funis.map(String)} onChange={e=>editarConfig({funis:[...e.target.selectedOptions].map(o=>Number(o.value))})}>
+                {funis.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+              </select></label>
+              <label>Horário inicial (Brasília)<input type="number" min={0} max={23} disabled={!editavel} value={config.horario_inicio} onChange={e=>editarConfig({horario_inicio:Number(e.target.value)})}/></label>
+              <label>Horário final (Brasília)<input type="number" min={1} max={24} disabled={!editavel} value={config.horario_fim} onChange={e=>editarConfig({horario_fim:Number(e.target.value)})}/></label>
+              <label>Autonomia<select disabled={!editavel} value={config.autonomia} onChange={e=>editarConfig({autonomia:e.target.value as ConfigAgente['autonomia']})}><option value="manual">Somente testes manuais</option><option value="rascunho">Rascunho para revisão humana</option></select></label>
+              <label>Regras de transferência<textarea style={campo} maxLength={2000} rows={3} disabled={!editavel} value={config.transferencia} onChange={e=>editarConfig({transferencia:e.target.value})}/></label>
+              <p className="ajuda">Vínculos e horários definem o escopo planejado. Esta configuração não habilita despacho autônomo ou transferência automática; isso exige homologação operacional.</p>
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' }}>
                 <input type="checkbox" checked={atual.ativo} disabled={!editavel}
                   onChange={e => editar({ ativo: e.target.checked })}/>

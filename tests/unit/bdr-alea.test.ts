@@ -18,10 +18,12 @@ test('cinco cenários BDR sem envio externo',()=>{
   assert.equal(paradaObrigatoria('Pare de me enviar mensagens, por favor'),'opt_out');
   for(const estado of ['opt_out','humano_assumiu','transferido','aguardando_corretor'] as const)assert(estadoBloqueiaBDR(estado));
 });
-test('pré-homologação bloqueia leads reais; teste exige telefone explícito',()=>{
-  const c={modo:'simulacao',contatos_teste:['5514999999999']};
-  assert(!envioBdrPermitido(c,'5514999999999'));
-  assert(envioBdrPermitido({...c,modo:'homologacao'},'5514999999999'));
+test('pré-homologação bloqueia leads reais; piloto aceita somente o telefone autorizado',()=>{
+  const c={modo:'simulacao',contatos_teste:['5514999999999','5514997754659']};
+  assert(!envioBdrPermitido(c,'5514997754659'));
+  assert(envioBdrPermitido({...c,modo:'homologacao'},'5514997754659'));
+  assert(envioBdrPermitido({...c,modo:'homologacao'},'+55 (14) 99775-4659'),'normaliza o telefone do piloto');
+  assert(!envioBdrPermitido({...c,modo:'homologacao'},'5514999999999'),'allowlist não amplia o piloto');
   assert(!envioBdrPermitido({...c,modo:'homologacao'},'5514888888888'));
   assert(!envioBdrPermitido({...c,modo:'producao'},'5514888888888'));
   assert(envioBdrPermitido({...c,modo:'producao',aprovado_em:'2026-11-06',aprovado_por:'operador-aprovador'},'5514888888888'));
@@ -46,7 +48,8 @@ test('não inventa agenda/condições e rejeita saídas inválidas',()=>{
   const prompt=promptsBDR('Ficha aprovada',{renda_faixa:'prefere não informar'},[{mensagem:'interesse em morar'}],'Quero FGTS');
   assert(prompt.system.includes('facultativa'));assert(prompt.system.includes('nunca motivo isolado'));
   assert(prompt.user.includes('prefere não informar'));assert(prompt.system.includes('dados não confiáveis'));
-  assert.equal(JSON.parse(resumoBDR({prazo:'6 meses'},{source_channel:'lp'},'aguardando_corretor')).imovel,CODIGO_ALEA);
+  assert.equal(JSON.parse(resumoBDR({prazo:'6 meses'},{source_channel:'lp'},'aguardando_corretor',CODIGO_ALEA)).imovel,CODIGO_ALEA);
+  assert.equal(JSON.parse(resumoBDR({}, {}, 'novo','AP0002_OUTRO')).imovel,'AP0002_OUTRO');
 });
 test('origem seleciona somente evidências suportadas, sem atribuição inferida',()=>{
   assert.deepEqual(origemImutavel({source_channel:'lp',utm_source:'google',gclid:'abc',senha:'não persistir',inferido:true}),
@@ -87,6 +90,7 @@ test('fila CRM concorrente: uma escrita, depois somente reconciliação e sem va
   process.env.REALIZE_SUPERLOGICA_N8N_TOKEN='fake-token';
   const registros:Record<string,any>[]=[{id:'registro',conta_id:conta,status_sincronizacao:'pendente',tentativas:0,
     proxima_tentativa:new Date(0).toISOString(),atualizado_em:new Date().toISOString(),origem:{source_channel:'lp'}}];
+  const cfg:any={conta_id:conta,crm_habilitado:true,responsavel_crm_confirmado:true};
   const fakeAdmin={from(tabela:string){
     const filtros:Array<(r:Record<string,any>)=>boolean>=[];let patch:Record<string,any>|null=null;let unico=false;
     const q:any={select(){return q;},update(p:Record<string,any>){patch=p;return q;},
@@ -96,7 +100,7 @@ test('fila CRM concorrente: uma escrita, depois somente reconciliação e sem va
       lte(k:string,v:unknown){filtros.push(r=>r[k]<=v!);return q;},
       limit(){return q;},maybeSingle(){unico=true;return q;},
       then(resolve:(r:unknown)=>void){
-        const rows=tabela==='bdr_config'?[{conta_id:conta,crm_habilitado:true,responsavel_crm_confirmado:true}]:registros;
+        const rows=tabela==='bdr_config'?[cfg]:tabela==='contas'?[{id:conta,ativo:true,slug:'cliente',modulos_habilitados:['crm','agentes','crm_avancado']}]:tabela==='conta_recursos'?[]:registros;
         const matches=rows.filter(r=>filtros.every(f=>f(r)));
         for(const r of matches)if(patch)Object.assign(r,patch);
         resolve({data:unico?(matches[0]?{...matches[0]}:null):matches.map(x=>({...x})),error:null});
@@ -105,6 +109,14 @@ test('fila CRM concorrente: uma escrita, depois somente reconciliação e sem va
   const original=globalThis.fetch;const acoes:string[]=[];
   globalThis.fetch=async(_url,init)=>{acoes.push(JSON.parse(String(init?.body)).acao);await new Promise(r=>setTimeout(r,5));return Response.json({ok:true});};
   try {
+    await sincronizarSuperlogica(fakeAdmin as any,conta);
+    assert.deepEqual(acoes,[]);assert.equal(registros[0].erro_tecnico,'distribuicao_inicial_sylvio_nao_homologada');
+    registros.push({...registros[0],id:'consulta-historica',status_sincronizacao:'reconciliar'});
+    await sincronizarSuperlogica(fakeAdmin as any,conta);
+    assert.deepEqual(acoes,['consultar'],'bloqueio de novos cadastros não pode impedir consulta de registros anteriores');
+    registros.pop();acoes.length=0;
+    cfg.distribuicao_crm_validada={nome:'SYLVIO GUILHERME FRANÇA JUNIOR',usuario_id:'usuario-ficticio-teste',time_id:'time-ficticio-teste',
+      ativo:true,recebe_leads:true,elegivel:true,regra:'fixo',codigo_anuncio:CODIGO_ALEA,evidencia:'Evidência inteiramente fictícia para teste local',verificado_em:new Date().toISOString()};
     await Promise.all([sincronizarSuperlogica(fakeAdmin as any,conta),sincronizarSuperlogica(fakeAdmin as any,conta)]);
     assert.deepEqual(acoes,['cadastrar']);assert.equal(registros[0].status_sincronizacao,'reconciliar');
     registros[0].proxima_tentativa=new Date(0).toISOString();

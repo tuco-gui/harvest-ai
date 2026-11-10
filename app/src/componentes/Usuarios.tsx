@@ -57,6 +57,10 @@ export default function Usuarios({
     if (!r.ok) { setAviso(d.erro); return; }
     setSenhaNova({ email: d.email, senha: d.senha, emailEnviado: d.emailEnviado });
   }
+  async function alterarPapel(u:Perfil,papel:string){
+    const r=await fetch('/api/usuarios',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:u.id,acao:'papel',papel})});
+    const d=await r.json();if(!r.ok){setAviso(d.erro);return;}router.refresh();
+  }
 
   return (
     <div className="pagina">
@@ -75,7 +79,7 @@ export default function Usuarios({
               <tr key={u.id}>
                 <td>{u.nome || '—'}</td>
                 <td style={{ color: 'var(--ink-2)' }}>{u.email}</td>
-                <td><span className="selo" data-papel={u.papel}>{NOME_PAPEL[u.papel] ?? u.papel}</span></td>
+                <td>{u.id!==meuId&&u.papel!=='super_admin'?<select aria-label={'Papel de '+(u.nome??u.email)} value={u.papel} onChange={e=>void alterarPapel(u,e.target.value)}><option value="operador">Operador</option><option value="admin">Administrador</option></select>:<span className="selo" data-papel={u.papel}>{NOME_PAPEL[u.papel] ?? u.papel}</span>}</td>
                 <td className="acao">
                   <button onClick={() => gerarSenha(u)}>Gerar nova senha</button>
                   {u.id !== meuId && <button onClick={() => remover(u)}>Remover</button>}

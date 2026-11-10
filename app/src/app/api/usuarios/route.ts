@@ -64,7 +64,7 @@ export async function POST(req: Request) {
   }
 
   // Quem não é super admin só cria na própria conta
-  const conta = papel === 'super_admin' ? null : (ehSuper ? (b.conta_id ?? perfil.conta_id) : perfil.conta_propria);
+  const conta = papel === 'super_admin' ? null : (ehSuper ? (b.conta_id ?? perfil.conta_id) : perfil.conta_id);
   if (papel !== 'super_admin' && !conta) {
     return NextResponse.json({ erro: 'Escolha a conta do usuário.' }, { status: 400 });
   }
@@ -161,10 +161,20 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ erro: 'Sem permissão.' }, { status: 403 });
   }
 
-  const { id } = await req.json().catch(() => ({}) as any);
+  const b=await req.json().catch(()=>({}) as any);
+  const {id}=b;
   if (!id) return NextResponse.json({ erro: 'Falta o usuário.' }, { status: 400 });
 
   const admin = supabaseAdmin();
+
+  if(b.acao==='papel'){
+    if(!perfil.conta_id||!['admin','operador'].includes(b.papel)||id===perfil.id)return NextResponse.json({erro:'Altere somente o papel de outro membro nesta workspace.'},{status:400});
+    const {data:alvo}=await admin.from('perfis').select('papel').eq('id',id).maybeSingle();
+    if(!alvo||alvo.papel==='super_admin')return NextResponse.json({erro:'Papel global não pode ser administrado como membro de cliente.'},{status:403});
+    const {data,error}=await admin.from('conta_usuarios').update({papel:b.papel}).eq('user_id',id).eq('conta_id',perfil.conta_id).eq('ativo',true).select('id').maybeSingle();
+    if(error||!data)return NextResponse.json({erro:'Membro não encontrado nesta workspace.'},{status:404});
+    return NextResponse.json({ok:true});
+  }
 
   // Verificar que o alvo tem membership na conta atual do caller
   if (perfil.papel !== 'super_admin') {
@@ -181,8 +191,12 @@ export async function PATCH(req: Request) {
     }
   }
 
-  const { data: alvo } = await admin.from('perfis').select('email').eq('id', id).single();
+  const { data: alvo } = await admin.from('perfis').select('email,papel').eq('id', id).single();
   if (!alvo) return NextResponse.json({ erro: 'Usuário não encontrado.' }, { status: 404 });
+  if(perfil.papel!=='super_admin'){
+    const {data:membros,error:em}=await admin.from('conta_usuarios').select('conta_id').eq('user_id',id).eq('ativo',true);
+    if(em||alvo.papel==='super_admin'||membros?.some(m=>m.conta_id!==perfil.conta_id))return NextResponse.json({erro:'Usuário global ou multicliente: utilize recuperação própria de senha ou a administração global.'},{status:403});
+  }
 
   const senha = senhaProvisoria('Harvest');
   const { error } = await admin.auth.admin.updateUserById(id, { password: senha });
@@ -198,7 +212,7 @@ export async function PATCH(req: Request) {
 /**
  * Remove membro da workspace.
  * NÃO deleta o Auth user — apenas remove a membership.
- * Se o usuário não tem mais nenhuma membership, pode ser removido do Auth.
+ * Preserva Auth e dados históricos mesmo quando não restam memberships ativas.
  */
 export async function DELETE(req: Request) {
   const perfil = await perfilAtual();
@@ -206,7 +220,8 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ erro: 'Sem permissão.' }, { status: 403 });
   }
 
-  const { id } = await req.json().catch(() => ({}) as any);
+  const b=await req.json().catch(()=>({}) as any);
+  const {id}=b;
   if (!id) return NextResponse.json({ erro: 'Falta o usuário.' }, { status: 400 });
   if (id === perfil.id) {
     return NextResponse.json({ erro: 'Você não pode remover a si mesmo.' }, { status: 400 });
@@ -230,7 +245,7 @@ export async function DELETE(req: Request) {
   }
 
   // Remover SOMENTE a membership desta workspace
-  const targetConta = perfil.papel === 'super_admin' ? (await req.json().catch(() => ({})) as any).conta_id : perfil.conta_id;
+  const targetConta = perfil.papel === 'super_admin' ? (b.conta_id??perfil.conta_id) : perfil.conta_id;
 
   if (!targetConta) {
     return NextResponse.json({ erro: 'Especifique a conta.' }, { status: 400 });
@@ -238,23 +253,13 @@ export async function DELETE(req: Request) {
 
   const { error } = await admin
     .from('conta_usuarios')
-    .delete()
+    .update({ativo:false})
     .eq('user_id', id)
     .eq('conta_id', targetConta);
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
-  // Verificar se o usuário ainda tem outras memberships
-  const { count } = await admin
-    .from('conta_usuarios')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', id)
-    .eq('ativo', true);
-
-  // Se não tem mais nenhuma membership, remover do Auth
-  if (count === 0) {
-    await admin.auth.admin.deleteUser(id);
-  }
+  // Preserva Auth, vínculos históricos e acessos em outras empresas.
 
   return NextResponse.json({ ok: true });
 }

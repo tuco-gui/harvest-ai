@@ -3,6 +3,7 @@ import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { carregarModulos, modulosDaConta } from '@/lib/autorizacao';
 import Topo from '@/componentes/Topo';
 import DefinirSenha from '@/componentes/DefinirSenha';
+import {recursosVisiveis} from '@/lib/servicosWorkspace';
 
 export default async function LayoutApp({ children }: { children: React.ReactNode }) {
   const perfil = await perfilAtual();
@@ -51,6 +52,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
   // Módulos habilitados para a conta (camada de autorização de visibilidade).
   const modulosHabilitados = await carregarModulos(admin, perfil);
   const modulos = modulosDaConta(modulosHabilitados, perfil.papel);
+  const recursos=await recursosVisiveis(admin,perfil);
 
   return (
     <Topo
@@ -63,6 +65,9 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
       contas={contas}
       ehSuperAdmin={ehSuper}
       modulos={[...modulos]}
+      recursos={recursos}
+      delegacao={perfil.delegacao??null}
+      delegacaoExpirada={perfil.delegacao_expirada??false}
     >
       {children}
     </Topo>

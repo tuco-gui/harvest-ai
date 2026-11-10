@@ -2,6 +2,8 @@ import {NextResponse} from 'next/server';
 import {contexto,isAdmin} from '@/lib/contextoConversasExternas';
 import {enviarRespostaMeta} from '@/lib/crmMetaEnvio';
 import {zernio} from '@/lib/crmZernio';
+import {perfilTemRecursos} from '@/lib/servicosWorkspace';
+import {tipoCanalRecurso} from '@/lib/recursosRotas';
 type Ctx={params:Promise<{id:string}>};
 async function carregar(id:string){
  const c=await contexto();if('erro'in c)return {erro:c.erro!};
@@ -17,7 +19,8 @@ async function carregar(id:string){
  const {data:fonte}=await admin.from('crm_fontes_funil')
   .select('id,nome,tipo,status,funil_id,zernio_account_id').eq('id',conversa.fonte_id)
   .eq('conta_id',perfil.conta_id).maybeSingle();
- if(!fonte)return {erro:NextResponse.json({erro:'Fonte não encontrada.'},{status:404})} as const;
+  if(!fonte)return {erro:NextResponse.json({erro:'Fonte não encontrada.'},{status:404})} as const;
+  if(!(await perfilTemRecursos(admin,perfil,[tipoCanalRecurso(fonte.tipo)])))return {erro:NextResponse.json({erro:'Canal não liberado nesta workspace.'},{status:403})} as const;
  return {perfil,admin,conversa,fonte} as const;
 }
 export async function GET(_req:Request,{params}:Ctx):Promise<Response>{
@@ -31,7 +34,7 @@ export async function GET(_req:Request,{params}:Ctx):Promise<Response>{
    .select('oportunidade_id').eq('conta_id',c.perfil.conta_id).eq('conversa_id',c.conversa.id).maybeSingle();
   if(erroVinculo)return NextResponse.json({erro:'Falha ao consultar vínculo do CRM.'},{status:503});
   let oportunidade=null;
-  if(vinculo){
+   if(vinculo&&await perfilTemRecursos(c.admin,c.perfil,['crm.oportunidades'])){
    let q=c.admin.from('oportunidades').select('id,empresa,contato,estagio,contato_id,funil_id')
     .eq('conta_id',c.perfil.conta_id).eq('id',vinculo.oportunidade_id);
    if(!isAdmin(c.perfil.papel))q=q.eq('owner_id',c.perfil.id);
@@ -70,7 +73,9 @@ export async function PATCH(req:Request,{params}:Ctx){
  return NextResponse.json({conversa:data});
 }
 export async function POST(req:Request,{params}:Ctx){
- const c=await carregar((await params).id);if('erro'in c)return c.erro;
+  const c=await carregar((await params).id);if('erro'in c)return c.erro;
+  if(!(await perfilTemRecursos(c.admin,c.perfil,[tipoCanalRecurso(c.fonte.tipo),'inbox.envio'],'enviar')))
+   return NextResponse.json({erro:'Envio não autorizado neste contexto de workspace.'},{status:403});
  const meta=c.fonte.tipo==='instagram_dm'||c.fonte.tipo==='facebook_messenger';
  if(c.fonte.status!=='pronto'||(!meta&&c.fonte.tipo!=='webchat'))
   return NextResponse.json({erro:'Fonte ainda não habilitada para enviar respostas.'},{status:409});

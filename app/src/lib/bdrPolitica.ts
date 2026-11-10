@@ -1,5 +1,7 @@
 /** Política especializada Alea. Sem transporte, credenciais ou efeitos externos. */
 export const CODIGO_ALEA = 'CA0653_MMOL';
+/** Piloto de homologação: único destinatário autorizado a receber resposta do agente. */
+export const TELEFONE_HOMOLOGACAO_BDR = '5514997754659';
 export const ESTADOS_BDR = ['novo','contato_iniciado','em_qualificacao','qualificado',
   'aguardando_corretor','transferido','sem_resposta','nutricao','desqualificado','opt_out','humano_assumiu'] as const;
 export type EstadoBDR = typeof ESTADOS_BDR[number];
@@ -19,9 +21,19 @@ export function horarioPermitido(agora: Date): boolean {
   const hora = Number(new Intl.DateTimeFormat('en-GB', {timeZone:'America/Sao_Paulo',hour:'2-digit',hourCycle:'h23'}).format(agora));
   return hora >= 9 && hora < 19;
 }
+function telefoneBdr(v: string): string {
+  let t = String(v ?? '').replace(/\D/g, '');
+  if (t.length === 10 || t.length === 11) t = '55' + t;
+  return t;
+}
+/**
+ * Homologação é fail-closed: apenas o telefone do piloto recebe resposta,
+ * mesmo que `contatos_teste` liste outros números. Produção exige aprovação
+ * explícita registrada. A captura de outros contatos não depende desta função.
+ */
 export function envioBdrPermitido(config: {modo: string; aprovado_em?: string | null;
   aprovado_por?: string | null; contatos_teste: string[]}, telefone: string): boolean {
-  if (config.modo === 'homologacao') return config.contatos_teste.includes(telefone);
+  if (config.modo === 'homologacao') return telefoneBdr(telefone) === TELEFONE_HOMOLOGACAO_BDR;
   return config.modo === 'producao' && !!config.aprovado_em && !!config.aprovado_por;
 }
 export function estadoBloqueiaBDR(estado: EstadoBDR): boolean {
@@ -54,7 +66,7 @@ export function validarDecisaoBDR(bruto: string): DecisaoBDR {
 }
 export function promptsBDR(base: string, qualificacao: Qualificacao, historico: unknown, mensagem: string) {
   return {
-    system: `Você é o assistente virtual BDR imobiliário do Alea Botucatu, da Realize Negócios Imobiliários.
+    system: `Você é o assistente virtual BDR imobiliário da empresa desta workspace.
 Seja breve, consultivo, respeitoso. Faça uma pergunta principal por mensagem, no máximo duas perguntas.
 Não repita perguntas respondidas. Qualifique interesse, objetivo de moradia, prazo, financiamento,
 FGTS/entrada, objeção, visita e disponibilidade. Renda apenas em faixa, facultativa, nunca motivo isolado de desqualificação.
@@ -67,11 +79,11 @@ Extraia apenas fatos explicitamente declarados, omita campos desconhecidos. Não
 Para interesse use apenas confirmado, sem_interesse ou indefinido, conforme declaração explícita do cliente.
 Responda JSON sem markdown: {"resposta":"texto ao cliente","qualificacao":{},"handoff":false,"frio":false}.
 Campos permitidos em qualificacao: ${CAMPOS_QUALIFICACAO.join(', ')}.
-Base aprovada pela equipe:\n${base || 'Apenas empreendimento Alea Botucatu, Realize. Condições devem ser confirmadas com corretor.'}`,
+Base aprovada pela equipe:\n${base || 'Nenhuma ficha de imóvel aprovada. Encaminhe informações comerciais ao corretor.'}`,
     user: JSON.stringify({qualificacao,historico,mensagem}),
   };
 }
-export function resumoBDR(q: Qualificacao, origem: unknown, estado: string): string {
-  return JSON.stringify({origem,imovel:CODIGO_ALEA,qualificacao:q,estado,
+export function resumoBDR(q: Qualificacao, origem: unknown, estado: string,codigo?:string): string {
+  return JSON.stringify({origem,imovel:codigo??null,qualificacao:q,estado,
     proxima_acao:estado==='aguardando_corretor'?'Corretor deve assumir e confirmar condições/horários':'Continuar qualificação progressiva'});
 }

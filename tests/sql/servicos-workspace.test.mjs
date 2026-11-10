@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {readFile} from 'node:fs/promises';
+import {PGlite} from '../../app/node_modules/@electric-sql/pglite/dist/index.js';
+import {schemaHarvest} from './schema-harvest.mjs';
+
+test('055: migração preserva módulos/BDR, concede por tenant atomicamente e audita sem ativar integrações',async()=>{
+ const db=new PGlite();try{
+  await schemaHarvest(db);
+  const a='11111111-1111-4111-8111-111111111111',b='22222222-2222-4222-8222-222222222222',root='33333333-3333-4333-8333-333333333333',cliente='44444444-4444-4444-8444-444444444444';
+  await db.query("INSERT INTO contas(id,nome,slug,modulos_habilitados) VALUES($1,'Cliente A','cliente-a',ARRAY['crm','crm_avancado','agentes','ia']),($2,'Cliente B','cliente-b',ARRAY['crm'])",[a,b]);
+  await db.query("INSERT INTO auth.users(id,email) VALUES($1,'root@example.invalid'),($2,'cliente@example.invalid')",[root,cliente]);
+  await db.query("UPDATE perfis SET papel='super_admin' WHERE id=$1",[root]);
+  await db.query("UPDATE perfis SET papel='admin',conta_id=$1 WHERE id=$2",[a,cliente]);
+  const canal=(await db.query("INSERT INTO whatsapp_canais(conta_id,provider,nome) VALUES($1,'waha','Canal teste') RETURNING id",[a])).rows[0].id;
+  const funil=(await db.query("INSERT INTO funis(conta_id,nome,canal_padrao_id) VALUES($1,'Funil teste',$2) RETURNING id",[a,canal])).rows[0].id;
+  await db.query("INSERT INTO bdr_config(conta_id,canal_id,funil_id,modo) VALUES($1,$2,$3,'simulacao')",[a,canal,funil]);
+  const before=(await db.query('SELECT * FROM bdr_config WHERE conta_id=$1',[a])).rows[0];
+  await db.exec(await readFile(new URL('../../sql/055_servicos_workspace.sql',import.meta.url),'utf8'));
+  assert.deepEqual((await db.query('SELECT * FROM bdr_config WHERE conta_id=$1',[a])).rows[0],before);
+  assert.deepEqual((await db.query('SELECT modulos_habilitados FROM contas WHERE id=$1',[a])).rows[0].modulos_habilitados,['crm','crm_avancado','agentes','ia']);
+  assert.equal((await db.query('SELECT count(*)::int n FROM conta_recursos')).rows[0].n,0);
+  const save=(ator,versao,changes)=>db.query('SELECT servicos_salvar($1,$2,$3,$4,$5::jsonb)',[a,ator,versao,'Contrato revisado pelo super admin',JSON.stringify(changes)]);
+  await assert.rejects(save(cliente,0,[{recurso:'crm.base',liberado:true}]),/Somente super admin/);
+  await save(root,0,[{recurso:'crm.base',liberado:false}]);
+  assert.equal((await db.query('SELECT count(*)::int n FROM conta_recursos WHERE conta_id=$1',[b])).rows[0].n,0);
+  await assert.rejects(save(root,0,[{recurso:'crm.base',liberado:true}]),/Versão/);
+  await assert.rejects(save(root,1,[{recurso:'crm.base',liberado:true,expira_em:new Date(Date.now()+3600_000).toISOString()}]),/temporária inválida/);
+  await assert.rejects(save(root,1,[{recurso:'crm.base',liberado:true},{recurso:'crm.contatos',liberado:'não-booleano'}]),/boolean/);
+  assert.equal((await db.query("SELECT liberado FROM conta_recursos WHERE conta_id=$1 AND recurso='crm.base'",[a])).rows[0].liberado,false,'nenhuma alteração parcial quando a transação falha');
+  assert.equal((await db.query('SELECT count(*)::int n FROM servicos_auditoria WHERE workspace_id=$1',[a])).rows[0].n,1);
+  const dg=(await db.query("SELECT servicos_delegar($1,$2,'suporte','Configurar conexão do cliente',60) id",[a,root])).rows[0].id;
+  assert(dg);await assert.rejects(db.query("SELECT servicos_delegar($1,$2,'homologacao','Testar sem mensagem externa',60)",[a,root]),/Contexto inválido/);
+  assert.equal((await db.query('SELECT servicos_encerrar_delegacao($1,$2) ok',[dg,root])).rows[0].ok,true);
+  assert.equal((await db.query('SELECT servicos_encerrar_delegacao($1,$2) ok',[dg,root])).rows[0].ok,false,'encerramento idempotente');
+  assert((await db.query('SELECT encerrado_em FROM workspace_delegacoes WHERE id=$1',[dg])).rows[0].encerrado_em);
+  await assert.rejects(db.query("SELECT servicos_delegar($1,$2,'suporte','Configurar conexão do cliente',121)",[a,root]),/Contexto inválido/);
+  await db.exec('SET ROLE service_role');
+  await assert.rejects(db.query('DELETE FROM servicos_auditoria'),/permission denied/);await db.exec('RESET ROLE');
+  await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[cliente]);
+  await db.exec('SET ROLE authenticated');
+  await assert.rejects(db.query('SELECT * FROM conta_recursos'),/permission denied/);
+  await assert.rejects(db.query('SELECT servicos_salvar($1,$2,1,$3,$4::jsonb)',[a,root,'Tentativa de elevação','[]']),/permission denied/);
+  await assert.rejects(db.query("UPDATE perfis SET papel='super_admin' WHERE id=$1",[cliente]),/Papel global restrito/);
+  await db.exec('RESET ROLE');
+  assert.deepEqual((await db.query('SELECT * FROM bdr_config WHERE conta_id=$1',[a])).rows[0],before);
+  assert.equal((await db.query('SELECT recursos_versao FROM contas WHERE id=$1',[a])).rows[0].recursos_versao,1);
+  // A camada temporária não substitui o bloqueio permanente, inclusive no banco real.
+  await db.query("UPDATE contas SET slug='figueira-seed-teste' WHERE slug='figueira-marketing'");
+  await db.query("UPDATE contas SET slug='figueira-marketing' WHERE id=$1",[b]);
+  const salvarTrial=(versao,mudancas)=>db.query('SELECT servicos_salvar($1,$2,$3,$4,$5::jsonb)',[b,root,versao,'Homologar sem apagar contrato',JSON.stringify(mudancas)]);
+  await salvarTrial(0,[{recurso:'crm.base',liberado:false}]);
+  await salvarTrial(1,[{recurso:'crm.base',liberado:true,expira_em:new Date(Date.now()+3600_000).toISOString()}]);
+  const camadas=(await db.query('SELECT escopo,liberado FROM conta_recursos WHERE conta_id=$1 ORDER BY escopo',[b])).rows;
+  assert.deepEqual(camadas,[{escopo:'homologacao',liberado:true},{escopo:'permanente',liberado:false}]);
+  await db.query("UPDATE conta_recursos SET expira_em=now()-interval '1 second' WHERE conta_id=$1 AND escopo='homologacao'",[b]);
+  assert.deepEqual((await db.query('SELECT liberado FROM conta_recursos WHERE conta_id=$1 AND (expira_em IS NULL OR expira_em>now())',[b])).rows,[{liberado:false}]);
+  await salvarTrial(2,[{recurso:'crm.base',liberado:true}]);
+  assert.deepEqual((await db.query('SELECT escopo,liberado FROM conta_recursos WHERE conta_id=$1',[b])).rows,[{escopo:'permanente',liberado:true}]);
+ }finally{await db.close();}
+});

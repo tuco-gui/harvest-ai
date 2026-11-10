@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import type { CookieOptions } from '@supabase/ssr';
+import {resolverWorkspace} from '../workspaceContexto';
+import {carregarDelegacao,COOKIE_DELEGACAO,type Delegacao} from '../servicosWorkspace';
 
 type CookieNovo = { name: string; value: string; options?: CookieOptions };
 
@@ -45,6 +47,8 @@ export type Perfil = {
   avatar_url: string | null;
   telefone: string | null;
   senha_provisoria: boolean;
+  delegacao?: Delegacao | null;
+  delegacao_expirada?: boolean;
 };
 
 /** Cookie que guarda em qual conta o usuário está trabalhando. */
@@ -80,88 +84,12 @@ export async function perfilAtual(): Promise<Perfil | null> {
 
   const admin = supabaseAdmin();
 
-  // 2. SUPER ADMIN: acesso global, SEMPRE funciona
-  if (ehSuperAdmin) {
-    let contaIdAtiva: string | null = null;
-
-    if (escolhida) {
-      // Validar que a conta existe e está ativa
-      const { data: existe } = await admin
-        .from('contas').select('id').eq('id', escolhida).eq('ativo', true).maybeSingle();
-      if (existe) {
-        contaIdAtiva = escolhida;
-      }
-    }
-
-    return {
-      id: perfis.id,
-      conta_id: contaIdAtiva,
-      conta_propria: null,
-      nome: perfis.nome,
-      email: perfis.email,
-      papel: 'super_admin',
-      avatar_url: perfis.avatar_url,
-      telefone: perfis.telefone,
-      senha_provisoria: perfis.senha_provisoria,
-    };
-  }
-
-  // 3. Usuário comum: tentar conta_usuarios (multi-workspace)
-  const { data: memberships, error: memError } = await admin
-    .from('conta_usuarios')
-    .select('conta_id, papel')
-    .eq('user_id', user.id)
-    .eq('ativo', true);
-
-  // Se a tabela não existe ou deu erro, fallback para perfis.conta_id (legado)
-  if (memError || !memberships) {
-    const papel = (papelGlobal ?? 'operador') as 'admin' | 'operador';
-    return {
-      id: perfis.id,
-      conta_id: (perfis as any).conta_id ?? null,
-      conta_propria: (perfis as any).conta_id ?? null,
-      nome: perfis.nome,
-      email: perfis.email,
-      papel,
-      avatar_url: perfis.avatar_url,
-      telefone: perfis.telefone,
-      senha_provisoria: perfis.senha_provisoria,
-    };
-  }
-
-  // 4. Usuário com memberships
-  let contaIdAtiva: string | null = null;
-  let papelAtivo: 'admin' | 'operador' = 'operador';
-
-  if (escolhida) {
-    // Validar membership para a conta escolhida
-    const membro = memberships.find(m => m.conta_id === escolhida);
-    if (membro) {
-      contaIdAtiva = membro.conta_id;
-      papelAtivo = membro.papel as 'admin' | 'operador';
-    }
-  } else if (memberships.length > 0) {
-    // Auto-select se só tem 1 membership
-    if (memberships.length === 1) {
-      contaIdAtiva = memberships[0].conta_id;
-      papelAtivo = memberships[0].papel as 'admin' | 'operador';
-      cookieJar.set(COOKIE_CONTA, contaIdAtiva!, {
-        httpOnly: true, sameSite: 'lax', secure: true, path: '/', maxAge: 60 * 60 * 12,
-      });
-    }
-  }
-
-  const contaPropria = memberships.length > 0 ? memberships[0].conta_id : null;
-
-  return {
-    id: perfis.id,
-    conta_id: contaIdAtiva,
-    conta_propria: contaPropria,
-    nome: perfis.nome,
-    email: perfis.email,
-    papel: papelAtivo,
-    avatar_url: perfis.avatar_url,
-    telefone: perfis.telefone,
-    senha_provisoria: perfis.senha_provisoria,
-  };
+  const contexto=await resolverWorkspace(admin,{id:perfis.id,papel:papelGlobal??'operador',conta_id:perfis.conta_id},escolhida);
+  const resolvido:Perfil={id:perfis.id,conta_id:contexto.contaId,conta_propria:contexto.contaPropria,
+    nome:perfis.nome,email:perfis.email,papel:contexto.papel,avatar_url:perfis.avatar_url,
+    telefone:perfis.telefone,senha_provisoria:perfis.senha_provisoria};
+  resolvido.delegacao=await carregarDelegacao(admin,resolvido,cookieJar.get(COOKIE_DELEGACAO)?.value);
+  resolvido.delegacao_expirada=ehSuperAdmin&&!!cookieJar.get(COOKIE_DELEGACAO)?.value&&!resolvido.delegacao;
+  if(!ehSuperAdmin&&!escolhida&&resolvido.conta_id){try{cookieJar.set(COOKIE_CONTA,resolvido.conta_id,{httpOnly:true,sameSite:'lax',secure:true,path:'/',maxAge:60*60*12});}catch{/* Server Components usam o mesmo contexto resolvido sem gravar cookie. */}}
+  return resolvido;
 }

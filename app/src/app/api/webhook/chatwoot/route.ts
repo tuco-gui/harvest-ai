@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import { processarEventoInbound } from '@/lib/inbound';
 import { normalizarTelefone } from '@/lib/telefone';
 import { normalizarWebhookChatwoot } from '@/lib/inboundChatwoot';
+import {recursoDaWorkspace} from '@/lib/servicosWorkspace';
 
 export async function POST(req: Request) {
   const token = process.env.CHATWOOT_WEBHOOK_TOKEN;
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({erro:'Vínculo indisponível.'},{status:503});
   if (inboxes?.length!==1) return NextResponse.json({ok:true,ignorado:true,motivo:'vinculo_ausente_ou_ambiguo'});
   const vinculo = inboxes[0];
+  if(!(await recursoDaWorkspace(admin,vinculo.conta_id,['integracoes.chatwoot','inbox.atendimento'])))return NextResponse.json({ok:true,ignorado:true,motivo:'integracao_nao_liberada'});
   const {data:crm,error:errCrm} = await admin.from('crm_vinculos').select('ativo')
     .eq('conta_id',vinculo.conta_id).eq('chatwoot_account_id',e.accountId).eq('ativo',true).maybeSingle();
   if (errCrm || !crm) return NextResponse.json({ok:true,ignorado:true});

@@ -135,6 +135,7 @@ export default function Contas({
                   </button>
                 </td>
                 <td className="acao">
+                  <Link href={'/contas/'+c.id+'/servicos'}>Serviços e Permissões</Link>
                   {contaAtiva !== c.id && (
                     <button onClick={() => trabalharEm(c.id)}>Trabalhar nesta conta</button>
                   )}

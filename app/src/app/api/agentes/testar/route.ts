@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   try {
     const [agente, llm] = await Promise.all([
       admin.from('agentes_workspace')
-        .select('nome,instrucao').eq('conta_id', perfil.conta_id).eq('tipo', b.tipo).maybeSingle(),
+        .select('*').eq('conta_id', perfil.conta_id).eq('tipo', b.tipo).maybeSingle(),
       carregarConexaoIA(admin, perfil.conta_id),
     ]);
     if (agente.error || !agente.data) {

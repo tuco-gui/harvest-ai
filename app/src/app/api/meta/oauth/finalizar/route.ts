@@ -3,6 +3,7 @@ import {perfilAtual,supabaseAdmin} from '@/lib/supabase/server';
 import {decifrarMeta,cifrarMeta} from '@/lib/crmMetaOAuth';
 import {isAdmin} from '@/lib/crmControleAcesso';
 import {assinarMensagensMessenger} from '@/lib/crmMetaAssinaturas';
+import {perfilTemRecursos} from '@/lib/servicosWorkspace';
 
 function ir(resultado:'ok'|'erro'){return NextResponse.redirect(
  'https://harvest.figueiramarketing.com.br/meta/oauth/concluido?resultado='+resultado,303);}
@@ -20,6 +21,7 @@ export async function POST(req:Request){
   .is('consumido_em',null).gt('expira_em',new Date().toISOString()).maybeSingle();
  if(!oauth?.opcoes_cifradas)return ir('erro');
  try{
+  if(!(await perfilTemRecursos(admin,perfil,['integracoes.meta','inbox.facebook'],'configurar')))return ir('erro');
   const opcoes=JSON.parse(decifrarMeta(oauth.opcoes_cifradas)) as Array<
     {id:string;nome:string;token:string}>;
   const pagina=opcoes.find(p=>p.id===paginaId);

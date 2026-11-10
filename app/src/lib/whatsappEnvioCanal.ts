@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {recursoDaWorkspace} from './servicosWorkspace';
 import { sessaoWahaDoCanal, type CanalWhatsApp } from './whatsappCanais';
 import { getStatus, sendText } from './waha';
 
@@ -6,6 +7,7 @@ import { getStatus, sendText } from './waha';
 export async function enviarTextoCanal(admin: SupabaseClient, contaId: string,
   canal: CanalWhatsApp, telefone: string, texto: string): Promise<boolean> {
   if (canal.conta_id!==contaId || !canal.ativo) throw Error('canal_invalido');
+  if(!(await recursoDaWorkspace(admin,contaId,['inbox.whatsapp','inbox.envio'],'enviar')))throw Error('recurso_nao_liberado');
   if (canal.provider==='waha') {
     const sessao = sessaoWahaDoCanal(canal);
     if ((await getStatus(sessao))?.status!=='WORKING') throw Error('canal_desconectado');

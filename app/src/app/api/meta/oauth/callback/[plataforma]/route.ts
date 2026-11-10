@@ -3,6 +3,8 @@ import {perfilAtual,supabaseAdmin} from '@/lib/supabase/server';
 import {isAdmin} from '@/lib/crmControleAcesso';
 import {cifrarMeta,type PlataformaMeta} from '@/lib/crmMetaOAuth';
 import {trocarCodigoMeta,contaInstagram,paginasFacebook} from '@/lib/crmMetaGraph';
+import {perfilTemRecursos} from '@/lib/servicosWorkspace';
+import {tipoCanalRecurso} from '@/lib/recursosRotas';
 
 type Ctx={params:Promise<{plataforma:string}>};
 function destino(resultado:'ok'|'erro'|'selecionar',state?:string){
@@ -29,6 +31,7 @@ export async function GET(req:Request,{params}:Ctx){
   .is('consumido_em',null).gt('expira_em',new Date().toISOString()).maybeSingle();
  if(error||!estado)return destino('erro');
  try{
+  if(!(await perfilTemRecursos(admin,perfil,['integracoes.meta',tipoCanalRecurso(tipo)],'configurar')))return destino('erro');
   const token=await trocarCodigoMeta(tipo,code);
   if(tipo==='instagram_dm'){
    const conta=await contaInstagram(token.token);

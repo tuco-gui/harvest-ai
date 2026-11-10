@@ -1,6 +1,8 @@
 import {createHmac,timingSafeEqual,createHash} from 'node:crypto';
 import {webhookSecret} from '@/lib/crmZernioWebhook';
 import {supabaseAdmin} from '@/lib/supabase/server';
+import {recursoDaWorkspace} from '@/lib/servicosWorkspace';
+import {tipoCanalRecurso} from '@/lib/recursosRotas';
 export const runtime='nodejs';
 type Context={params:Promise<{fonte:string}>};
 export async function POST(req:Request,{params}:Context){
@@ -30,7 +32,8 @@ export async function POST(req:Request,{params}:Context){
   .select('id,conta_id,tipo,zernio_account_id,status').eq('id',id)
   .eq('zernio_account_id',accountId).eq('tipo',platform==='instagram'?'instagram_dm':'facebook_messenger')
   .in('status',['aguardando_autorizacao','pronto']).maybeSingle();
- if(!fonte)return Response.json({ignored:true});
+  if(!fonte)return Response.json({ignored:true});
+  if(!(await recursoDaWorkspace(db,fonte.conta_id,[tipoCanalRecurso(fonte.tipo),'integracoes.zernio'])))return Response.json({ignored:true});
  const visitanteId=String(m.sender.id);
  if(visitanteId.length<10||visitanteId.length>100)return Response.json({ignored:true});
  let {data:conversa}=await db.from('crm_conversas_externas').select('id')
@@ -65,9 +68,9 @@ export async function POST(req:Request,{params}:Context){
   ]);
  }
  // A primeira conversa gera um lead no funil, caso a opção esteja habilitada.
- const {error:leadErro}=await db.rpc('crm_criar_negocio_primeira_conversa_social',{
+  const {error:leadErro}=await recursoDaWorkspace(db,fonte.conta_id,['crm.oportunidades'])?await db.rpc('crm_criar_negocio_primeira_conversa_social',{
   p_conta:fonte.conta_id,p_fonte:id,p_conversa:conversa.id
- });
+  }):{error:null};
  if(leadErro)return new Response('Lead persistence error',{status:503});
  return Response.json({ok:true});
 }

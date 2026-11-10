@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {recursoDaWorkspace} from './servicosWorkspace.ts';
 import type { EventoInboundNormalizado } from './inboundTipos';
 import { classificarMensagem } from './optoutResposta';
 import { suprimirTelefone } from './supressao';
@@ -165,6 +166,10 @@ export async function processarEventoInbound(
       });
     }
   }
+
+  // Mantém registro canônico/opt-out, mas não executa atendimento/automação sem licença.
+  if(!(await recursoDaWorkspace(admin,contaId,['inbox.whatsapp','inbox.atendimento'])))
+    return {ok:true,eventoId:inserido.id,leadId,campanhaId};
 
   // Opt-in seguro: só a primeira mensagem de texto NÃO negativa de um canal
   // com exatamente um funil ligado poderá originar um negócio. Sem disparos.

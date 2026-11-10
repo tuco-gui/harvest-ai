@@ -15,11 +15,12 @@ function fake(ativo:boolean,aoRpc:(data:unknown)=>void):SupabaseClient {
   from(t:string){
    const chain={
     select(_:string){return chain;},eq(_:string,__:unknown){return chain;},
-    async maybeSingle(){return {data:{id:30,auto_criar_negocio_inbound:ativo},error:null};},
+    async maybeSingle(){return {data:t==='contas'?{id:'workspace',ativo:true,slug:'cliente',modulos_habilitados:['crm','crm_avancado']}:{id:30,auto_criar_negocio_inbound:ativo},error:null};},
+    then(resolve:(x:unknown)=>void){resolve({data:[],error:null});},
     order(_:string,__:unknown){return chain;},
     async limit(_:number){return {data:[{id:51,nome:'Novo',probabilidade:5}],error:null};}
    };
-   assert(['funis','funil_estagios'].includes(t));
+   assert(['funis','funil_estagios','contas','conta_recursos'].includes(t));
    return chain;
   },
   async rpc(nome:string,args:unknown) {

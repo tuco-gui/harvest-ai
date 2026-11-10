@@ -12,14 +12,14 @@ const {executarSessaoBDR}=await import('../../app/src/lib/bdr.ts');
 
 function banco() {
   const conta='11111111-1111-4111-8111-111111111111';
-  const cfg:any={conta_id:conta,canal_id:1,funil_id:1,modo:'simulacao',contatos_teste:['5514999999999'],base_aprovada:''};
-  const sessao:any={id:'sessao',conta_id:conta,canal_id:1,telefone:'5514999999999',lead_id:1,
+  const cfg:any={conta_id:conta,canal_id:1,funil_id:1,modo:'simulacao',contatos_teste:['5514997754659'],base_aprovada:''};
+  const sessao:any={id:'sessao',conta_id:conta,canal_id:1,telefone:'5514997754659',lead_id:1,
     estado:'novo',qualificacao:{},resumo:'',ultima_entrada_id:1,processada_entrada_id:null,versao:0,
     envio_pendente:false,proximo_followup:null,followups:0,cadencia_inicio:null,consentimento_followup:false};
   const tables:Record<string,any[]>={bdr_config:[cfg],bdr_sessoes:[sessao],bdr_execucoes:[],
     inbound_eventos:[{id:1,conta_id:conta,canal_id:1,telefone:sessao.telefone,mensagem:'Tenho interesse no Alea',nome_contato:'Teste',recebido_em:'2026-11-06T14:59:00Z'}],
     agentes_workspace:[{conta_id:conta,tipo:'bdr',ativo:true,instrucao:'Atenda consultivamente.'}],
-    opt_outs:[],conta_supressao:[],crm_atendimentos_canais:[],bdr_pausas:[],prospecta_mensagens:[],historico_contato:[],
+    opt_outs:[],conta_supressao:[],crm_atendimentos_canais:[],bdr_pausas:[],prospecta_mensagens:[],historico_contato:[],conta_recursos:[],
     contas:[{id:conta,ativo:true,ambiente:'producao',modulos_habilitados:['crm','crm_avancado','agentes']}],
     whatsapp_canais:[{id:1,conta_id:conta,ativo:true,provider:'waha'}]};
   let aoLerConfig:(()=>void)|null=null;
@@ -91,13 +91,26 @@ test('runtime: homologação envia uma vez, histórico canônico e timeout não 
     assert.equal(c.tables.prospecta_mensagens.length,0);
   }finally{confirmado=true;mock.timers.reset();}
 });
+test('configuração de instância permite homologação do piloto sem liberar produção',async()=>{
+  mock.timers.enable({apis:['Date'],now:new Date('2026-11-06T15:00:00Z')});enviados=0;
+  try {
+    const b=banco();b.cfg.modo='homologacao';
+    b.tables.agentes_workspace[0].configuracao={canais:[1],funis:[1]};
+    await b.run();assert.equal(enviados,1);
+    const c=banco();c.cfg.modo='producao';c.cfg.aprovado_em='2026-11-06';c.cfg.aprovado_por='aprovador';
+    c.tables.agentes_workspace[0].configuracao={};await c.run();
+    assert.equal(enviados,1,'produção com configuração não é liberada por este fluxo');
+    const d=banco();d.cfg.modo='homologacao';d.sessao.telefone='5514888888888';
+    const antes=chamadasIA;await d.run();assert.equal(chamadasIA,antes,'não consome IA para contato fora do piloto');
+  } finally { mock.timers.reset(); }
+});
 test('runtime: opt-out externo, conta removida, fora da allowlist e quiet hours bloqueiam transporte',async()=>{
   mock.timers.enable({apis:['Date'],now:new Date('2026-11-06T15:00:00Z')});
   enviados=0;
   try {
     const b=banco();b.cfg.modo='homologacao';b.tables.opt_outs.push({conta_id:b.cfg.conta_id,telefone:b.sessao.telefone,status:'ativo'});await b.run();
     const c=banco();c.cfg.modo='homologacao';c.tables.contas[0].ativo=false;await c.run();
-    const d=banco();d.cfg.modo='homologacao';d.cfg.contatos_teste=[];await d.run();
+    const d=banco();d.cfg.modo='homologacao';d.sessao.telefone='5514888888888';await d.run();
     mock.timers.setTime(new Date('2026-11-06T23:00:00Z').getTime());
     const e=banco();e.cfg.modo='homologacao';await e.run();assert.equal(e.tables.bdr_execucoes.length,0);
     assert.equal(enviados,0);
@@ -113,4 +126,15 @@ test('reserva conhecida como não enviada é cancelada e a nova entrada pode ser
     b.tables.inbound_eventos.push({...b.tables.inbound_eventos[0],id:2,mensagem:'Prazo de 6 meses'});
     await b.run();assert.equal(enviados,1);assert.equal(b.sessao.processada_entrada_id,2);
   }finally{mock.timers.reset();}
+});
+test('permissão granular do canal/resposta bloqueia transporte sem desconectar o canal existente',async()=>{
+ mock.timers.enable({apis:['Date'],now:new Date('2026-11-06T15:00:00Z')});enviados=0;
+ try{for(const recurso of ['agentes.whatsapp','agentes.responder','inbox.envio']){
+   const b=banco();b.cfg.modo='homologacao';b.tables.conta_recursos.push({conta_id:b.cfg.conta_id,recurso,liberado:false});
+   await b.run();assert.equal(enviados,0);assert.equal(b.tables.whatsapp_canais[0].ativo,true);assert.equal(b.sessao.envio_pendente,false);
+ }}finally{mock.timers.reset();}
+});
+test('grant de serviço não muda modo/autorizações operacionais da Realize',async()=>{
+ const b=banco();b.tables.conta_recursos.push({conta_id:b.cfg.conta_id,recurso:'agentes.responder',liberado:true});
+ enviados=0;await b.run();assert.equal(enviados,0);assert.equal(b.cfg.modo,'simulacao');assert(!b.cfg.aprovado_em);
 });
