@@ -108,7 +108,7 @@ export default function ContaDetalhe({
       <div className="modos" style={{ marginTop: 16, marginBottom: 20 }}>
         <button aria-pressed={aba === 'usuarios'} onClick={() => setAba('usuarios')}>Usuários ({usuarios.length})</button>
         <Link href={'/contas/'+conta.id+'/servicos'} className="btn-teste">Serviços, CRM, Inbox e Agentes</Link>
-        <button aria-pressed={aba === 'integracoes'} onClick={() => setAba('integracoes')}>Integrações</button>
+        <button aria-pressed={aba === 'integracoes'} onClick={() => setAba('integracoes')}>Estado das integrações</button>
         <button aria-pressed={aba === 'campanhas'} onClick={() => setAba('campanhas')}>Campanhas ({campanhas.length})</button>
         <button aria-pressed={aba === 'erros'} onClick={() => setAba('erros')}>
           Log de erros{erros.length > 0 ? ` (${erros.length})` : ''}
