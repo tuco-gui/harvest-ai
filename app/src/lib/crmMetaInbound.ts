@@ -77,6 +77,18 @@ export function extrairMensagensMeta(payload:unknown):MensagemMetaEntrada[]{
  }
  return eventos;
 }
+/** Chave estável de captura por número receptor e remetente.
+ * A unicidade de pessoas no banco continua por conta + telefone; os IDs de
+ * mensagem permanecem no ledger crm_mensagens_externas para auditoria/retry.
+ * Não usar o message_id como chave comercial: uma pessoa pode enviar N mensagens.
+ */
+export function chaveCapturaWhatsAppMeta(m: Pick<MensagemMetaEntrada,'contaExternaId'|'remetenteId'>): string {
+ const phoneId=String(m.contaExternaId).trim();
+ const contato=String(m.remetenteId).replace(/\D/g,'');
+ if(!/^\d{8,30}$/.test(phoneId)||!/^\d{10,15}$/.test(contato))
+  throw Error('identidade_whatsapp_invalida');
+ return `meta-wa:${phoneId}:${contato}`;
+}
 /**
  * Inbound WhatsApp oficial também alimenta a captura Superlógica da workspace,
  * reutilizando o mesmo outbox/bridge da Realize. Só captura contatos nomeados
@@ -94,7 +106,7 @@ async function capturarWhatsAppSuperlogica(
   .select('funil_id').eq('conta_id',fonte.conta_id).eq('funil_id',fonte.funil_id).maybeSingle();
  if(error||!cfg)return;
  await capturarLeadSuperlogica(admin,fonte.conta_id,{
-  chave:`meta:${m.mensagemId}`,nome,telefone:m.remetenteId,email:null,
+  chave:chaveCapturaWhatsAppMeta(m),nome,telefone:m.remetenteId,email:null,
   origem:{source_channel:'meta',utm_source:'whatsapp'},
  });
 }
@@ -141,8 +153,8 @@ export async function gravarMensagemMeta(admin:SupabaseClient,m:MensagemMetaEntr
     p_conta:fonte.conta_id,p_fonte:fonte.id,p_conversa:conversa.id,
    }):{error:null};
   if(negocio.error)throw Error('Falha ao vincular contato e negócio Meta.');
-  // Captura idempotente por message_id. Roda também em retry (insert duplicado)
-  // para que uma falha anterior de captura seja reconciliada, nunca duplicada.
+  // Captura idempotente por número receptor + contato. Mensagens permanecem
+  // auditáveis por message_id e retries reconciliam sem novo lead comercial.
   if(m.plataforma==='whatsapp_cloud_api')await capturarWhatsAppSuperlogica(admin,fonte,m);
   if(errInsert?.code==='23505')return 'duplicada';
  const now=new Date().toISOString();
