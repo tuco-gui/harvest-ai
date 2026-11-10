@@ -83,7 +83,8 @@ async function request(path: string, init: RequestInit = {}): Promise<any> {
 
 export async function listarInboxes(accountId: number): Promise<ChatwootInbox[]> {
   const json = await request(`/api/v1/accounts/${accountId}/inboxes`);
-  return json?.payload ?? [];
+  if(!Array.isArray(json?.payload))throw Error('Chatwoot: acesso à conta/inboxes não confirmado.');
+  return json.payload;
 }
 
 export async function listarConversas(

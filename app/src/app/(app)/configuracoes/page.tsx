@@ -3,6 +3,7 @@ import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import Configuracoes from '@/componentes/Configuracoes';
 import { carregarCanais } from '@/lib/whatsappCanais';
 import { listarOptOuts, buscarPolitica } from '@/lib/optout';
+import {recursosVisiveis} from '@/lib/servicosWorkspace';
 
 export default async function Pagina() {
   const perfil = await perfilAtual();
@@ -36,6 +37,7 @@ export default async function Pagina() {
   }
 
   const admin = supabaseAdmin();
+  const recursos=await recursosVisiveis(admin,perfil);
   const [{ data: cred }, { data: envio }, { data: mensagensErro }, { data: leadsComErro }, { data: canais }, { data: conta }, { data: chatwootInbox }, optOutsResult, politica] = await Promise.all([
     admin.from('conta_credenciais').select('*').eq('conta_id', perfil.conta_id).single(),
     admin.from('conta_config_envio').select('*').eq('conta_id', perfil.conta_id).single(),
@@ -47,7 +49,7 @@ export default async function Pagina() {
       .select('empresa, erro_enriquecimento, enriquecido_em')
       .eq('conta_id', perfil.conta_id).not('erro_enriquecimento', 'is', null)
       .order('enriquecido_em', { ascending: false }).limit(50),
-    carregarCanais(admin, perfil.conta_id).then((data) => ({ data })),
+    recursos.includes('inbox.whatsapp')?carregarCanais(admin, perfil.conta_id).then((data) => ({ data })):admin.from('whatsapp_canais').select('*').eq('conta_id',perfil.conta_id),
     admin.from('contas').select('modulos_habilitados').eq('id', perfil.conta_id).maybeSingle(),
     admin.from('chatwoot_inboxes').select('chatwoot_account_id').eq('conta_id', perfil.conta_id).limit(1).maybeSingle(),
     listarOptOuts(admin, perfil.conta_id),
@@ -74,10 +76,11 @@ export default async function Pagina() {
   // Módulos habilitados: enriquecimento interno só para quem tem o módulo
   // (super_admin sempre tem — definido em lib/autorizacao).
   const modulos = new Set<string>((conta?.modulos_habilitados as string[] | null) ?? []);
-  const mostraEnriquecimento = perfil.papel === 'super_admin' || modulos.has('enriquecimento');
+  const mostraEnriquecimento = perfil.papel === 'super_admin' || recursos.includes('integracoes.enriquecimento');
 
   return (
     <Configuracoes
+      recursos={recursos}
       chatwootAccountId={chatwootInbox?.chatwoot_account_id ?? null}
       temSerpapi={!!cred?.serpapi_key}
       evolutionUrl={cred?.evolution_url ?? ''}
@@ -106,7 +109,7 @@ export default async function Pagina() {
       mostraEnriquecimento={mostraEnriquecimento}
       eSuperAdmin={perfil.papel === 'super_admin'}
       eAdmin={perfil.papel === 'admin'}
-      crmAvancado={perfil.papel === 'super_admin' || modulos.has('crm_avancado')}
+       crmAvancado={perfil.papel === 'super_admin' || recursos.some(k=>['inbox.instagram','inbox.facebook','inbox.webchat'].includes(k))}
       optOuts={optOutsResult.dados}
       optOutsTotal={optOutsResult.total}
       optOutPolicy={politica}

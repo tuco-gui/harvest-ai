@@ -52,13 +52,16 @@ export async function PATCH(req: Request) {
   if (Array.isArray(modulos_habilitados)) {
     const permitidos = new Set(['whatsapp', 'ia', 'usuarios', 'chamados', 'status', 'enriquecimento', 'crm', 'twenty_crm', 'agentes', 'crm_avancado']);
     const modulos = [...new Set(modulos_habilitados.filter((m): m is string => typeof m === 'string' && permitidos.has(m)))];
-    const { error } = await supabaseAdmin().from('contas').update({ modulos_habilitados: modulos }).eq('id', id);
+    const db=supabaseAdmin();
+    let {error}=await db.rpc('servicos_modulos_legado',{p_conta:id,p_ator:perfil.id,p_modulos:modulos});
+    if(error&&['42883','PGRST202'].includes(error.code))({error}=await db.from('contas').update({modulos_habilitados:modulos}).eq('id',id));
     if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, modulos_habilitados: modulos });
   }
 
   // ADR-009: marca a conta como 'teste' (guarda fail-closed de WhatsApp) e sua whitelist de QA.
   if (ambiente === 'teste' || ambiente === 'producao') {
+    if(perfil.delegacao&&ambiente==='producao')return NextResponse.json({erro:'Acesso delegado não libera ambiente produtivo.'},{status:403});
     const { error } = await supabaseAdmin().from('contas')
       .update({ ambiente, whatsapp_qa_whitelist: String(whatsapp_qa_whitelist ?? '').trim() || null })
       .eq('id', id);

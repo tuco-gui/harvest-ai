@@ -1,4 +1,4 @@
-import {readFileSync} from 'node:fs';
+import {readFileSync,writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {telefoneCRM,adaptarLeadParaChild,validarEscritorUnico,analisarConsultaLeads} from '../app/src/lib/superlogicaContrato.mjs';
@@ -34,6 +34,7 @@ export function criarBridgeRealize(){
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const expected=criarBridgeRealize();
-  if(process.argv.includes('--print'))console.log(JSON.stringify(expected));
+  if(process.argv.includes('--write'))writeFileSync(new URL('../n8n/realize-superlogica-bridge.json',import.meta.url),JSON.stringify(expected));
+  else if(process.argv.includes('--print'))console.log(JSON.stringify(expected));
   else if(!isDeepStrictEqual(JSON.parse(readFileSync(new URL('../n8n/realize-superlogica-bridge.json',import.meta.url),'utf8')),expected))throw Error('bridge_artifact_desatualizado');
 }

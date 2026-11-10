@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { supabaseNoNavegador } from '@/lib/supabase/browser';
+import {politicaDaRota} from '@/lib/recursosRotas';
 
 type Conta = { id: string; nome: string };
 export type ModuloVisivel = 'whatsapp' | 'ia' | 'usuarios' | 'chamados' | 'status' | 'enriquecimento' | 'crm' | 'agentes' | 'crm_avancado';
@@ -18,6 +19,9 @@ type Props = {
   contas: Conta[];
   ehSuperAdmin: boolean;
   modulos: ModuloVisivel[];
+  recursos?:string[];
+  delegacao?:{id:string;modo:string;motivo:string;expira_em:string}|null;
+  delegacaoExpirada?:boolean;
   children: React.ReactNode;
 };
 
@@ -130,6 +134,8 @@ export default function Topo(p: Props) {
   }
 
   function link(href: string, label: string) {
+    const politica=politicaDaRota(href);
+    if(p.recursos&&politica&&!politica.recursos.every(k=>p.recursos!.includes(k)))return null;
     const ativo = href === '/' || href === '/crm' ? caminho === href : caminho.startsWith(href);
     return (
       <Link key={href} href={href} className="lateral-link" aria-current={ativo ? 'page' : undefined}>
@@ -198,6 +204,8 @@ export default function Topo(p: Props) {
             {temCrm && p.modulos.includes('crm_avancado') && link('/crm/tarefas', 'Tarefas')}
             {temCrm && p.modulos.includes('crm_avancado') && link('/crm/agenda', 'Agenda')}
             {temAgentes && link('/agentes', 'Agentes de IA')}
+            {p.papel!=='operador'&&link('/analytics','Dashboard')}
+            {p.papel!=='operador'&&link('/analytics/relatorios','Relatórios')}
           </div>
           <div className="lateral-grupo">
             <div className="lateral-grupo-titulo">Sistema</div>
@@ -208,8 +216,8 @@ export default function Topo(p: Props) {
           </div>
           {p.ehSuperAdmin && (
             <div className="lateral-grupo">
-              <div className="lateral-grupo-titulo">Admin</div>
-              {link('/contas', 'Contas')}
+              <div className="lateral-grupo-titulo">Super Admin</div>
+              {link('/contas', 'Clientes')}
               {link('/equipe', 'Equipe')}
               {link('/sistema', 'Sistema')}
             </div>
@@ -246,6 +254,12 @@ export default function Topo(p: Props) {
       </aside>
 
       <div className="app-main">
+        <div className="workspace-contexto" data-delegado={!!p.delegacao||!!p.delegacaoExpirada} role="status">
+          <strong>{p.contaNome}</strong>
+          <small>{p.delegacaoExpirada?'Acesso delegado expirado — encerre ou inicie outro acesso':p.delegacao?`Acesso delegado · ${p.delegacao.modo} · até ${new Date(p.delegacao.expira_em).toLocaleTimeString('pt-BR')}`:p.ehSuperAdmin?'Super admin · acesso normal conforme serviços da workspace':'Workspace selecionada'}</small>
+          {p.delegacao&&<small>{p.delegacao.motivo} · Envios e ativações bloqueados.</small>}
+          {(p.delegacao||p.delegacaoExpirada)&&<button type="button" onClick={async()=>{const r=await fetch('/api/acesso-delegado',{method:'DELETE'});if(r.ok)window.location.assign('/contas');}}>Encerrar acesso delegado</button>}
+        </div>
         <div className="topo-barra">
           <button className="tema" onClick={trocarTema} aria-label="Alternar tema">
             <span className="sol">

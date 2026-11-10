@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { PROVEDORES } from '@/lib/ia';
 import { CANAIS_HARVEST } from '@/lib/canaisUnificados';
 import CanaisChatwoot from './CanaisChatwoot';
+import {filtrarConfiguracao} from '@/lib/configuracaoRecursos';
 
 type ErroMensagem = { tipo: string; empresa: string; erro: string; quando: string };
 
@@ -33,6 +34,7 @@ type OptOut = {
 };
 
 type Props = {
+  recursos?:string[];
   chatwootAccountId: number | null;
   temSerpapi: boolean;
   evolutionUrl: string;
@@ -69,11 +71,12 @@ type Props = {
 
 export default function Configuracoes(p: Props) {
   const router = useRouter();
-  const [aba, setAba] = useState<'conexoes' | 'integracoes' | 'mensagens' | 'tempo' | 'erros' | 'optouts'>('conexoes');
+  const [aba, setAba] = useState<'integracoes' | 'mensagens' | 'tempo' | 'erros' | 'optouts'>('integracoes');
+  const liberado=(k:string)=>!p.recursos||p.recursos.includes(k);
 
   useEffect(()=>{
     const params=new URLSearchParams(window.location.search);
-    if(params.get('aba')==='integracoes'&&p.crmAvancado)setAba('integracoes');
+    if(['integracoes','conexoes'].includes(params.get('aba')??''))setAba('integracoes');
   },[p.crmAvancado]);
 
   const [serpapi, setSerpapi] = useState('');
@@ -124,6 +127,7 @@ export default function Configuracoes(p: Props) {
   const [registrandoManual, setRegistrandoManual] = useState(false);
 
   async function salvarSomenteIA() {
+    if(p.recursos&&!p.recursos.includes('integracoes.ia')){setAvisoIa('Conexão IA não liberada para esta workspace.');return;}
     if (salvandoIa) return;
     setSalvandoIa(true);
     setAvisoIa('');
@@ -145,6 +149,8 @@ export default function Configuracoes(p: Props) {
   }
 
   async function testar(qual: string) {
+    const recurso=qual==='ia'?'integracoes.ia':qual==='whatsapp'?'integracoes.waha':qual==='serpapi'?'integracoes.serpapi':'integracoes.enriquecimento';
+    if(p.recursos&&!p.recursos.includes(recurso)){setAviso('Integração não liberada para esta workspace.');return;}
     setTestando(qual);
     const r = await fetch('/api/testar', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -162,6 +168,7 @@ export default function Configuracoes(p: Props) {
   // nunca aparecia. Este hotfix reconecta a chamada a um botão real por
   // canal WAHA (ver seção "WhatsApp — canais" abaixo).
   async function conectarWaha(canalId: number) {
+    if(p.recursos&&!p.recursos.includes('inbox.whatsapp')){setAviso('WhatsApp não liberado para esta workspace.');return;}
     setWahaPainelAberto(true);
     setWahaCanalAlvo(canalId);
     setWahaErro(null);
@@ -340,7 +347,7 @@ export default function Configuracoes(p: Props) {
     const r = await fetch('/api/configuracoes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: JSON.stringify(filtrarConfiguracao({
         // campos de chave em branco significam "não mexer", não "apagar"
         serpapi_key: serpapi || undefined,
         evolution_url: evoUrl,
@@ -365,7 +372,7 @@ export default function Configuracoes(p: Props) {
         contexto,
         intervalo_min: min,
         intervalo_max: max,
-      }),
+      },p.recursos)),
     });
     const dados = await r.json();
     setSalvando(false);
@@ -379,8 +386,7 @@ export default function Configuracoes(p: Props) {
   return (
     <div className="pagina">
       <div className="modos" style={{ marginBottom: 28 }}>
-        <button aria-pressed={aba === 'conexoes'} onClick={() => setAba('conexoes')}>Conexões</button>
-        {p.crmAvancado && <button aria-pressed={aba === 'integracoes'} onClick={() => setAba('integracoes')}>Integrações</button>}
+        <button aria-pressed={aba === 'integracoes'} onClick={() => setAba('integracoes')}>Integrações</button>
         <button aria-pressed={aba === 'mensagens'} onClick={() => setAba('mensagens')}>Mensagens</button>
         <button aria-pressed={aba === 'tempo'} onClick={() => setAba('tempo')}>Tempo de envio</button>
         <button aria-pressed={aba === 'erros'} onClick={() => setAba('erros')}>
@@ -393,11 +399,15 @@ export default function Configuracoes(p: Props) {
         )}
       </div>
 
-      {aba === 'integracoes' && p.crmAvancado &&
-        <IntegracoesCRM onVerWhatsapp={()=>setAba('conexoes')}/>}
-
-      {aba === 'conexoes' && (
+      {aba === 'integracoes' && (
         <>
+          <h1>Integrações</h1>
+          <nav aria-label="Categorias de integrações" className="modos" style={{flexWrap:'wrap'}}>
+            <a href="#integracao-whatsapp">WhatsApp</a><a href="#integracao-social">Instagram · Messenger · Sites</a>
+            <a href="#integracao-chatwoot">Chatwoot</a><a href="#integracao-crm">Twenty · Superlógica · CRMs externos</a>
+            <a href="#integracao-provedores">Outros provedores</a>
+          </nav>
+          {p.crmAvancado&&<div id="integracao-social"><IntegracoesCRM onVerWhatsapp={()=>document.getElementById('integracao-whatsapp')?.scrollIntoView({behavior:'smooth'})}/></div>}
           {/* Painel de diagnóstico — só super admin vê */}
           {p.eSuperAdmin && (
             <section className="secao">
@@ -465,7 +475,7 @@ export default function Configuracoes(p: Props) {
             </section>
           )}
 
-          <section className="secao">
+          {liberado('inbox.whatsapp')&&<section className="secao" id="integracao-whatsapp">
             <h2>Conexões de atendimento</h2>
              <p className="ajuda">A Inbox foi desenhada para receber diferentes provedores em uma única conversa por canal e workspace. Os itens planejados ainda não recebem nem enviam mensagens.</p>
              <div className="crm-canais-capacidades">
@@ -634,9 +644,9 @@ export default function Configuracoes(p: Props) {
                 );
               })()}
             </div>
-          </section>
+          </section>}
 
-          <section className="secao">
+          {liberado('integracoes.chatwoot')&&<section className="secao" id="integracao-chatwoot">
             <h2>Canais de atendimento (Chatwoot)</h2>
             <p className="resumo-secao">
               Chatwoot é a fonte de verdade das conversas. Vincule inboxes do Chatwoot para que
@@ -644,11 +654,17 @@ export default function Configuracoes(p: Props) {
               simultaneamente (WhatsApp, Instagram, Messenger, Telegram).
             </p>
             <div className="cartaocfg">
-              <CanaisChatwoot chatwootAccountId={p.chatwootAccountId} />
+              <CanaisChatwoot chatwootAccountId={p.chatwootAccountId} superAdmin={p.eSuperAdmin} />
             </div>
+          </section>}
+
+          <section className="secao" id="integracao-crm"><h2>Twenty CRM · Superlógica · CRMs externos</h2>
+            <p className="ajuda">Os vínculos e credenciais existentes são preservados. Disponibilidade no plano não comprova sincronização ou atribuição no CRM externo.</p>
+            {liberado('integracoes.twenty')&&<p>Twenty: usa o adapter e o vínculo desta workspace; ativação depende da configuração validada pela Figueira.</p>}
+            {liberado('integracoes.superlogica')&&<p>Superlógica: <a href="/agentes">Abrir ficha imobiliária e diagnóstico das capturas</a>. Regras de responsável são administradas no time do Superlógica, não pelo comentário do cadastro.</p>}
           </section>
 
-          <section className="secao">
+          <section className="secao" id="integracao-provedores">
             <h2>Busca no Google Maps</h2>
             <p className="resumo-secao">
               A prospecção usa a busca do Google Maps. Cada página de busca consome um crédito.

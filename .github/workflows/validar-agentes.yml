@@ -17,6 +17,16 @@ on:
       - "tests/sql/bdr-schema-atual.test.mjs"
       - "tests/unit/bdr-superlogica-integracao.test.mjs"
       - "tests/unit/bdr-leads-paginacao.test.mjs"
+      - "tests/unit/servicos-*.test.ts"
+      - "tests/helpers/servicos-db.ts"
+      - "tests/sql/schema-harvest.mjs"
+      - "tests/sql/servicos-workspace.test.mjs"
+      - "sql/055_servicos_workspace.sql"
+      - "sql/056_agentes_configuracao.sql"
+      - "sql/057_chatwoot_provisionamento.sql"
+      - "sql/058_capturas_vinculos_crm.sql"
+      - "tests/unit/organizacao-*.test.ts"
+      - "tests/sql/organizacao-harvest.test.mjs"
       - "tests/integration/bdr-postgres.sql"
       - "scripts/realize-*.mjs"
       - "sql/054_realize_bdr.sql"
@@ -143,7 +153,13 @@ jobs:
       - name: Validar editor de fluxos BDR existente
         working-directory: app
         run: node --experimental-strip-types --test tests/unit/fluxoAgente.test.ts
-      - name: Validar tipos
+      - name: Validar serviços multicliente e acesso delegado sem ativação
+        working-directory: app
+        run: npm run test:servicos
+      - name: Validar organização, modelos e provisionamento por workspace
+        working-directory: app
+        run: npm run test:organizacao
+      - name: Validar tipos TypeScript
         working-directory: app
         run: npx tsc --noEmit
       - name: Build sem usar recursos da VPS

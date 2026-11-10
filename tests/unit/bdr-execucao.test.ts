@@ -19,7 +19,7 @@ function banco() {
   const tables:Record<string,any[]>={bdr_config:[cfg],bdr_sessoes:[sessao],bdr_execucoes:[],
     inbound_eventos:[{id:1,conta_id:conta,canal_id:1,telefone:sessao.telefone,mensagem:'Tenho interesse no Alea',nome_contato:'Teste',recebido_em:'2026-11-06T14:59:00Z'}],
     agentes_workspace:[{conta_id:conta,tipo:'bdr',ativo:true,instrucao:'Atenda consultivamente.'}],
-    opt_outs:[],conta_supressao:[],crm_atendimentos_canais:[],bdr_pausas:[],prospecta_mensagens:[],historico_contato:[],
+    opt_outs:[],conta_supressao:[],crm_atendimentos_canais:[],bdr_pausas:[],prospecta_mensagens:[],historico_contato:[],conta_recursos:[],
     contas:[{id:conta,ativo:true,ambiente:'producao',modulos_habilitados:['crm','crm_avancado','agentes']}],
     whatsapp_canais:[{id:1,conta_id:conta,ativo:true,provider:'waha'}]};
   let aoLerConfig:(()=>void)|null=null;
@@ -113,4 +113,15 @@ test('reserva conhecida como não enviada é cancelada e a nova entrada pode ser
     b.tables.inbound_eventos.push({...b.tables.inbound_eventos[0],id:2,mensagem:'Prazo de 6 meses'});
     await b.run();assert.equal(enviados,1);assert.equal(b.sessao.processada_entrada_id,2);
   }finally{mock.timers.reset();}
+});
+test('permissão granular do canal/resposta bloqueia transporte sem desconectar o canal existente',async()=>{
+ mock.timers.enable({apis:['Date'],now:new Date('2026-11-06T15:00:00Z')});enviados=0;
+ try{for(const recurso of ['agentes.whatsapp','agentes.responder','inbox.envio']){
+   const b=banco();b.cfg.modo='homologacao';b.tables.conta_recursos.push({conta_id:b.cfg.conta_id,recurso,liberado:false});
+   await b.run();assert.equal(enviados,0);assert.equal(b.tables.whatsapp_canais[0].ativo,true);assert.equal(b.sessao.envio_pendente,false);
+ }}finally{mock.timers.reset();}
+});
+test('grant de serviço não muda modo/autorizações operacionais da Realize',async()=>{
+ const b=banco();b.tables.conta_recursos.push({conta_id:b.cfg.conta_id,recurso:'agentes.responder',liberado:true});
+ enviados=0;await b.run();assert.equal(enviados,0);assert.equal(b.cfg.modo,'simulacao');assert(!b.cfg.aprovado_em);
 });

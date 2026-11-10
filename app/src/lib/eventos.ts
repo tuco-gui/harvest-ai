@@ -18,6 +18,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { processarAutomacoes } from './automacoes';
 import { receberEventoBDR } from './bdrInbound';
+import {recursoDaWorkspace} from './servicosWorkspace.ts';
 
 export type TipoEvento =
   | 'mensagem_recebida'
@@ -67,6 +68,7 @@ export async function emitirEvento(
   else if (evento.tipo === 'opt_out') classificacao = 'optout';
 
   // DESPATCH LEGACY: processarAutomacoes (usa crmBackend internamente)
+  if(!(await recursoDaWorkspace(admin,evento.contaId,['crm.automacoes'],'ativar')))return;
   // TODO: quando Twenty workflows estiverem configurados via UI,
   // despachar diretamente para o adapter nativo e remover esta chamada.
   try {

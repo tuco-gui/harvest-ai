@@ -4,7 +4,9 @@ Fonte de aceite: [PR #45](https://github.com/tuco-gui/harvest-ai/pull/45), docum
 
 **Correções atuais do PR #46:** consultar [evidências da revisão](realize-alea-bdr-revisao-pr46.md). O bridge adapta explicitamente `cliente/telefone/email` para `Nome/WhatsApp/E-mail`, confere o cutover dos três workflows publicados e exige consulta LEADS antes de escrever ou confirmar cadastro.
 
-**Atualização LEADS e homologação real:** [paginação e cadastro controlado](realize-leads-paginacao-homologacao-pr46.md). Consulta completa em 11 páginas, cadastro oficial `16829081` confirmado e reexecução sem duplicidade. O workflow de leitura existente foi atualizado; o cutover dos formulários continua bloqueado pelo endpoint Harvest 404, migration não aplicada e workspace Realize ausente.
+**Estado operacional atual:** [autenticação e cutover concluídos](realize-cutover-operacional-2026-11-06.md). O PR foi integrado em `3ef0968`; endpoint, migration e workspace estão publicados e não são mais bloqueios. Os workflows foram migrados com escritor único, e a captura/reconciliação ponta a ponta passou. O BDR permanece em simulação e inativo. Pareamento físico e configuração comercial continuam separados da integração técnica.
+
+**Etapa anterior LEADS:** [paginação e cadastro controlado](realize-leads-paginacao-homologacao-pr46.md). A consulta completa, o cadastro oficial `16829081` e a repetição sem duplicidade foram homologados antes da publicação; os bloqueios de infraestrutura descritos naquela etapa foram superados.
 
 ## Escolha por módulo
 

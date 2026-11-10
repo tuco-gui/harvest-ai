@@ -14,6 +14,10 @@ export function adaptarLeadParaChild(p) {
   return {'Nome':nome,'WhatsApp':telefone,'E-mail':String(p.email??'').trim(),
     'Protocolo':p.idempotency_key,'Canal':p.midia??'Harvest - Alea',
     'Origem':p.origem?.utm_source??p.midia??'', 'Campanha':p.origem?.utm_campaign??'',
+    'Renda familiar':p.origem?.renda_familiar??'', 'Termo':p.origem?.utm_term??'',
+    gclid:p.origem?.gclid??'',
+    comentarioLead:p.comentarioLead??'',origem:p.origem??{},
+    protocolo_origem:p.origem?.protocolo??p.idempotency_key,
     tenant_id:p.tenant_id,idempotency_key:p.idempotency_key,codigo_anuncio:'CA0653_MMOL'};
 }
 

@@ -1231,3 +1231,17 @@ a:hover{color:var(--ink)}
  background:var(--surface);border:1px solid var(--rule);cursor:pointer}
 @media(max-width:640px){.integracoes-crm-setup-dados label{grid-template-columns:1fr auto}
  .integracoes-crm-setup-dados label>span{grid-column:1 / -1}}
+.servicos-presets { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:20px 0; }
+.servicos-grupo { margin:16px 0; border:1px solid var(--rule); border-radius:6px; padding:14px; }
+.servicos-grupo summary { font-weight:700; cursor:pointer; }
+.servicos-tabela { overflow-x:auto; }
+.servicos-tabela th { min-width:115px; white-space:normal; }
+.servicos-tabela td:first-child { min-width:300px; }
+.servicos-tabela input[type=checkbox] { margin-right:6px; }
+.servicos-delegacao { margin-top:24px; display:grid; gap:12px; }
+.workspace-contexto { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:12px 20px; border-bottom:1px solid var(--rule); background:var(--surface); }
+.workspace-contexto[data-delegado=true] { border-left:4px solid var(--red); }
+.workspace-contexto small { color:var(--ink-2); }
+.servicos-presets button,.servicos-delegacao button,.workspace-contexto button { border:1px solid var(--rule); border-radius:4px; padding:7px 10px; }
+.servicos-workspace textarea { display:block; width:100%; padding:10px; border:1px solid var(--rule); border-radius:4px; background:var(--surface); color:var(--ink); margin:8px 0 12px; }
+.servicos-delegacao input,.servicos-delegacao select { padding:8px; border:1px solid var(--rule); background:var(--surface); color:var(--ink); }

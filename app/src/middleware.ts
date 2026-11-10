@@ -1,7 +1,12 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { CookieOptions } from '@supabase/ssr';
+import {createClient} from '@supabase/supabase-js';
 import { rotaPublicaSemSessao } from '@/lib/rotasPublicas';
+import {resolverWorkspace} from '@/lib/workspaceContexto';
+import {autorizarRequisicao} from '@/lib/recursosHttp';
+import {COOKIE_DELEGACAO} from '@/lib/servicosWorkspace';
+import {requerInspecaoCorpo,rotaSemContrato} from '@/lib/recursosRotas';
 
 type CookieNovo = { name: string; value: string; options?: CookieOptions };
 
@@ -49,6 +54,22 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);
+  }
+  if(user&&!ehLogin&&!rotaSemContrato(req.nextUrl.pathname)){
+    try{
+      const admin=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.SUPABASE_SERVICE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});
+      const {data:p,error}=await admin.from('perfis').select('id,papel,conta_id').eq('id',user.id).maybeSingle();
+      if(error||!p)return NextResponse.json({erro:'Sessão sem perfil autorizado.'},{status:403});
+      const contexto=await resolverWorkspace(admin,p,req.cookies.get('harvest_conta')?.value);
+      let body:Record<string,unknown>={};
+      if(!['GET','HEAD','OPTIONS'].includes(req.method)&&requerInspecaoCorpo(req.nextUrl.pathname)){
+        const clone=req.clone();const reader=clone.body?.getReader();let texto='';let bytes=0;const dec=new TextDecoder();
+        if(reader)while(true){const chunk=await reader.read();if(chunk.done)break;bytes+=chunk.value.length;if(bytes>65536){void reader.cancel();return NextResponse.json({erro:'Configuração muito grande.'},{status:413});}texto+=dec.decode(chunk.value,{stream:true});}
+        try{const b=JSON.parse(texto);if(b&&typeof b==='object'&&!Array.isArray(b))body=b;}catch{}
+      }
+      const acesso=await autorizarRequisicao(admin,{id:p.id,papel:contexto.papel,conta_id:contexto.contaId},req.nextUrl.pathname,req.method,body,req.cookies.get(COOKIE_DELEGACAO)?.value);
+      if(!acesso.ok)return NextResponse.json({erro:acesso.erro},{status:acesso.status??403});
+    }catch{return NextResponse.json({erro:'Não foi possível verificar os serviços da workspace.'},{status:503});}
   }
   return res;
 }

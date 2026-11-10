@@ -20,6 +20,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     .select('*, estagio:funil_estagios(id, nome, ordem)')
     .eq('id', automacaoId)
     .eq('funil_id', id)
+    .eq('conta_id', perfil.conta_id ?? '')
     .maybeSingle();
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
@@ -52,11 +53,20 @@ export async function PATCH(req: Request, { params }: Ctx) {
     return NextResponse.json({ erro: 'Nada para atualizar.' }, { status: 400 });
   }
 
+  const {data:funil}=await admin.from('funis').select('id').eq('id',id).eq('conta_id',perfil.conta_id??'').maybeSingle();
+  if(!funil)return NextResponse.json({erro:'Funil não encontrado.'},{status:404});
+  for(const estagio of [updates.estagio_id,b.acao_parametros?.estagio_destino_id]){
+    if(estagio==null)continue;
+    const {data}=await admin.from('funil_estagios').select('id').eq('id',estagio).eq('funil_id',id).maybeSingle();
+    if(!data)return NextResponse.json({erro:'Estágio não encontrado neste funil.'},{status:400});
+  }
+
   const { data: automacao, error } = await admin
     .from('funil_automacoes')
     .update(updates)
     .eq('id', automacaoId)
     .eq('funil_id', id)
+    .eq('conta_id', perfil.conta_id ?? '')
     .select('*, estagio:funil_estagios(id, nome, ordem)')
     .maybeSingle();
 
@@ -80,7 +90,8 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     .from('funil_automacoes')
     .delete()
     .eq('id', automacaoId)
-    .eq('funil_id', id);
+    .eq('funil_id', id)
+    .eq('conta_id', perfil.conta_id ?? '');
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

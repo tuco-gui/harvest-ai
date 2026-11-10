@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   const { data: funil } = await admin
     .from('funis').select('id')
     .eq('id', id).eq('conta_id', perfil.conta_id ?? '').maybeSingle();
-  if (!funil && perfil.papel !== 'super_admin') {
+  if (!funil) {
     return NextResponse.json({ erro: 'Funil não encontrado.' }, { status: 404 });
   }
 
@@ -46,7 +46,7 @@ export async function POST(req: Request, { params }: Ctx) {
   const { data: funil } = await admin
     .from('funis').select('id, conta_id')
     .eq('id', id).eq('conta_id', perfil.conta_id ?? '').maybeSingle();
-  if (!funil && perfil.papel !== 'super_admin') {
+  if (!funil) {
     return NextResponse.json({ erro: 'Funil não encontrado.' }, { status: 404 });
   }
 
@@ -95,6 +95,8 @@ export async function POST(req: Request, { params }: Ctx) {
     if (!Number.isInteger(Number(destinoId))) {
       return NextResponse.json({ erro: 'Ação "mover_estagio" requer acao_parametros.estagio_destino_id.' }, { status: 400 });
     }
+    const {data:destino}=await admin.from('funil_estagios').select('id').eq('id',destinoId).eq('funil_id',id).maybeSingle();
+    if(!destino)return NextResponse.json({erro:'Estágio de destino não encontrado neste funil.'},{status:400});
   }
 
   const contaId = funil?.conta_id ?? perfil.conta_id;

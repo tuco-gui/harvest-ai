@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Perfil } from './supabase/server';
+import {modulosComServicos} from './servicosWorkspace.ts';
 
 /**
  * Módulos operacionais habilitados por conta (coluna contas.modulos_habilitados,
@@ -64,10 +65,5 @@ export async function carregarModulos(
   perfil: Perfil,
 ): Promise<string[] | null> {
   if (!perfil.conta_id) return null;
-  const { data } = await admin
-    .from('contas')
-    .select('modulos_habilitados')
-    .eq('id', perfil.conta_id)
-    .maybeSingle();
-  return (data?.modulos_habilitados as string[] | null) ?? null;
+  return modulosComServicos(admin,perfil);
 }

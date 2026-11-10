@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {recursoDaWorkspace} from './servicosWorkspace.ts';
 import { chaveEstagio } from './crmStages.ts';
 import type { TipoMensagemInbound } from './inboundTipos.ts';
 
@@ -18,7 +19,8 @@ export async function criarNegocioDoPrimeiroInbound(
   contaId:string;canalId:number;funilId:number;telefone:string;
   nomeContato:string|null;
  }):Promise<number|null> {
- const {data:funil,error:erroFunil}=await admin.from('funis')
+  if(!(await recursoDaWorkspace(admin,entrada.contaId,['crm.oportunidades','crm.funis'])))return null;
+  const {data:funil,error:erroFunil}=await admin.from('funis')
    .select('id,auto_criar_negocio_inbound').eq('id',entrada.funilId)
    .eq('conta_id',entrada.contaId).eq('ativo',true).maybeSingle();
  if(erroFunil)throw Error('Não foi possível verificar a automação do funil.');

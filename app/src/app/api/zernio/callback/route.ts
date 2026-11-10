@@ -2,6 +2,8 @@ import {NextResponse} from 'next/server';
 import {supabaseAdmin} from '@/lib/supabase/server';
 import {zernio} from '@/lib/crmZernio';
 import {assinarFonte} from '@/lib/crmZernioWebhook';
+import {recursoDaWorkspace} from '@/lib/servicosWorkspace';
+import {tipoCanalRecurso} from '@/lib/recursosRotas';
 const voltar=(resultado:string)=>NextResponse.redirect(
  'https://harvest.figueiramarketing.com.br/configuracoes?aba=integracoes&zernio_oauth='+resultado);
 export async function GET(req:Request){
@@ -37,6 +39,7 @@ export async function GET(req:Request){
    .select('id').maybeSingle();
   if(error||!fonte)return voltar('erro');
   try{
+   if(!(await recursoDaWorkspace(db,estado.conta_id,['integracoes.zernio',tipoCanalRecurso(estado.plataforma)],'configurar')))return voltar('erro');
    const webhookId=await assinarFonte(estado.fonte_id,estado.perfil_zernio,accountId);
    await db.from('crm_fontes_funil').update({zernio_webhook_id:webhookId})
     .eq('id',estado.fonte_id).eq('conta_id',estado.conta_id);

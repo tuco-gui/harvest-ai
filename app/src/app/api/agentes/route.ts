@@ -4,6 +4,7 @@ import { perfilTemModulo } from '@/lib/autorizacao';
 import { tipoAgenteValido, validarConfiguracaoAgente, CATALOGO_AGENTES, TIPOS_AGENTE } from '@/lib/agentes';
 import { carregarConexaoIA } from '@/lib/conexaoIAWorkspace';
 import { validarFluxoAgente, FLUXO_BDR_IMOBILIARIO_BASE, type FluxoAgente } from '@/lib/fluxoAgente';
+import {configuracaoPadrao,validarConfigAgente} from '@/lib/agenteModelos';
 
 async function contexto() {
   const perfil = await perfilAtual();
@@ -20,12 +21,12 @@ export async function GET() {
   const c = await contexto();
   if ('erro' in c) return NextResponse.json({ erro: c.erro }, { status: c.status });
   const { data, error } = await c.admin.from('agentes_workspace')
-    .select('id,conta_id,tipo,nome,instrucao,ativo,atualizado_em')
+    .select('*')
     .eq('conta_id', c.perfil.conta_id!).order('id');
   if (error) return NextResponse.json({ erro: 'O catálogo dos agentes ainda não está disponível no banco.' }, { status: 503 });
   const agentes = TIPOS_AGENTE.map(tipo =>
     data?.find(a => a.tipo === tipo) ?? {
-      id: null, conta_id: c.perfil.conta_id, tipo, ...CATALOGO_AGENTES[tipo], ativo: false, atualizado_em: null,
+      id: null, conta_id: c.perfil.conta_id, tipo, ...CATALOGO_AGENTES[tipo], configuracao:configuracaoPadrao(tipo),ativo: false, atualizado_em: null,
     }
   );
   // O resumo da conexao configurada em Configuracoes e seguro para a interface:
@@ -52,6 +53,15 @@ export async function PATCH(req: Request) {
   const falha = validarConfiguracaoAgente(b.nome, b.instrucao);
   if (falha) return NextResponse.json({ erro: falha }, { status: 400 });
   if (typeof b.ativo !== 'boolean') return NextResponse.json({ erro: 'Estado do agente inválido.' }, { status: 400 });
+  if(b.configuracao!==undefined){
+    if(!validarConfigAgente(b.tipo,b.configuracao))return NextResponse.json({erro:'Configuração de modelo, horários ou autonomia inválida.'},{status:400});
+    for(const [campo,tabela]of [['canais','whatsapp_canais'],['funis','funis']] as const){
+      for(const id of b.configuracao[campo]){
+        const {data,error}=await c.admin.from(tabela).select('id').eq('id',id).eq('conta_id',c.perfil.conta_id).maybeSingle();
+        if(error||!data)return NextResponse.json({erro:'Canal/funil fora da workspace.'},{status:403});
+      }
+    }
+  }
 
   const { data, error } = await c.admin.from('agentes_workspace').upsert({
     conta_id: c.perfil.conta_id,
@@ -59,8 +69,9 @@ export async function PATCH(req: Request) {
     nome: b.nome.trim(),
     instrucao: b.instrucao.trim(),
     ativo: b.ativo,
+    ...(b.configuracao!==undefined?{configuracao:b.configuracao}:{}),
     atualizado_em: new Date().toISOString(),
-  }, { onConflict: 'conta_id,tipo' }).select('id,conta_id,tipo,nome,instrucao,ativo,atualizado_em').single();
+  }, { onConflict: 'conta_id,tipo' }).select('*').single();
   if (error) return NextResponse.json({ erro: 'Não foi possível salvar o agente.' }, { status: 500 });
   return NextResponse.json({ agente: data });
 }

@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:organizacao": "node --experimental-strip-types --test --test-concurrency=1 ../tests/unit/organizacao-*.test.ts ../tests/sql/organizacao-harvest.test.mjs",
+    "test:servicos": "node --experimental-strip-types --test --test-concurrency=1 ../tests/unit/servicos-*.test.ts ../tests/sql/servicos-workspace.test.mjs",
     "test:bdr": "node --experimental-strip-types --test --test-concurrency=1 ../tests/sql/bdr-alea.test.mjs ../tests/sql/bdr-schema-atual.test.mjs ../tests/unit/bdr-alea.test.ts ../tests/unit/bdr-chatwoot-ownership.test.ts ../tests/unit/bdr-superlogica-integracao.test.mjs ../tests/unit/bdr-leads-paginacao.test.mjs && node --experimental-strip-types --experimental-test-module-mocks --test ../tests/unit/bdr-execucao.test.ts",
     "dev": "next dev -p 3000",
     "build": "next build",

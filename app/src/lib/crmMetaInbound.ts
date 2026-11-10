@@ -1,5 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {SupabaseClient} from '@supabase/supabase-js';
+import {recursoDaWorkspace} from './servicosWorkspace.ts';
+import {tipoCanalRecurso} from './recursosRotas.ts';
 import type {PlataformaMeta} from './crmMetaOAuth';
 
 export type MensagemMetaEntrada={
@@ -44,7 +46,8 @@ export async function gravarMensagemMeta(admin:SupabaseClient,m:MensagemMetaEntr
  // Não distribuir o mesmo evento entre duas workspaces ou fontes ambíguas.
  if(fontes.length!==1)return 'ignorada';
  const fonte=fontes[0];
- if(!fonte.meta_token_cifrado)return 'ignorada';
+  if(!fonte.meta_token_cifrado)return 'ignorada';
+  if(!(await recursoDaWorkspace(admin,fonte.conta_id,[tipoCanalRecurso(m.plataforma)])))return 'ignorada';
  let {data:conversa,error:erroConversa}=await admin.from('crm_conversas_externas')
   .select('id').eq('conta_id',fonte.conta_id).eq('fonte_id',fonte.id)
   .eq('visitante_id',m.remetenteId).maybeSingle();
@@ -70,9 +73,9 @@ export async function gravarMensagemMeta(admin:SupabaseClient,m:MensagemMetaEntr
   texto:m.texto,mensagem_externa_id:m.mensagemId,
  });
   if(errInsert&&errInsert.code!=='23505')throw Error('Falha ao registrar mensagem Meta.');
-  const negocio=await admin.rpc('crm_criar_negocio_primeira_conversa_social',{
+   const negocio=await recursoDaWorkspace(admin,fonte.conta_id,['crm.oportunidades'])?await admin.rpc('crm_criar_negocio_primeira_conversa_social',{
     p_conta:fonte.conta_id,p_fonte:fonte.id,p_conversa:conversa.id,
-  });
+   }):{error:null};
   if(negocio.error)throw Error('Falha ao vincular contato e negócio Meta.');
   if(errInsert?.code==='23505')return 'duplicada';
  const now=new Date().toISOString();

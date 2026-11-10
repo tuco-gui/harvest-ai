@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { perfilTemModulo } from '@/lib/autorizacao';
+import {perfilTemRecursos} from '@/lib/servicosWorkspace';
 
 async function contexto() {
   const perfil = await perfilAtual();
   if (!perfil?.conta_id) return {resposta:NextResponse.json({erro:'Selecione uma workspace.'},{status:401})} as const;
   const admin = supabaseAdmin();
-  if (perfil.papel==='operador' || !(await perfilTemModulo(admin,perfil,'agentes')) ||
+  if (perfil.papel==='operador' || !(await perfilTemRecursos(admin,perfil,['agentes.bdr']))||!(await perfilTemModulo(admin,perfil,'agentes')) ||
     !(await perfilTemModulo(admin,perfil,'crm_avancado')))
     return {resposta:NextResponse.json({erro:'Acesso restrito ao administrador dos agentes/CRM.'},{status:403})} as const;
   return {perfil,admin} as const;
@@ -28,26 +29,32 @@ export async function POST(req: Request) {
     try { await processarBDR(c.admin,c.perfil.conta_id!); return NextResponse.json({ok:true}); }
     catch { return NextResponse.json({erro:'Não foi possível processar o BDR.'},{status:503}); }
   }
-  if (!Number.isSafeInteger(b?.canal_id) || !Number.isSafeInteger(b?.funil_id) ||
-    !['simulacao','homologacao'].includes(b?.modo) || typeof b.base_aprovada!=='string' || b.base_aprovada.length>16000 ||
-    !Array.isArray(b.contatos_teste) || b.contatos_teste.length>10 ||
-    b.contatos_teste.some((x:unknown)=>typeof x!=='string'||!/^55\d{10,11}$/.test(x)))
-    return NextResponse.json({erro:'Informe canal, funil, modo de teste e até dez contatos controlados.'},{status:400});
-  const [canal,funil,conta,existente] = await Promise.all([
-    c.admin.from('whatsapp_canais').select('id').eq('conta_id',c.perfil.conta_id).eq('id',b.canal_id).eq('ativo',true).maybeSingle(),
-    c.admin.from('funis').select('id').eq('conta_id',c.perfil.conta_id).eq('id',b.funil_id).eq('canal_padrao_id',b.canal_id).eq('ativo',true).maybeSingle(),
-    c.admin.from('contas').select('slug').eq('id',c.perfil.conta_id).single(),
-    c.admin.from('bdr_config').select('canal_id,funil_id,modo').eq('conta_id',c.perfil.conta_id).maybeSingle(),
+  return NextResponse.json({erro:'Edite a ficha por PATCH. Mudanças de modo exigem homologação operacional documentada; este endpoint não concede aprovação.'},{status:409});
+}
+
+/** Edita a ficha e vínculos sem alterar modo, autorização CRM ou aprovação operacional. */
+export async function PATCH(req:Request){
+  const c=await contexto();if('resposta'in c)return c.resposta;
+  const b=await req.json().catch(()=>null);
+  if(!Number.isSafeInteger(b?.canal_id)||!Number.isSafeInteger(b?.funil_id)||
+    typeof b?.codigo_anuncio!=='string'||!/^[\w.-]{1,100}$/.test(b.codigo_anuncio)||
+    typeof b?.base_aprovada!=='string'||b.base_aprovada.length>16000)
+    return NextResponse.json({erro:'Informe canal, funil, código e ficha aprovada do imóvel.'},{status:400});
+  const [canal,funil,ex]=await Promise.all([
+    c.admin.from('whatsapp_canais').select('id').eq('id',b.canal_id).eq('conta_id',c.perfil.conta_id).eq('ativo',true).maybeSingle(),
+    c.admin.from('funis').select('id').eq('id',b.funil_id).eq('conta_id',c.perfil.conta_id).eq('canal_padrao_id',b.canal_id).eq('ativo',true).maybeSingle(),
+    c.admin.from('bdr_config').select('*').eq('conta_id',c.perfil.conta_id).maybeSingle(),
   ]);
-  if ([canal,funil,conta,existente].some(x=>x.error) || !canal.data || !funil.data)
-    return NextResponse.json({erro:'Canal/funil inválido para a workspace.'},{status:403});
-  if (b.modo==='homologacao' && (conta.data?.slug!=='figueira-marketing' || !b.contatos_teste.length))
-    return NextResponse.json({erro:'Homologue na Figueira Marketing com contatos controlados.'},{status:409});
-  if (existente.data && (existente.data.canal_id!==b.canal_id || existente.data.funil_id!==b.funil_id))
-    return NextResponse.json({erro:'Há configuração existente. Migração de canal/funil exige revisão dos vínculos.'},{status:409});
-  const {error} = await c.admin.from('bdr_config').upsert({conta_id:c.perfil.conta_id,
-    canal_id:b.canal_id,funil_id:b.funil_id,modo:b.modo,base_aprovada:b.base_aprovada.trim(),
-    contatos_teste:b.contatos_teste,aprovado_em:null,aprovado_por:null,evidencia_homologacao:null,
-    atualizado_em:new Date().toISOString()},{onConflict:'conta_id'});
-  return error?NextResponse.json({erro:'Não foi possível salvar o BDR.'},{status:503}):NextResponse.json({ok:true});
+  if([canal,funil,ex].some(x=>x.error)||!canal.data||!funil.data)return NextResponse.json({erro:'Canal/funil inválido nesta workspace.'},{status:403});
+  if(ex.data?.modo&&ex.data.modo!=='simulacao')return NextResponse.json({erro:'Pause e homologue a operação antes de editar uma configuração com envio habilitado.'},{status:409});
+  if(ex.data&&(ex.data.canal_id!==b.canal_id||ex.data.funil_id!==b.funil_id||ex.data.codigo_anuncio!==b.codigo_anuncio)){
+    const [ss,rr]=await Promise.all(['bdr_sessoes','superlogica_registros'].map(t=>c.admin.from(t).select('id',{count:'exact',head:true}).eq('conta_id',c.perfil.conta_id)));
+    if(ss.error||rr.error||ss.count||rr.count)return NextResponse.json({erro:'Há sessões/capturas vinculadas. A troca de imóvel/canal/funil exige migração específica; a ficha continua editável.'},{status:409});
+  }
+  const patch={canal_id:b.canal_id,funil_id:b.funil_id,codigo_anuncio:b.codigo_anuncio,base_aprovada:b.base_aprovada.trim(),atualizado_em:new Date().toISOString()};
+  const q=ex.data?c.admin.from('bdr_config').update(patch).eq('conta_id',c.perfil.conta_id).eq('atualizado_em',ex.data.atualizado_em):
+    c.admin.from('bdr_config').insert({...patch,conta_id:c.perfil.conta_id,modo:'simulacao'});
+  const {data,error}=await q.select('*').maybeSingle();
+  if(error||!data)return NextResponse.json({erro:'Não foi possível salvar. Recarregue a configuração e confira a migration 056.'},{status:409});
+  return NextResponse.json({config:data,ok:true,ativado:false});
 }

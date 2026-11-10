@@ -51,6 +51,14 @@ test('cutover preserva planilha/resposta/credenciais e recusa escritor legado, m
   const retries=structuredClone(ready);retries[2].nodes[0].retryOnFail=true;assert.throws(()=>validarEscritorUnico(retries),/child_sem_protecao/);
   const draft=structuredClone(ready);draft[0].versionId='rascunho';assert.throws(()=>validarEscritorUnico(draft),/versao_publicada/);
 });
+test('renda, UTMs, GCLID, protocolo e comentário não se perdem no adapter gerado',()=>{
+  const input={...p,comentarioLead:'Protocolo AB-TESTE | Renda familiar: faixa declarada',origem:{source_channel:'lp',renda_familiar:'3 a 5 mil',
+    utm_source:'google',utm_medium:'cpc',utm_campaign:'teste',utm_term:'termo recebido',utm_content:'grupo-a',gclid:'gclid-ficticio',protocolo:'AB-TESTE'}};
+  const mapped=adaptarLeadParaChild(input);assert.equal(mapped['Renda familiar'],'3 a 5 mil');assert.equal(mapped.Termo,'termo recebido');
+  assert.equal(mapped.gclid,'gclid-ficticio');assert.equal(mapped.protocolo_origem,'AB-TESTE');assert.equal(mapped.comentarioLead,input.comentarioLead);
+  assert.deepEqual(mapped.origem,input.origem);assert.deepEqual(code('Adaptar contrato do child existente',input),mapped);
+  assert(!('responsavel' in mapped));assert(!('usuario_id' in mapped));
+});
 test('HTTP 200, success, simulação, consulta incompleta e cadastros múltiplos não confirmam CRM',()=>{
   for(const r of [{status:'SIMULADO',message:'Sem envio externo'},{statusCode:200,body:{ok:true}},
     {status:'cadastrado',confirmado_crm:true}, {...consulta([]),completa:false},consulta([lead,{...lead,id_superlogica:'crm-456'}])])

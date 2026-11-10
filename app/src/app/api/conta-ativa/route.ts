@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin, COOKIE_CONTA } from '@/lib/supabase/server';
+import {COOKIE_DELEGACAO,auditarServico,carregarRecursos,encerrarDelegacao} from '@/lib/servicosWorkspace';
 
 /**
  * Troca de workspace.
@@ -17,8 +18,10 @@ export async function POST(req: Request) {
 
   // "Sair da conta" — limpa cookie
   if (!conta_id) {
+    if(perfil.delegacao)await encerrarDelegacao(admin,perfil.delegacao.id,perfil.id);
     const res = NextResponse.json({ ok: true });
     res.cookies.delete(COOKIE_CONTA);
+    res.cookies.delete(COOKIE_DELEGACAO);
     return res;
   }
 
@@ -36,7 +39,11 @@ export async function POST(req: Request) {
 
   // Super admin: acesso global, SEMPRE permitido
   if (perfil.papel === 'super_admin') {
+    const c=await carregarRecursos(admin,conta_id);
+    if(c.migrada)await auditarServico(admin,conta_id,perfil.id,'workspace_selecionada',{contexto:'contrato_normal',anterior:perfil.conta_id});
+    if(perfil.delegacao)await encerrarDelegacao(admin,perfil.delegacao.id,perfil.id);
     const res = NextResponse.json({ ok: true });
+    res.cookies.delete(COOKIE_DELEGACAO);
     res.cookies.set(COOKIE_CONTA, String(conta_id), {
       httpOnly: true, sameSite: 'lax', secure: true, path: '/', maxAge: 60 * 60 * 12,
     });

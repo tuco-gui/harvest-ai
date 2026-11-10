@@ -43,6 +43,7 @@ const TIPOS_CHATWOOT: Record<string, string> = {
 
 type Props = {
   chatwootAccountId: number | null;
+  superAdmin?:boolean;
 };
 
 /**
@@ -53,7 +54,7 @@ type Props = {
  * Não cria conectores próprios — usa o Chatwoot como fonte de verdade.
  * A Inbox do Harvest é uma VISÃO do Chatwoot + contexto Harvest.
  */
-export default function CanaisChatwoot({ chatwootAccountId }: Props) {
+export default function CanaisChatwoot({ chatwootAccountId,superAdmin=false }: Props) {
   const [inboxes, setInboxes] = useState<InboxVinculado[]>([]);
   const [disponiveis, setDisponiveis] = useState<InboxDisponivel[]>([]);
   const [configurado, setConfigurado] = useState(!!chatwootAccountId);
@@ -62,6 +63,7 @@ export default function CanaisChatwoot({ chatwootAccountId }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [provisionavel,setProvisionavel]=useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -69,8 +71,11 @@ export default function CanaisChatwoot({ chatwootAccountId }: Props) {
     try {
       const r = await fetch('/api/canais/chatwoot');
       const d = await r.json();
+      setProvisionavel(d.provisionamento_disponivel===true);
+      if(!r.ok)setErro(d.erro??'Integração indisponível.');
       if (d.ok || d.configurado) {
         setConfigurado(d.configurado);
+        if(d.chatwootAccountId)setAccountId(String(d.chatwootAccountId));
         setInboxes(d.inboxes ?? []);
         setDisponiveis(d.disponiveis ?? []);
       } else {
@@ -83,6 +88,14 @@ export default function CanaisChatwoot({ chatwootAccountId }: Props) {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+  async function provisionar(){
+    setSalvando(true);setErro(null);setMensagem(null);
+    try{
+      const r=await fetch('/api/canais/chatwoot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'provisionar'})});
+      const d=await r.json();if(!r.ok)throw Error(d.erro);
+      setAccountId(String(d.chatwootAccountId));await carregar();setMensagem('Conta provisionada e vinculada. Conecte agora os canais autorizados. Nenhuma IA foi ativada.');
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao provisionar.');}finally{setSalvando(false);}
+  }
 
   async function configurarAccount() {
     setSalvando(true);
@@ -171,10 +184,12 @@ export default function CanaisChatwoot({ chatwootAccountId }: Props) {
       </p>
 
       {/* Configuração do Account ID */}
-      {!configurado && (
+      {!configurado&&<div><button type="button" disabled={carregando||salvando||!provisionavel} onClick={()=>void provisionar()}>{salvando?'Provisionando…':'Preparar Inbox desta workspace'}</button>
+        {!provisionavel&&<p className="ajuda">Provisionamento pela API administrativa aguardando credencial Platform App e usuário técnico da Figueira. Uma licença Inbox não comprova conta provisionada.</p>}</div>}
+      {!configurado && superAdmin && (
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
-            Chatwoot Account ID
+            Vincular conta existente (administração global)
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input

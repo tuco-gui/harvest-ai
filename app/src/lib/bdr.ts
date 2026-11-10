@@ -7,10 +7,11 @@ import { carregarConexaoIA } from './conexaoIAWorkspace.ts';
 import { gerarComIA } from './ia.ts';
 import { enviarTextoCanal } from './whatsappEnvioCanal.ts';
 import { CATALOGO_AGENTES } from './agentes.ts';
+import {recursoDaWorkspace} from './servicosWorkspace.ts';
 import type { CanalWhatsApp } from './whatsappCanais';
 
 type ConfigBDR = {conta_id:string;canal_id:number;funil_id:number;modo:string;aprovado_em:string|null;
-  aprovado_por:string|null;base_aprovada:string;contatos_teste:string[]};
+   aprovado_por:string|null;base_aprovada:string;contatos_teste:string[];codigo_anuncio?:string};
 type SessaoBDR = {id:string;conta_id:string;canal_id:number;telefone:string;lead_id:number;
   estado:EstadoBDR;qualificacao:Qualificacao;resumo:string;ultima_entrada_id:number;
   processada_entrada_id:number|null;versao:number;envio_pendente:boolean;
@@ -19,6 +20,7 @@ type SessaoBDR = {id:string;conta_id:string;canal_id:number;telefone:string;lead
 /** Falha fechada, inclusive se a consulta de opt-out/conta/canal falhar. */
 async function podeEnviar(admin: SupabaseClient, cfg: ConfigBDR, s: SessaoBDR) {
   if (!envioBdrPermitido(cfg,s.telefone) || !horarioPermitido(new Date())) return false;
+  if(!(await recursoDaWorkspace(admin,s.conta_id,['agentes.bdr','agentes.whatsapp','agentes.responder'],'enviar')))return false;
   const [opt,sup,conta,canal,humano,pausa] = await Promise.all([
     admin.from('opt_outs').select('id').eq('conta_id',s.conta_id).eq('telefone',s.telefone).eq('status','ativo').limit(1),
     admin.from('conta_supressao').select('telefone').eq('conta_id',s.conta_id).eq('telefone',s.telefone).limit(1),
@@ -52,6 +54,7 @@ export async function assumirBDR(admin: SupabaseClient, contaId: string, canalId
 
 export async function executarSessaoBDR(admin: SupabaseClient, cfg: ConfigBDR, s: SessaoBDR) {
   if (estadoBloqueiaBDR(s.estado) || s.envio_pendente) return;
+  if(!(await recursoDaWorkspace(admin,s.conta_id,['agentes.bdr'],'simular')))return;
   const novaEntrada = s.ultima_entrada_id!==s.processada_entrada_id;
   const followup = !novaEntrada && s.consentimento_followup && s.proximo_followup && Date.parse(s.proximo_followup)<=Date.now();
   if (!novaEntrada && !followup) return;
@@ -69,12 +72,17 @@ export async function executarSessaoBDR(admin: SupabaseClient, cfg: ConfigBDR, s
       .eq('conta_id',s.conta_id).eq('canal_id',s.canal_id).eq('telefone',s.telefone)
       .order('recebido_em',{ascending:false}).limit(12);
     if (errHistorico || errEntradas) throw Error('historico_indisponivel');
-    const {data:agente,error:errAgente} = await admin.from('agentes_workspace').select('instrucao,ativo')
+    const {data:agente,error:errAgente} = await admin.from('agentes_workspace').select('*')
       .eq('conta_id',s.conta_id).eq('tipo','bdr').maybeSingle();
     if (errAgente || !agente?.ativo) throw Error('agente_bdr_inativo');
+    if(agente.configuracao){
+      const a=agente.configuracao;
+      if(cfg.modo!=='simulacao'||(a.canais?.length&&!a.canais.includes(s.canal_id))||(a.funis?.length&&!a.funis.includes(cfg.funil_id)))return;
+      // Configuração de instância é manual/rascunho até nova homologação operacional.
+    }
     const {conexao} = await carregarConexaoIA(admin,s.conta_id);
     if (!conexao) throw Error('ia_nao_configurada');
-    const prompt = promptsBDR(cfg.base_aprovada,s.qualificacao,{entradas,saidas:historico},
+    const prompt = promptsBDR([cfg.base_aprovada,agente.configuracao?.conhecimento].filter(Boolean).join('\n'),s.qualificacao,{entradas,saidas:historico},
       novaEntrada?entrada.mensagem??'[Mídia recebida: peça esclarecimento ou encaminhe ao humano]':
         s.followups===3?'Encerre respeitosamente a cadência inicial, sem pergunta ou pressão.':
           'Retomada contextual autorizada: aproveite o histórico, não repita perguntas já respondidas.');
@@ -87,8 +95,9 @@ export async function executarSessaoBDR(admin: SupabaseClient, cfg: ConfigBDR, s
     const qualificado = qualificacaoCompleta(qualificacao);
     const estado: EstadoBDR = decisao.handoff?'aguardando_corretor':decisao.frio?'nutricao':
       qualificado?'aguardando_corretor':followup?'sem_resposta':s.processada_entrada_id===null?'contato_iniciado':'em_qualificacao';
-    const resumo = resumoBDR(qualificacao,{source_channel:'whatsapp'},estado);
-    if (!entrada.nome_contato && qualificacao.nome) await capturarLeadSuperlogica(admin,s.conta_id,{
+    const resumo = resumoBDR(qualificacao,{source_channel:'whatsapp'},estado,cfg.codigo_anuncio);
+    if (!entrada.nome_contato && qualificacao.nome&&cfg.codigo_anuncio==='CA0653_MMOL'&&
+      (process.env.REALIZE_SUPERLOGICA_WORKSPACES??'').split(',').map(x=>x.trim()).includes(s.conta_id)) await capturarLeadSuperlogica(admin,s.conta_id,{
       chave:`bdr:${s.id}`,nome:qualificacao.nome,telefone:s.telefone,email:null,leadId:s.lead_id,
       origem:{source_channel:'whatsapp'}});
     const simulado = cfg.modo==='simulacao';

@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import {registerHooks} from 'node:module';
 const etapas:string[]=[];
 const fixture={
+  bloqueado:false,
   db:{from(tabela:string){const q:any={select(){return q;},eq(){return q;},limit(){return q;},maybeSingle(){return q;},then(resolve:any){
-    const rows:any={chatwoot_inboxes:[{conta_id:'workspace-a',whatsapp_canal_id:1}],crm_vinculos:{ativo:true},whatsapp_canais:{id:1},funis:[{id:2}]};
+    const rows:any={contas:{id:'workspace-a',ativo:true,slug:'cliente-a',modulos_habilitados:[]},conta_recursos:fixture.bloqueado?[{recurso:'integracoes.chatwoot',liberado:false}]:[],chatwoot_inboxes:[{conta_id:'workspace-a',whatsapp_canal_id:1}],crm_vinculos:{ativo:true},whatsapp_canais:{id:1},funis:[{id:2}]};
     assert(tabela in rows);resolve({data:rows[tabela],error:null});}};return q;}},
   assumir:async()=>{etapas.push('pausa_persistida_antes_da_sessao');},
   receber:async(_db:unknown,e:any,conta:string,canal:number,funil:number)=>{
@@ -27,6 +28,9 @@ try{
     conversation:{id:7,inbox_id:3,meta:{assignee:{id:4},sender:{type:'contact',phone_number:'+5514999999999'}}}};
   const r=await POST(new Request('https://harvest.test/api/webhook/chatwoot',{method:'POST',headers:{'Content-Type':'application/json','x-webhook-token':'token-ficticio'},body:JSON.stringify(body)}));
   assert.equal(r.status,200);assert.deepEqual(etapas,['pausa_persistida_antes_da_sessao','inbound_registrado']);
+  fixture.bloqueado=true;
+  const negado=await POST(new Request('https://harvest.test/api/webhook/chatwoot',{method:'POST',headers:{'Content-Type':'application/json','x-webhook-token':'token-ficticio'},body:JSON.stringify(body)}));
+  assert.equal((await negado.json()).motivo,'integracao_nao_liberada');assert.equal(etapas.length,2);
   console.log('Chatwoot: ownership pré-sessão persiste e incoming continua na Inbox.');
 }finally{h.deregister();delete (globalThis as any).__bdrCw;
   if(tokenAnterior===undefined)delete process.env.CHATWOOT_WEBHOOK_TOKEN;else process.env.CHATWOOT_WEBHOOK_TOKEN=tokenAnterior;}

@@ -1,6 +1,7 @@
 import { createHash,timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
+import {recursoDaWorkspace} from '@/lib/servicosWorkspace';
 
 type Ctx={params:Promise<{token:string}>};
 type Fonte={id:string;conta_id:string;nome:string;dominio:string|null;tipo:string;status:string};
@@ -18,7 +19,8 @@ async function carregarFonte(token:string):Promise<Fonte|null>{
  const {data}=await supabaseAdmin().from('crm_fontes_funil')
   .select('id,conta_id,nome,dominio,tipo,status')
   .eq('token_publico',token).eq('tipo','webchat').maybeSingle();
- return data??null;
+  if(data&&!(await recursoDaWorkspace(supabaseAdmin(),data.conta_id,['inbox.webchat'])))return null;
+  return data??null;
 }
 function naoEncontrado(){return NextResponse.json({erro:'Webchat não disponível.'},{status:404});}
 function conferirSegredo(atual:string,enviado:string){

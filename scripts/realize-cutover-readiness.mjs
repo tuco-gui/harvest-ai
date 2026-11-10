@@ -12,6 +12,6 @@ const bloqueios=[];
 if(status!==401)bloqueios.push('endpoint_bdr_nao_publicado_ou_nao_verificado');
 if(!db.schema_bdr_instalado)bloqueios.push('migration_bdr_nao_aplicada');
 if(!db.workspace_realize_existente)bloqueios.push('workspace_realize_ausente');
-console.log(JSON.stringify({operacao:'preflight_cutover_somente_leitura',endpoint_status:status,...db,infraestrutura_minima_pronta:bloqueios.length===0,cutover_permitido:false,bloqueios,
+console.log(JSON.stringify({operacao:'preflight_cutover_somente_leitura',endpoint_status:status,...db,infraestrutura_minima_pronta:bloqueios.length===0,exclusividade_do_escritor:'nao_avaliada_por_este_preflight',bloqueios,
   exige_tambem:['autenticacao ponta a ponta','configuracao CRM e canal/funil Realize','drenagem das execucoes antigas','validarEscritorUnico nas versoes publicadas','preservacao dos protocolos']}));
 if(bloqueios.length)process.exitCode=2;
