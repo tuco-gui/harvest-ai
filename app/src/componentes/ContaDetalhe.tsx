@@ -102,12 +102,12 @@ export default function ContaDetalhe({
           {conta.nome} {!conta.ativo && <span className="selo" data-zap-selo="nao">inativa</span>}
         </h2>
         <button type="button" className="salvar" onClick={trabalharNestaConta}>Trabalhar nesta conta</button>
-        <Link className="btn-teste" href={'/contas/'+conta.id+'/servicos'}>Serviços e Permissões</Link>
+        <Link className="btn-teste" href={'/contas/'+conta.id+'/servicos'}>Gerenciar serviços desta conta</Link>
       </div>
 
       <div className="modos" style={{ marginTop: 16, marginBottom: 20 }}>
         <button aria-pressed={aba === 'usuarios'} onClick={() => setAba('usuarios')}>Usuários ({usuarios.length})</button>
-        <button aria-pressed={aba === 'modulos'} onClick={() => setAba('modulos')}>Módulos legados</button>
+        <Link href={'/contas/'+conta.id+'/servicos'} className="btn-teste">Serviços, CRM, Inbox e Agentes</Link>
         <button aria-pressed={aba === 'integracoes'} onClick={() => setAba('integracoes')}>Integrações</button>
         <button aria-pressed={aba === 'campanhas'} onClick={() => setAba('campanhas')}>Campanhas ({campanhas.length})</button>
         <button aria-pressed={aba === 'erros'} onClick={() => setAba('erros')}>
@@ -135,6 +135,7 @@ export default function ContaDetalhe({
         </table>
       )}
 
+      {/* Configuração antiga de módulos descontinuada na navegação: usar serviços granulares. */}
       {aba === 'modulos' && (
         <div className="cartaocfg">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
