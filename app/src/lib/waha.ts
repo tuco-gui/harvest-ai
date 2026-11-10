@@ -95,13 +95,26 @@ export async function getOrCreateSession(sessionName: string): Promise<WahaStatu
     atual = await getStatus(sessionName);
   }
   if (atual?.status === 'STOPPED' || atual?.status === 'FAILED') {
-    await fetch(`${base()}/api/sessions/${sessionName}/start`, {
+    // WAHA NOWEB: /start não recupera uma sessão FAILED; /restart sim.
+    // Em produção o POST pode responder 201 antes de emitir SCAN_QR_CODE.
+    // Não repassar o FAILED transitório ao front (que encerraria o polling).
+    const estavaFalha = atual.status === 'FAILED';
+    const acao = estavaFalha ? 'restart' : 'start';
+    const reinicio = await fetch(`${base()}/api/sessions/${sessionName}/${acao}`, {
       method: 'POST',
       headers: headers(),
       signal: AbortSignal.timeout(20_000),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (!reinicio?.ok) return {status:'ERRO'};
     atual = await getStatus(sessionName);
-    precisavaCriar = true; // start também pode precisar de webhook
+    if (estavaFalha) {
+      for (let tentativas=0; atual?.status==='FAILED' && tentativas<4; tentativas++) {
+        await new Promise(resolve=>setTimeout(resolve,500));
+        atual=await getStatus(sessionName);
+      }
+      if (atual?.status==='FAILED') return {status:'ERRO'};
+    }
+    precisavaCriar = true; // start/restart pode exigir novo webhook
   }
 
   // Sempre garante que o webhook está registrado — tanto na criação quanto
