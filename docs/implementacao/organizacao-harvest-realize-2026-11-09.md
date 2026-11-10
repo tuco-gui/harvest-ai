@@ -377,3 +377,30 @@ Confirmar acesso logado às telas da Realize no Harvest, validar CRM interno (12
 serviços por conta e Integrações, testar vínculo incremental sem disparo,
 então parear WAHA com QR apenas com operador do número. Não liberar atendimento
 automático nem distribuição comercial antes dos gates correspondentes.
+
+
+## 12. Corrigido WAHA sem QR — 10/11/2026 (PR #49)
+
+- Diagnóstico em produção, sem ler segredos: canal WAHA `24` da Realize,
+  nome de sessão `harvest_ce15f29bce0f409c978525f363dc74d5_c24`, estava
+  `FAILED`; havia webhook HMAC registrado, mas a tentativa de `POST /start`
+  retornava HTTP 201 mantendo `FAILED`.
+- `POST /api/sessions/{name}/restart` foi testado na própria API WAHA da
+  instalação: retornou HTTP 201 e evoluiu a `SCAN_QR_CODE` em consulta posterior.
+  O QR expira se ninguém o ler; não constitui conexão com o telefone.
+- `app/src/lib/waha.ts` passou a usar `/restart` para `FAILED` e aguardar
+  por até 2 segundos a transição assíncrona; `STOPPED` continua usando
+  `/start`, erro HTTP continua fail-closed.
+- Testes unitários novos passaram no CI junto a TypeScript e build Next.js.
+  PR #49 mesclado (`21f87ded374b835f59984612969db57d1d999b0d`).
+- GitHub Actions run `42849385827`: build, deploy Swarm e smoke HTTP
+  **sucesso**. Serviço `harvest_harvest` atualizado em
+  `2026-11-10T15:57:22Z`, imagem
+  `sha256:e2fc7d065a777aaba96ea1b759b534a93ce6d6b9f2c55db806e04816a79dbc75`.
+- Pós-release, PostgreSQL confirmado: Realize segue com 12 leads, 12 contatos
+  e 12 oportunidades locais e BDR em `simulacao`.
+- **Dependência humana agora:** operador do número +55 14 99708-0405 deve
+  escanear um QR fresco em Configurações → Integrações → WhatsApp/canal Realize.
+  Não afirmar pareamento, recebimento real, respostas IA ou envio ao Superlógica
+  a partir desses testes técnicos. Não ativar BDR enquanto o piloto não estiver
+  homologado para `5514997754659`.
