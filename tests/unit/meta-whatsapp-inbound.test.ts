@@ -4,6 +4,7 @@ import { test, mock } from 'node:test';
 const chamadas: Array<{ conta: string; lead: any }> = [];
 let duplicate = false;
 let funilConfig = 13;
+let tokenMeta: string|null = 'cifrado';
 
 mock.module('../../app/src/lib/superlogica.ts', {
   namedExports: {
@@ -38,7 +39,7 @@ function admin() {
           if (tabela === 'crm_fontes_funil') {
             return resolve({ data: [{
               id: 'fonte-1', conta_id: 'conta-1', funil_id: 13,
-              meta_token_cifrado: 'cifrado', status: 'pronto',
+              meta_token_cifrado: tokenMeta, status: 'pronto',
             }], error: null });
           }
           if (tabela === 'crm_conversas_externas') {
@@ -91,6 +92,19 @@ test('normaliza WhatsApp Cloud API e ignora status/mídia', () => {
   assert.equal(eventos[0].remetenteId, '5514997754659');
   assert.equal(eventos[0].mensagemId, 'wamid.1');
   assert.equal(eventos[0].nomeContato, 'Piloto');
+});
+
+test('WhatsApp HMAC pré-validado no endpoint não depende de OAuth Instagram, mas outras fontes dependem', async () => {
+ chamadas.length = 0;
+ tokenMeta = null;
+ try {
+  const evento = extrairMensagensMeta(payload)[0];
+  assert.equal(await gravarMensagemMeta(admin(),evento),'gravada');
+  assert.equal(chamadas.length,1,'webhook WhatsApp recebe mesmo sem token OAuth por fonte');
+  const semToken = {...evento,plataforma:'instagram_dm' as const};
+  assert.equal(await gravarMensagemMeta(admin(),semToken),'ignorada',
+    'Instagram/Messenger não devem aceitar fonte sem token próprio');
+ }finally{tokenMeta='cifrado';}
 });
 
 test('captura idempotente alcança o piloto e também outros contatos nomeados', async () => {
