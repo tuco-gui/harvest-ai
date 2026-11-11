@@ -25,6 +25,12 @@ assert(!validarValoresPersonalizados({segmento:''},[campo]).ok);
 assert(!validarValoresPersonalizados({nome_desconhecido:'x'},[campo]).ok);
 assert(validarCadastro('produtos',{nome:'Plano de mídia',preco:-1}));
 assert.equal(validarCadastro('produtos',{nome:'Plano de mídia',preco:199.90,ativo:true}),null);
+assert.equal(validarCadastro('produtos',{nome:'Alea',preco:0,imagens:[{url:'https://example.com/fachada.jpg',legenda:'Fachada ilustrativa',ilustrativa:true}]}),null);
+assert(validarCadastro('produtos',{nome:'Alea',preco:0,imagens:[{url:'javascript:alert(1)',legenda:'X',ilustrativa:true}]}));
+assert(validarCadastro('produtos',{nome:'Alea',preco:0,imagens:[{url:'http://localhost/foto',legenda:'X',ilustrativa:true}]}));
+assert(validarCadastro('produtos',{nome:'Alea',preco:0,imagens:[{url:'https://x.com/f',legenda:'X'}]}));
+assert(validarCadastro('produtos',{nome:'Alea',preco:0,imagens:Array.from({length:13},()=>({url:'https://x.com/a.jpg',legenda:'',ilustrativa:true}))}));
+
 assert(validarCadastro('contatos',{nome:'A',empresa_id:9}));
 assert(!modulosDaConta(['crm'],'super_admin').has('crm_avancado'));
 assert(modulosDaConta(['crm','crm_avancado'],'admin').has('crm_avancado'));
