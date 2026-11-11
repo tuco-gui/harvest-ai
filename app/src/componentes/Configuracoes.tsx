@@ -87,6 +87,10 @@ export default function Configuracoes(p: Props) {
   const [wahaStatus, setWahaStatus] = useState<{ status: string; qr: string | null; numero: string | null } | null>(null);
   const [wahaCarregando, setWahaCarregando] = useState(false);
   const [wahaErro, setWahaErro] = useState<string | null>(null);
+  const [codigoPareamento, setCodigoPareamento] = useState<string | null>(null);
+  const [numeroPareamento, setNumeroPareamento] = useState('');
+  const [solicitandoCodigo, setSolicitandoCodigo] = useState(false);
+  const [provedorPareamento, setProvedorPareamento] = useState<'waha'|'evolution'>('waha');
   // Cada linha WAHA controla sua própria sessão (tenant + canal).
   const [wahaPainelAberto, setWahaPainelAberto] = useState(false);
   const [wahaCanalAlvo, setWahaCanalAlvo] = useState<number | null>(null);
@@ -167,7 +171,11 @@ export default function Configuracoes(p: Props) {
   // wahaStatus — resultado era canal criado, WAHA nunca era acionado, QR
   // nunca aparecia. Este hotfix reconecta a chamada a um botão real por
   // canal WAHA (ver seção "WhatsApp — canais" abaixo).
-  async function conectarWaha(canalId: number) {
+  async function conectarWaha(canalId: number, tipo: 'waha'|'evolution'='waha') {
+    const provedor=(p.canais.find(c=>c.id===canalId)?.provider??tipo)==='evolution'?'evolution':'waha';
+    setProvedorPareamento(provedor);
+    setCodigoPareamento(null);
+    setNumeroPareamento(p.canais.find(c=>c.id===canalId)?.numero??novoCanalNumero??'');
     if(p.recursos&&!p.recursos.includes('inbox.whatsapp')){setAviso('WhatsApp não liberado para esta workspace.');return;}
     setWahaPainelAberto(true);
     setWahaCanalAlvo(canalId);
@@ -180,7 +188,7 @@ export default function Configuracoes(p: Props) {
       tentativas++;
       let r: Response;
       try {
-        r = await fetch(`/api/waha/session?canalId=${canalId}`);
+        r = await fetch(`/api/${provedor}/session?canalId=${canalId}`,{cache:'no-store'});
       } catch {
         setWahaCarregando(false);
         setWahaErro('Sem conexão com o servidor. Tente novamente.');
@@ -217,6 +225,23 @@ export default function Configuracoes(p: Props) {
     setWahaCanalAlvo(null);
     setWahaStatus(null);
     setWahaErro(null);
+    setCodigoPareamento(null);
+  }
+
+  async function solicitarCodigo() {
+    if(wahaCanalAlvo==null)return;
+    setSolicitandoCodigo(true);setWahaErro(null);setCodigoPareamento(null);
+    try{
+      const r=await fetch(`/api/${provedorPareamento}/session?canalId=${wahaCanalAlvo}`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({telefone:numeroPareamento.trim()}),
+      });
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw Error(d.erro??'Código de pareamento indisponível.');
+      if(typeof d.codigo!=='string')throw Error('Código não recebido.');
+      setCodigoPareamento(d.codigo);
+    }catch(e){setWahaErro(e instanceof Error?e.message:'Não foi possível gerar código.');}
+    finally{setSolicitandoCodigo(false)}
   }
 
   async function desconectarWaha() {
@@ -258,7 +283,7 @@ export default function Configuracoes(p: Props) {
       // Fluxo esperado (Hotfix P0): criar canal WAHA não conecta sozinho —
       // sem isso, o canal fica "Não conectado" pra sempre. Abre o painel de
       // QR imediatamente após salvar, sem exigir um segundo clique.
-      if (novoCanalProvider === 'waha' && d.canal?.id) conectarWaha(d.canal.id);
+      if (d.canal?.id) conectarWaha(d.canal.id,novoCanalProvider==='evolution'?'evolution':'waha');
     } else {
       const d = await r.json().catch(() => ({ erro: 'Não consegui conectar o número.' }));
       setAviso(d.erro ?? 'Não consegui conectar o número.');
@@ -514,10 +539,10 @@ export default function Configuracoes(p: Props) {
                       </td>
                       <td>{c.padrao ? '★' : ''}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        {c.provider === 'waha' && c.ativo && c.status !== 'conectado' && (
+                        {['waha','evolution'].includes(c.provider) && c.ativo && c.status !== 'conectado' && (
                           <>
                             <button type="button" className="ver-detalhes" style={{ fontWeight: 600 }}
-                                    onClick={() => conectarWaha(c.id)}>Conectar</button>
+                                    onClick={() => conectarWaha(c.id,c.provider==='evolution'?'evolution':'waha')}>Conectar</button>
                             {' · '}
                           </>
                         )}
@@ -559,8 +584,8 @@ export default function Configuracoes(p: Props) {
                   <label className="label" htmlFor="canal-provider">Provedor</label>
                   <select id="canal-provider" value={novoCanalProvider} onChange={(e) => setNovoCanalProvider(e.target.value)}
                           style={{ width: '100%', height: 46, padding: '0 12px', background: 'var(--sunken)', border: '1px solid var(--rule)', borderRadius: 2, fontSize: 15 }}>
-                    <option value="waha">WAHA (QR Code)</option>
-                    <option value="evolution">Evolution (instância)</option>
+                    <option value="waha">WAHA (QR Code ou código)</option>
+                    <option value="evolution">Evolution (QR Code ou código)</option>
                   </select>
                 </div>
                 {novoCanalProvider === 'evolution' && (
@@ -586,7 +611,7 @@ export default function Configuracoes(p: Props) {
                   <div className="cartaocfg" style={{ marginTop: 14, border: '1px solid var(--rule)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <b style={{ fontSize: 14 }}>
-                        Conexão WhatsApp (WAHA){canalAlvo ? ` — ${canalAlvo.nome}` : ''}
+                        Conexão WhatsApp ({provedorPareamento==='waha'?'WAHA':'Evolution'}){canalAlvo ? ` — ${canalAlvo.nome}` : ''}
                       </b>
                       <button type="button" className="ver-detalhes" onClick={fecharPainelWaha}>fechar</button>
                     </div>
@@ -611,7 +636,7 @@ export default function Configuracoes(p: Props) {
                           <p className="ajuda">Gerando QR Code…</p>
                         )}
 
-                        {wahaStatus?.status === 'SCAN_QR_CODE' && wahaStatus.qr && (
+                        {wahaStatus?.status === 'SCAN_QR_CODE' && wahaStatus.qr && !codigoPareamento && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
                             <img src={wahaStatus.qr} alt="QR Code do WhatsApp" style={{ maxWidth: 260 }} />
                             <p className="ajuda">
@@ -619,12 +644,25 @@ export default function Configuracoes(p: Props) {
                               Conectar um aparelho → escaneie o código acima. Aguardando leitura…
                             </p>
                             <button type="button" className="btn-teste" disabled={wahaCarregando}
-                                    onClick={() => wahaCanalAlvo && conectarWaha(wahaCanalAlvo)}>
+                                    onClick={() => wahaCanalAlvo && conectarWaha(wahaCanalAlvo,provedorPareamento)}>
                               Atualizar QR
                             </button>
                           </div>
                         )}
 
+                        {!jaConectado&&<div style={{borderTop:'1px solid var(--rule)',paddingTop:12,marginTop:12}}>
+                          <b>Alternativa: conectar com código</b>
+                          <p className="ajuda">Informe o número do próprio canal com DDI e DDD. No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho → Conectar com número de telefone.</p>
+                          <div style={{display:'flex',gap:10,alignItems:'end',flexWrap:'wrap'}}>
+                            <label style={{flex:'1 1 190px'}}>Número com DDI e DDD
+                              <input value={numeroPareamento} onChange={e=>setNumeroPareamento(e.target.value)} inputMode="tel" placeholder="5514999999999"/>
+                            </label>
+                            <button type="button" className="btn-teste" disabled={solicitandoCodigo||wahaStatus?.status==='WORKING'}
+                              onClick={()=>void solicitarCodigo()}>{solicitandoCodigo?'Gerando…':'Gerar código de pareamento'}</button>
+                          </div>
+                          {codigoPareamento&&<p role="status" style={{fontSize:22,fontWeight:700,letterSpacing:3,marginTop:12}}>{codigoPareamento}</p>}
+                          {codigoPareamento&&<p className="ajuda">Digite esse código no celular para concluir a conexão. Acompanhe o status nesta tela.</p>}
+                        </div>}
                         {wahaStatus && !wahaErro && wahaStatus.status !== 'SCAN_QR_CODE' && wahaStatus.status !== 'WORKING' && (
                           <p className="ajuda">Conectando… (status: {wahaStatus.status})</p>
                         )}
@@ -633,7 +671,7 @@ export default function Configuracoes(p: Props) {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
                             <p className="ajuda" style={{ color: 'var(--red)' }}>{wahaErro}</p>
                             <button type="button" className="btn-teste" disabled={wahaCarregando}
-                                    onClick={() => wahaCanalAlvo && conectarWaha(wahaCanalAlvo)}>
+                                    onClick={() => wahaCanalAlvo && conectarWaha(wahaCanalAlvo,provedorPareamento)}>
                               Tentar novamente
                             </button>
                           </div>

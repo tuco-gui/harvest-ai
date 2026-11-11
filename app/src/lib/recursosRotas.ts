@@ -38,6 +38,7 @@ export function politicaDaRota(path:string,method='GET',b:Record<string,unknown>
    return p(ks,path.endsWith('/testar')?'simular':b.ativo===true||b.modo==='producao'||b.modo==='homologacao'?'ativar':e);
  }
  if(path.startsWith('/api/waha/'))return p(['inbox.whatsapp','integracoes.waha'],e);
+ if(path.startsWith('/api/evolution/'))return p(['inbox.whatsapp'],e);
  if(path.startsWith('/api/canais/chatwoot'))return p(['integracoes.chatwoot'],e);
  if(path.startsWith('/api/canais'))return p(['inbox.whatsapp'],e);
  if(path.startsWith('/api/zernio/'))return p(['integracoes.zernio'],e);
