@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
-import { getOrCreateSession, getQrCode, getNumeroConectado, logoutSession } from '@/lib/waha';
+import { getOrCreateSession, getQrCode, getNumeroConectado, logoutSession, solicitarCodigoWaha } from '@/lib/waha';
 import { carregarCanais, sessaoWahaDoCanal, type CanalWhatsApp } from '@/lib/whatsappCanais';
 
 async function canalDaRequisicao(req: Request, contaId: string): Promise<CanalWhatsApp | null> {
@@ -56,5 +56,27 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ erro: 'Não consegui desconectar do WAHA.' }, { status: 502 });
+  }
+}
+
+/** Pareamento opcional; não altera envio, agente ou outros canais. */
+export async function POST(req: Request) {
+  const perfil = await perfilAtual();
+  if (!perfil?.conta_id) return NextResponse.json({erro:'Escolha uma conta.'},{status:400});
+  if (perfil.papel==='operador') return NextResponse.json({erro:'Sem permissão.'},{status:403});
+  const canal=await canalDaRequisicao(req,perfil.conta_id);
+  if(!canal || !canal.ativo) return NextResponse.json({erro:'Canal WAHA indisponível nesta conta.'},{status:404});
+  const dados=await req.json().catch(()=>({}));
+  const telefone=typeof dados.telefone==='string'?dados.telefone:'';
+  const numero=telefone.replace(/\D/g,'');
+  if(!/^\d{10,15}$/.test(numero)) return NextResponse.json({erro:'Informe o DDI, DDD e telefone válidos.'},{status:400});
+  if(canal.numero && canal.numero.replace(/\D/g,'')!==numero)
+    return NextResponse.json({erro:'O telefone informado não corresponde ao número deste canal.'},{status:409});
+  try {
+    const codigo=await solicitarCodigoWaha(sessaoWahaDoCanal(canal),numero);
+    return NextResponse.json({codigo},{headers:{'Cache-Control':'no-store'}});
+  } catch(e) {
+    const erro=e instanceof Error?e.message:'Pareamento indisponível.';
+    return NextResponse.json({erro},{status:erro==='Canal já conectado.'?409:502});
   }
 }
