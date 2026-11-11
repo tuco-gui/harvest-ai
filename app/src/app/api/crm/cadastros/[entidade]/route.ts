@@ -12,7 +12,7 @@ const TABELAS:Record<EntidadeCadastro,string> = {
 const CAMPOS:Record<EntidadeCadastro,string[]> = {
   empresas:['nome','cnpj','telefone','email','site','setor','campos_extras'],
   contatos:['nome','telefone','email','cargo','empresa_id','campos_extras'],
-  produtos:['nome','sku','descricao','preco','moeda','ativo'],
+  produtos:['nome','sku','descricao','preco','moeda','ativo','imagens'],
 };
 const NOMES:{[K in EntidadeCadastro]: 'empresa'|'contato'|null} = {
   empresas:'empresa',contatos:'contato',produtos:null,
