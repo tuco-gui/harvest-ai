@@ -21,7 +21,7 @@ function banco() {
     agentes_workspace:[{conta_id:conta,tipo:'bdr',ativo:true,instrucao:'Atenda consultivamente.'}],
     opt_outs:[],conta_supressao:[],crm_atendimentos_canais:[],bdr_pausas:[],prospecta_mensagens:[],historico_contato:[],conta_recursos:[],
     contas:[{id:conta,ativo:true,ambiente:'producao',modulos_habilitados:['crm','crm_avancado','agentes']}],
-    whatsapp_canais:[{id:1,conta_id:conta,ativo:true,provider:'waha'}]};
+    whatsapp_canais:[{id:1,conta_id:conta,ativo:true,provider:'waha'}],crm_produtos:[]};
   let aoLerConfig:(()=>void)|null=null;
   const admin:any={
     rpc:async(name:string,p:any)=>{
