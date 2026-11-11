@@ -227,6 +227,24 @@ export async function getQrCode(sessionName: string): Promise<string | null> {
   }
 }
 
+/** Código de pareamento do WAHA, solicitado somente pelo operador do canal. */
+export async function solicitarCodigoWaha(sessionName: string, telefone: string): Promise<string> {
+  const numero = telefone.replace(/\D/g, '');
+  if (!/^\d{10,15}$/.test(numero)) throw new Error('Telefone inválido para pareamento.');
+  const estado = await getOrCreateSession(sessionName);
+  if (estado.status === 'WORKING') throw new Error('Canal já conectado.');
+  if (estado.status === 'ERRO' || estado.status === 'FAILED') throw new Error('Sessão WAHA indisponível.');
+  const r = await fetch(`${base()}/api/${encodeURIComponent(sessionName)}/auth/request-code`, {
+    method: 'POST', headers: headers(), body: JSON.stringify({ phoneNumber: numero }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!r.ok) throw new Error('O WAHA não gerou o código. Tente QR Code.');
+  const d: {code?: unknown} = await r.json();
+  if (typeof d.code !== 'string' || !/^[A-Z0-9-]{6,12}$/i.test(d.code))
+    throw new Error('Resposta inesperada do pareamento WAHA.');
+  return d.code;
+}
+
 /** Desconecta e apaga a sessão — próxima chamada a getOrCreateSession recria do zero. */
 export async function logoutSession(sessionName: string): Promise<void> {
   await fetch(`${base()}/api/${sessionName}/logout`, {
