@@ -5,14 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { contatosDasOportunidades } from '@/lib/crmContatos';
 import type { Oportunidade } from '@/lib/twenty';
 import CamposDinamicosCRM from '@/componentes/CamposDinamicosCRM';
-import type { CampoDef, EntidadeCadastro } from '@/lib/crmCadastros';
+import type { CampoDef, EntidadeCadastro, ImagemProduto } from '@/lib/crmCadastros';
 import { PRODUTOS_POR_PAGINA, type EstadoCatalogo } from '@/lib/crmCatalogoBusca';
 
 type Registro = {
  id:number;nome:string;email?:string|null;telefone?:string|null;
  cnpj?:string|null;site?:string|null;setor?:string|null;cargo?:string|null;
  empresa_id?:number|null;sku?:string|null;descricao?:string|null;
- preco?:number;ativo?:boolean;campos_extras?:Record<string,unknown>;
+ preco?:number;ativo?:boolean;imagens?:ImagemProduto[];campos_extras?:Record<string,unknown>;
 };
 type Empresa = {id:number;nome:string};
 const NOMES:Record<EntidadeCadastro,string> = {
@@ -21,7 +21,7 @@ const NOMES:Record<EntidadeCadastro,string> = {
 const REGISTRO_INICIAL:Record<EntidadeCadastro,()=>Record<string,any>>={
  empresas:()=>({nome:'',cnpj:'',email:'',telefone:'',site:'',setor:'',campos_extras:{}}),
  contatos:()=>({nome:'',email:'',telefone:'',cargo:'',empresa_id:null,campos_extras:{}}),
- produtos:()=>({nome:'',sku:'',descricao:'',preco:0,ativo:true}),
+ produtos:()=>({nome:'',sku:'',descricao:'',preco:0,ativo:true,imagens:[] as ImagemProduto[]}),
 };
 const CAMPOS_COMUNS:Record<EntidadeCadastro,Array<{key:string;rotulo:string;tipo?:string}>>={
  empresas:[
@@ -111,6 +111,12 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
   finally{setImportando(false);}
  }
  function mudar(chave:string,val:unknown){setForm(v=>({...v,[chave]:val}));}
+ function mudarImagem(indice:number,campo:keyof ImagemProduto,valor:string|boolean){
+  setForm(v=>({...v,imagens:(v.imagens as ImagemProduto[]??[]).map((img,i)=>i===indice?{...img,[campo]:valor}:img)}));
+ }
+ function adicionarImagem(){setForm(v=>({...v,imagens:[...(v.imagens??[]),{url:'',legenda:'',ilustrativa:true}]}));}
+ function removerImagem(indice:number){setForm(v=>({...v,imagens:(v.imagens??[]).filter((_:ImagemProduto,i:number)=>i!==indice)}));}
+
  const pessoasDosNegocios = useMemo(
    () => entidade==='contatos' ? contatosDasOportunidades(oportunidadesRelacionadas) : [],
    [entidade,oportunidadesRelacionadas],
@@ -203,6 +209,18 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
    {entidade==='produtos'&&<>
      <label>Preço (BRL)<input type="number" min={0} step="0.01" required
        value={form.preco??0} onChange={e=>mudar('preco',Number(e.target.value))}/></label>
+     <section style={{gridColumn:'1 / -1',display:'grid',gap:10}}>
+       <h3>Galeria de imagens</h3>
+       <p className="ajuda">Adicione apenas imagens com permissão de uso. Marque como ilustrativa quando não representar uma unidade específica. Isso não autoriza envio automático pelo agente.</p>
+       {((form.imagens??[]) as ImagemProduto[]).map((img,indice)=><div key={indice} style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',border:'1px solid var(--rule)',padding:10,borderRadius:6}}>
+         {img.url.startsWith('https://')&&<img src={img.url} alt={img.legenda||'Prévia'} loading="lazy" style={{width:90,height:70,objectFit:'cover',borderRadius:5}}/>}
+         <label style={{flex:'2 1 240px'}}>URL HTTPS<input type="url" value={img.url} required placeholder="https://..." onChange={e=>mudarImagem(indice,'url',e.target.value)}/></label>
+         <label style={{flex:'1 1 160px'}}>Legenda<input value={img.legenda} maxLength={160} onChange={e=>mudarImagem(indice,'legenda',e.target.value)}/></label>
+         <label className="crm-checkbox"><input type="checkbox" checked={img.ilustrativa} onChange={e=>mudarImagem(indice,'ilustrativa',e.target.checked)}/> Ilustrativa</label>
+         <button type="button" onClick={()=>removerImagem(indice)}>Remover</button>
+       </div>)}
+       <button type="button" disabled={(form.imagens??[]).length>=12} onClick={adicionarImagem}>+ Adicionar imagem</button>
+     </section>
      <label className="crm-checkbox"><input type="checkbox" checked={form.ativo===true}
        onChange={e=>mudar('ativo',e.target.checked)}/> Produto ativo</label>
    </>}
@@ -236,11 +254,18 @@ export default function CadastrosCRM({ entidade, oportunidadesRelacionadas = [] 
     {!carregando&&filtrados.length===0&&<p className="ajuda">Nenhum registro encontrado.</p>}
      {!carregando&&filtrados.map(x=><article key={x.id} id={'cadastro-'+x.id} className="crm-cadastro-card">
       <strong>{x.nome}</strong>
-      {entidade==='produtos'?<p>R$ {Number(x.preco??0).toLocaleString('pt-BR',{minimumFractionDigits:2})} · {x.sku||'Sem SKU'}</p>
+      {entidade==='produtos'?<p>{Number(x.preco??0)>0?'R$ '+Number(x.preco).toLocaleString('pt-BR',{minimumFractionDigits:2}):'Preço sob consulta'} · {x.sku||'Sem SKU'}</p>
        :<p>{x.email||x.telefone||'Sem contato informado'}</p>}
        {entidade==='contatos'&&x.empresa_id&&<p>Empresa: {empresas.find(a=>a.id===x.empresa_id)?.nome||'Empresa vinculada'}</p>}
        {entidade==='contatos'&&oportunidadesRelacionadas.filter(o=>o.contato_id===x.id).map(o=>
         <Link key={o.id} href={'/crm?oportunidade='+encodeURIComponent(String(o.id))}>Abrir negócio #{o.id} · {o.empresa||o.contato}</Link>)}
+       {entidade==='produtos'&&Array.isArray(x.imagens)&&x.imagens.length>0&&
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',margin:'8px 0'}}>
+          {x.imagens.slice(0,6).map((img,i)=><figure key={i} style={{margin:0,width:100}}>
+           <img src={img.url} alt={img.legenda||x.nome} loading="lazy" style={{width:100,height:75,objectFit:'cover',borderRadius:6}}/>
+           <figcaption className="ajuda" style={{fontSize:11}}>{img.legenda}{img.ilustrativa?' · Ilustrativa':''}</figcaption>
+          </figure>)}
+        </div>}
        {entidade==='produtos'&&<p>{x.ativo?'Ativo':'Retirado do catálogo'}</p>}
       <button type="button" onClick={()=>editar(x)}>Editar cadastro</button>
       {entidade==='produtos'&&x.ativo&&<button type="button" disabled={salvando}

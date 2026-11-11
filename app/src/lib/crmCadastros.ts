@@ -1,4 +1,17 @@
 /** Esquema canônico dos cadastros CRM, com dados somente da workspace ativa. */
+export type ImagemProduto = {url:string;legenda:string;ilustrativa:boolean};
+/** Apenas URLs HTTPS; nunca usar imagens não homologadas para promessa de venda. */
+export function validarImagensProduto(valor:unknown): valor is ImagemProduto[] {
+ if(!Array.isArray(valor)||valor.length>12)return false;
+ return valor.every(img=>{
+  if(!img||typeof img!=='object'||Array.isArray(img))return false;
+  const x=img as Record<string,unknown>;
+  if(typeof x.url!=='string'||x.url.length>1000||!/^https:\/\//i.test(x.url))return false;
+  try{const u=new URL(x.url);if(u.username||u.password||!u.hostname||u.hostname==='localhost'||u.hostname.endsWith('.local'))return false;}catch{return false;}
+  return typeof x.legenda==='string'&&x.legenda.length<=160&&typeof x.ilustrativa==='boolean';
+ });
+}
+
 export const ENTIDADES_CRM = ['empresas','contatos','produtos'] as const;
 export type EntidadeCadastro = typeof ENTIDADES_CRM[number];
 export const ENTIDADES_CAMPOS = ['empresa','contato','oportunidade'] as const;
@@ -77,6 +90,8 @@ export function validarCadastro(entidade:EntidadeCadastro,b:any) {
        (typeof b[chave]!=='string'||b[chave].length>(chave==='descricao'?2000:220)))
       return 'Campo inválido: '+chave;
   }
+  if(entidade==='produtos'&&b.imagens!==undefined&&!validarImagensProduto(b.imagens))
+    return 'Galeria inválida: informe até 12 URLs HTTPS com legenda e identificação de imagem ilustrativa.';
   if(entidade==='produtos'&&(typeof b.preco!=='number'||!Number.isFinite(b.preco)||b.preco<0||b.preco>999999999999))
     return 'Informe um preço válido.';
   if(entidade==='produtos'&&b.ativo!==undefined&&typeof b.ativo!=='boolean')return 'Estado inválido.';
