@@ -121,6 +121,8 @@ jobs:
         run: node --experimental-strip-types tests/unit/canais-unificados.test.ts
       - name: Testar vínculo seguro do canal de cada funil
         run: node --experimental-strip-types tests/unit/canal-funil.test.ts
+      - name: Validar QR e código de pareamento WAHA / Evolution
+        run: node --experimental-strip-types --test tests/unit/whatsapp-pairing-dual.test.ts
       - name: Validar recuperação de QR WAHA após status FAILED
         run: node --experimental-strip-types tests/unit/waha-restart-qr.test.ts
       - name: Validar recepção por canal e roteamento não ambíguo
