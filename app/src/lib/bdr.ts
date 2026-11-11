@@ -89,7 +89,16 @@ export async function executarSessaoBDR(admin: SupabaseClient, cfg: ConfigBDR, s
     }
     const {conexao} = await carregarConexaoIA(admin,s.conta_id);
     if (!conexao) throw Error('ia_nao_configurada');
-    const prompt = promptsBDR([cfg.base_aprovada,agente.configuracao?.conhecimento].filter(Boolean).join('\n'),s.qualificacao,{entradas,saidas:historico},
+    // Busca somente o produto ativo da MESMA workspace pelo código do imóvel.
+    // Catálogo contém fatos descritivos; preço 0 significa "sob consulta".
+    const {data:produto} = await admin.from('crm_produtos').select('nome,descricao,preco,sku')
+      .eq('conta_id',s.conta_id).eq('sku',cfg.codigo_anuncio??'').eq('ativo',true).maybeSingle();
+    const fichaCatalogo=produto
+      ? ['Produto do catálogo Harvest ('+produto.sku+'): '+produto.nome,
+         produto.descricao??'',
+         Number(produto.preco)>0?'Preço cadastrado no catálogo: R$ '+Number(produto.preco).toFixed(2)+' (confirmar atualização com corretor antes de informar)':'Preço ainda não homologado; encaminhe ao corretor.'].join('\n')
+      : '';
+    const prompt = promptsBDR([cfg.base_aprovada,fichaCatalogo,agente.configuracao?.conhecimento].filter(Boolean).join('\n'),s.qualificacao,{entradas,saidas:historico},
       novaEntrada?entrada.mensagem??'[Mídia recebida: peça esclarecimento ou encaminhe ao humano]':
         s.followups===3?'Encerre respeitosamente a cadência inicial, sem pergunta ou pressão.':
           'Retomada contextual autorizada: aproveite o histórico, não repita perguntas já respondidas.');
