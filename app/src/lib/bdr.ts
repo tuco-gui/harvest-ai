@@ -7,6 +7,7 @@ import { carregarConexaoIA } from './conexaoIAWorkspace.ts';
 import { gerarComIA } from './ia.ts';
 import { enviarTextoCanal } from './whatsappEnvioCanal.ts';
 import { CATALOGO_AGENTES } from './agentes.ts';
+import {buscarImoveisAlternativos,querOutrosImoveis,resumoImoveisAlternativos} from './superlogicaImoveis.ts';
 import {recursoDaWorkspace} from './servicosWorkspace.ts';
 import type { CanalWhatsApp } from './whatsappCanais';
 
@@ -98,7 +99,12 @@ export async function executarSessaoBDR(admin: SupabaseClient, cfg: ConfigBDR, s
          produto.descricao??'',
          Number(produto.preco)>0?'Preço cadastrado no catálogo: R$ '+Number(produto.preco).toFixed(2)+' (confirmar atualização com corretor antes de informar)':'Preço ainda não homologado; encaminhe ao corretor.'].join('\n')
       : '';
-    const prompt = promptsBDR([cfg.base_aprovada,fichaCatalogo,agente.configuracao?.conhecimento].filter(Boolean).join('\n'),s.qualificacao,{entradas,saidas:historico},
+    // Outras opções: somente a API IMÓVEIS publicada da própria Realize,
+    // nunca API LEADS/ZAPIER e nunca dados de outra workspace.
+    const alternativas=querOutrosImoveis(entrada.mensagem??'')
+      ? resumoImoveisAlternativos(await buscarImoveisAlternativos(s.conta_id,entrada.mensagem??''))
+      : '';
+    const prompt = promptsBDR([cfg.base_aprovada,fichaCatalogo,agente.configuracao?.conhecimento,alternativas].filter(Boolean).join('\n'),s.qualificacao,{entradas,saidas:historico},
       novaEntrada?entrada.mensagem??'[Mídia recebida: peça esclarecimento ou encaminhe ao humano]':
         s.followups===3?'Encerre respeitosamente a cadência inicial, sem pergunta ou pressão.':
           'Retomada contextual autorizada: aproveite o histórico, não repita perguntas já respondidas.');
