@@ -17,7 +17,7 @@ async function resolver(req:Request){
 export async function GET(req:Request){
  const x=await resolver(req);if('erro'in x)return x.erro;
  try {
-  const cred=await credencialEvolution(x.admin,x.perfil.conta_id,x.canal);
+  const cred=await credencialEvolution(x.admin,x.perfil.conta_id!,x.canal);
   const r=await estadoEvolution(cred);
   // Atualiza somente o registro do canal, jamais estado de outras empresas.
   await x.admin.from('whatsapp_canais').update({status:r.status==='WORKING'?'conectado':'desconectado',
@@ -33,7 +33,7 @@ export async function POST(req:Request){
  if(x.canal.numero&&x.canal.numero.replace(/\D/g,'')!==telefone)
    return NextResponse.json({erro:'Telefone diferente do registrado no canal.'},{status:409});
  try{
-  const cred=await credencialEvolution(x.admin,x.perfil.conta_id,x.canal);
+  const cred=await credencialEvolution(x.admin,x.perfil.conta_id!,x.canal);
   const codigo=await codigoEvolution(cred,telefone);
   return NextResponse.json({codigo},{headers:{'Cache-Control':'no-store'}});
  }catch(e){return NextResponse.json({erro:e instanceof Error?e.message:'Evolution indisponível.'},{status:502})}
