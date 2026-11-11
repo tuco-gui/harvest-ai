@@ -25,6 +25,16 @@ Escopo exclusivo: **CLIENTE REALIZE NEGÓCIOS IMOBILIÁRIOS**, workspace `realiz
 - Enquanto não houver token/contrato homologado, interesse por outros imóveis deve ser direcionado ao corretor humano, **sem afirmar que o catálogo externo foi consultado**.
 - BDR da Realize continua em simulação; nenhuma mudança nessa etapa autoriza resposta automática a clientes.
 
+## API IMÓVEIS — integração preparada, não autenticada
+
+- PR #51: `https://github.com/tuco-gui/harvest-ai/pull/51`, merge `dca2bd7fecb42e1d0a26bd9a8d4349caaaee661c`.
+- Endpoint documentado pela Superlógica/Arbo: `GET https://app-integracao.arboimoveis.com/api/imoveis`, header `Authorization` com token exclusivo API IMÓVEIS.
+- O código `app/src/lib/superlogicaImoveis.ts` usa apenas a chave server-side `REALIZE_IMOVEIS_API_TOKEN`, sem fallback para API LEADS ou ZAPIER.
+- A chamada só ocorre quando o interessado pede alternativas, somente na workspace Realize (allowlist existente `REALIZE_SUPERLOGICA_WORKSPACES`), e filtra `ativo=true`, `publicado=true`, finalidade Venda e cidade Botucatu. Só retorna dados públicos resumidos, limite quatro resultados e fotos de domínio confiável.
+- Enquanto `REALIZE_IMOVEIS_API_TOKEN` não estiver no cofre/servidor, **não há consulta real**. O BDR encaminha pedidos de alternativas ao corretor, sem inventar catálogo.
+- Testes automatizados validam isolamento, URLs, filtros, ausência de token e exclusão de dados privados.
+- A criação do token exige perfil autorizado no CRM Realize: Preferências → Integrações → Integrações personalizadas → Novo registro → API IMÓVEIS. Não copiar valores para GitHub, prompt ou logs.
+
 ## Verificações posteriores
 
 Verificar no Harvest com sessão da workspace Realize: Produtos → ficha `CA0653_MMOL`, galeria e preço sob consulta; na Inbox/Agentes, confirmar que o contexto do produto não introduz preços/estoque inventados; verificar encaminhamento de alternativas ao humano enquanto API IMÓVEIS não existir.
