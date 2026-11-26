@@ -3,6 +3,7 @@ import type {SupabaseClient} from '@supabase/supabase-js';
 import {recursoDaWorkspace} from './servicosWorkspace.ts';
 import {tipoCanalRecurso} from './recursosRotas.ts';
 import type {PlataformaMeta} from './crmMetaOAuth';
+import {jornadaRealize} from './realizeRecepcao.ts';
 import {capturarLeadSuperlogica} from './superlogica.ts';
 
 export type TipoMetaEntrada=PlataformaMeta|'whatsapp_cloud_api';
@@ -100,7 +101,7 @@ async function capturarWhatsAppSuperlogica(
  m:MensagemMetaEntrada,
 ){
  const nome=String(m.nomeContato??'').trim();
- if(nome.length<2)return;
+ if(nome.length<2||jornadaRealize(m.texto,null,false)!=='alea')return;
  if(!(await recursoDaWorkspace(admin,fonte.conta_id,['integracoes.superlogica'],'configurar')))return;
  const {data:cfg,error}=await admin.from('bdr_config')
   .select('funil_id').eq('conta_id',fonte.conta_id).eq('funil_id',fonte.funil_id).maybeSingle();
