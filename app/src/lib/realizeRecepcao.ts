@@ -50,3 +50,15 @@ export function preTriagemRealize(q:Record<string,unknown>) {
     renda==='prefere_nao_informar'?'recusada':faixa&&financiamento&&entrada?'coletada':'dados_insuficientes';
   return {status,faixa_renda:faixa,criterio:'somente renda familiar bruta mensal declarada',fonte:'Portaria MCID 333/2026',aprovacao_credito:false,parcela_estimada:null,subsidio_estimado:null,entrada_estimada:null,referencia:'https://simuladorhabitacao.caixa.gov.br/'};
 }
+
+/** Perguntas de triagem controladas pelo servidor; a IA extrai apenas fatos.
+ * Os valores fixos das faixas não são preços, parcelas ou promessa de crédito. */
+export function proximaPerguntaFinanceira(q:Record<string,unknown>):string|null {
+  const financiamento=normalizar(q.financiamento);
+  if(!financiamento)return 'Você pretende financiar o imóvel ou pagar à vista?';
+  if(preTriagemRealize(q).status!=='dados_insuficientes')return null;
+  if(!FAIXAS_MCMV.includes(q.renda_faixa as typeof FAIXAS_MCMV[number]))
+    return 'Se você se sentir à vontade, em qual faixa está a renda bruta mensal da sua família: até R$ 3.200; de R$ 3.200,01 a R$ 5.000; de R$ 5.000,01 a R$ 9.600; de R$ 9.600,01 a R$ 13.000; ou acima de R$ 13.000? Também pode preferir não informar.';
+  if(!String(q.fgts_entrada??'').trim())return 'Você já dispõe de entrada ou FGTS, ou prefere verificar essas possibilidades com o corretor?';
+  return null;
+}
