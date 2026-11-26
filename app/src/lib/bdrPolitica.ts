@@ -6,7 +6,7 @@ export const ESTADOS_BDR = ['novo','contato_iniciado','em_qualificacao','qualifi
   'aguardando_corretor','transferido','sem_resposta','nutricao','desqualificado','opt_out','humano_assumiu'] as const;
 export type EstadoBDR = typeof ESTADOS_BDR[number];
 export const CAMPOS_QUALIFICACAO = ['nome','interesse','objetivo','prazo','financiamento','renda_faixa',
-  'fgts_entrada','objecao','visita','disponibilidade'] as const;
+  'fgts_entrada','objecao','visita','disponibilidade','jornada_realize','intencao_realize','imovel_interesse'] as const;
 export type Qualificacao = Partial<Record<typeof CAMPOS_QUALIFICACAO[number], string>>;
 export type DecisaoBDR = { resposta: string; qualificacao: Qualificacao; handoff: boolean; frio: boolean };
 
