@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {jornadaRealize,intencaoRealize,mensagemRecepcao,origemAleaVerificada,preTriagemRealize} from '../../app/src/lib/realizeRecepcao.ts';
+import {jornadaRealize,intencaoRealize,mensagemRecepcao,origemAleaVerificada,preTriagemRealize,proximaPerguntaFinanceira} from '../../app/src/lib/realizeRecepcao.ts';
 
 test('WhatsApp geral: saudação sem origem não vira Alea',()=>{
  assert.equal(jornadaRealize('Olá',null,false),'recepcao');
@@ -44,4 +44,13 @@ test('MCMV orientativo, recusa e à vista não impedem atendimento',()=>{
  assert.equal(preTriagemRealize({renda_faixa:'prefere_nao_informar'}).status,'recusada');
  assert.equal(preTriagemRealize({financiamento:'à vista'}).status,'nao_aplicavel');
  assert.equal(preTriagemRealize({renda_faixa:'4000'}).status,'dados_insuficientes');
+});
+
+test('triagem faz uma pergunta de cada vez e respeita recusa ou pagamento à vista',()=>{
+ assert.match(proximaPerguntaFinanceira({})!,/financiar/);
+ assert.match(proximaPerguntaFinanceira({financiamento:'financiar'})!,/3.200/);
+ assert.match(proximaPerguntaFinanceira({financiamento:'financiar',renda_faixa:'ate_3200'})!,/FGTS/);
+ assert.equal(proximaPerguntaFinanceira({financiamento:'financiar',renda_faixa:'prefere_nao_informar'}),null);
+ assert.equal(proximaPerguntaFinanceira({financiamento:'à vista'}),null);
+ assert.equal(proximaPerguntaFinanceira({financiamento:'financiar',renda_faixa:'ate_3200',fgts_entrada:'não tem'}),null);
 });
