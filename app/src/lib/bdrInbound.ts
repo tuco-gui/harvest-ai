@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {recursoDaWorkspace} from './servicosWorkspace.ts';
+import { jornadaRealize } from './realizeRecepcao.ts';
 import { paradaObrigatoria } from './bdrPolitica.ts';
 import { capturarLeadSuperlogica } from './superlogica.ts';
 
@@ -17,6 +18,7 @@ export async function receberEventoBDR(admin: SupabaseClient, contaId: string, e
   if (erroSessao) throw Error('estado_bdr_indisponivel');
   // Mesmo opt-out/frio precisa existir no CRM; não condiciona a qualificação.
   if (sessao && e.nome_contato?.trim()&&cfg.codigo_anuncio==='CA0653_MMOL'&&
+    jornadaRealize(e.mensagem,null,false)==='alea'&&
     (process.env.REALIZE_SUPERLOGICA_WORKSPACES??'').split(',').map(x=>x.trim()).includes(contaId)) {
     const {data:s} = await admin.from('bdr_sessoes').select('lead_id').eq('conta_id',contaId).eq('id',sessao).single();
     await capturarLeadSuperlogica(admin,contaId,{chave:`${e.provider}:${e.canal_id}:${e.message_id_externo}`,
