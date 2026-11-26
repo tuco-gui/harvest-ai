@@ -75,7 +75,7 @@ const payload = {
         metadata: { phone_number_id: '123456789012345' },
         contacts: [{ wa_id: '5514997754659', profile: { name: 'Piloto' } }],
         messages: [
-          { id: 'wamid.1', from: '5514997754659', type: 'text', text: { body: 'Olá, tenho interesse' } },
+          { id: 'wamid.1', from: '5514997754659', type: 'text', text: { body: 'Olá, tenho interesse no Alea' } },
           { id: 'wamid.2', from: '5514997754659', type: 'image', image: { id: 'midia' } },
         ],
         statuses: [{ id: 'wamid.1', status: 'delivered' }],
@@ -140,7 +140,7 @@ test('uma conversa com várias mensagens conserva a chave comercial, mas recepto
    /identidade_whatsapp_invalida/);
  chamadas.length = 0;
  await gravarMensagemMeta(admin(),e);
- await gravarMensagemMeta(admin(),{...e,mensagemId:'wamid.99',texto:'Outra mensagem'});
+ await gravarMensagemMeta(admin(),{...e,mensagemId:'wamid.99',texto:'Outra pergunta sobre o Alea'});
  assert.equal(chamadas.length,2,'o bridge pode reconciliar cada mensagem');
  assert.equal(chamadas[0].lead.chave,chamadas[1].lead.chave,
    'as duas mensagens apontam para uma única entrada comercial no banco');
@@ -168,4 +168,13 @@ test('captura não cruza funil nem contato sem nome', async () => {
     ...extrairMensagensMeta(payload)[0], nomeContato: null,
   });
   assert.equal(chamadas.length, 0, 'sem nome não cria lead no CRM');
+});
+
+test('WhatsApp geral fica na Inbox, sem captura indevida como Alea', async () => {
+ chamadas.length=0;
+ const e=extrairMensagensMeta(payload)[0];
+ for(const texto of ['Olá','Quero alugar uma casa','Quero vender meu imóvel','Quero saber de outro empreendimento']){
+   assert.equal(await gravarMensagemMeta(admin(),{...e,texto}),'gravada');
+ }
+ assert.equal(chamadas.length,0);
 });
