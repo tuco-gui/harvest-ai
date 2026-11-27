@@ -193,3 +193,20 @@ export async function atribuirTime(accountId: number, conversationId: number, te
     body: JSON.stringify({ team_id: teamId }),
   });
 }
+
+/** Cria apenas a caixa API, sem callback, sem agente, sem mensagens.
+ * O transporte nativo WAHA/Evolution será vinculado e homologado em fase separada.
+ * A reserva persistida deve preceder esta chamada.
+ */
+export async function criarInboxApiChatwoot(accountId:number,nome:string):Promise<ChatwootInbox>{
+  if(!Number.isSafeInteger(accountId)||accountId<1||!nome.trim()||nome.length>120)
+    throw Error('chatwoot_inbox_invalida');
+  const d=await request(`/api/v1/accounts/${accountId}/inboxes`,{
+    method:'POST',redirect:'error',
+    body:JSON.stringify({name:nome,channel:{type:'api'},enable_auto_assignment:false,
+      greeting_enabled:false,csat_survey_enabled:false,lock_to_single_conversation:true}),
+  });
+  if(!Number.isSafeInteger(d?.id)||d.id<1||d.channel_type!=='Channel::Api'||d.name!==nome)
+    throw Error('chatwoot_inbox_ambigua');
+  return {id:d.id,name:d.name,channel_type:d.channel_type};
+}
