@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { perfilAtual, supabaseAdmin } from '@/lib/supabase/server';
 import { listarInboxes } from '@/lib/chatwoot';
+import {prepararInboxWhatsapp} from '@/lib/chatwootInboxProvisionamento';
 import {provisionarChatwoot,provisionamentoChatwootDisponivel} from '@/lib/chatwootProvisionamento';
 import {perfilTemRecursos,auditarServico} from '@/lib/servicosWorkspace';
 import {tipoCanalRecurso} from '@/lib/recursosRotas';
@@ -37,6 +38,13 @@ export async function GET() {
     .eq('conta_id', perfil.conta_id)
     .order('tipo_canal');
 
+  const [canais,preparos]=await Promise.all([
+    admin.from('whatsapp_canais').select('id,nome,provider,status,numero').eq('conta_id',perfil.conta_id).eq('ativo',true),
+    admin.from('chatwoot_inbox_provisionamentos').select('canal_id,inbox_id,estado').eq('conta_id',perfil.conta_id),
+  ]);
+  // Sem ledger confirmado, criação e vínculo de caixas novas permanecem bloqueados.
+  const preparosDisponiveis=!canais.error&&!preparos.error;
+  const preparadas=preparos.data??[];
   // Se tem account_id, consultar inboxes disponíveis no Chatwoot
   let inboxesDisponiveis: Array<{ id: number; name: string; channel_type?: string }> = [];
   if (chatwootAccountId) {
@@ -59,10 +67,13 @@ export async function GET() {
     configurado: !!chatwootAccountId,
     chatwootAccountId,
     inboxes: inboxesVinculados ?? [],
+    preparos_disponiveis:preparosDisponiveis,
+    preparos:preparadas,
+    canais_whatsapp:preparosDisponiveis?(canais.data??[]):[],
     // Inboxes disponíveis no Chatwoot que ainda não estão vinculados
     disponiveis: chatwootAccountId
       ? inboxesDisponiveis
-          .filter((i) => !(inboxesVinculados ?? []).some((v) => v.ativo&&v.chatwoot_inbox_id === i.id))
+          .filter((i) => preparosDisponiveis && !preparadas.some(p=>p.inbox_id===i.id) && !(inboxesVinculados ?? []).some((v) => v.ativo&&v.chatwoot_inbox_id === i.id))
           .map((i) => ({
             id: i.id,
             nome: i.name,
@@ -96,6 +107,14 @@ export async function POST(req: Request) {
     catch(e){return NextResponse.json({erro:e instanceof Error&&e.message==='chatwoot_platform_nao_configurada'?
       'A Figueira precisa provisionar a credencial Platform App e o usuário técnico autorizado do Chatwoot. Não é necessário criar a conta manualmente fora do Harvest.':
       'Provisionamento pendente de reconciliação pela Figueira. Nenhuma nova criação será repetida automaticamente.'},{status:409});}
+  }
+  if(acao==='preparar_inbox_whatsapp'){
+    if(!(await perfilTemRecursos(admin,perfil,['inbox.whatsapp'],'configurar')))return NextResponse.json({erro:'WhatsApp não liberado.'},{status:403});
+    if(!Number.isSafeInteger(b.canalId)||b.canalId<1)return NextResponse.json({erro:'Selecione um canal existente.'},{status:400});
+    try{
+      const resultado=await prepararInboxWhatsapp(admin,perfil.conta_id,perfil.id,b.canalId);
+      return NextResponse.json({ok:true,...resultado});
+    }catch{return NextResponse.json({erro:'Caixa não preparada. Verifique o canal, a conta Chatwoot e a reconciliação; não repita uma criação incerta.'},{status:409});}
   }
   // IDs remotos são a fronteira entre tenants e usam um token institucional.
   // Só o administrador da instalação pode criar/remover esses vínculos.
@@ -152,11 +171,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ erro: 'Configure o Chatwoot Account ID primeiro.' }, { status: 400 });
     }
 
+    const {data:reservada,error:erroReserva}=await admin.from('chatwoot_inbox_provisionamentos').select('inbox_id')
+      .eq('conta_id',perfil.conta_id).eq('inbox_id',inboxId).maybeSingle();
+    if(erroReserva||reservada)return NextResponse.json({erro:'Caixa reservada para um transporte WhatsApp; a vinculação exige homologação do conector.'},{status:409});
     const disponiveis = await listarInboxes(vinculo.chatwoot_account_id).catch(()=>null);
     if (!disponiveis?.some(i=>i.id===inboxId))
       return NextResponse.json({erro:'Inbox não confirmada na conta Chatwoot vinculada.'},{status:409});
     const remoto=disponiveis.find(i=>i.id===inboxId)!;
-    const tipos:Record<string,string>={'Channel::Instagram':'instagram','Channel::Facebook':'facebook','Channel::Whatsapp':'whatsapp','Channel::WebWidget':'widget','Channel::Api':'api'};
+    const tipos:Record<string,string>={'Channel::Instagram':'instagram','Channel::Facebook':'facebook','Channel::Whatsapp':'whatsapp','Channel::WebWidget':'widget','Channel::Api':'api','Channel::Telegram':'telegram','Channel::Email':'email','Channel::Sms':'sms','Channel::Line':'line'};
     const tipoReal=tipos[remoto.channel_type??'']??'outro';
     const recurso=tipoReal==='api'?'integracoes.chatwoot':tipoCanalRecurso(tipoReal==='widget'?'webchat':tipoReal);
     if(!(await perfilTemRecursos(admin,perfil,[recurso],'configurar')))return NextResponse.json({erro:'Canal não contratado.'},{status:403});
