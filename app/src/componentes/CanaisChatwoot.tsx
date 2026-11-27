@@ -8,6 +8,7 @@ type InboxVinculado = {
   tipo_canal: string;
   nome: string;
   ativo: boolean;
+  whatsapp_canal_id?:number|null;
 };
 
 type InboxDisponivel = {
@@ -41,6 +42,8 @@ const TIPOS_CHATWOOT: Record<string, string> = {
   'Channel::Line': 'line',
 };
 
+type CanalWhatsapp = {id:number;nome:string;provider:string;status:string;numero:string|null};
+type Preparo = {canal_id:number;inbox_id:number|null;estado:'reservado'|'preparado'|'incerto'};
 type Props = {
   chatwootAccountId: number | null;
   superAdmin?:boolean;
@@ -64,6 +67,10 @@ export default function CanaisChatwoot({ chatwootAccountId,superAdmin=false }: P
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [provisionavel,setProvisionavel]=useState(false);
+  const [preparosDisponiveis,setPreparosDisponiveis]=useState(false);
+  const [canaisWhatsapp,setCanaisWhatsapp]=useState<CanalWhatsapp[]>([]);
+  const [preparos,setPreparos]=useState<Preparo[]>([]);
+  const [urlConfiguracao,setUrlConfiguracao]=useState<string|null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -72,6 +79,10 @@ export default function CanaisChatwoot({ chatwootAccountId,superAdmin=false }: P
       const r = await fetch('/api/canais/chatwoot');
       const d = await r.json();
       setProvisionavel(d.provisionamento_disponivel===true);
+      setPreparosDisponiveis(d.preparos_disponiveis===true);
+      setCanaisWhatsapp(d.canais_whatsapp??[]);
+      setPreparos(d.preparos??[]);
+      setUrlConfiguracao(typeof d.url_configuracao_canais==='string'?d.url_configuracao_canais:null);
       if(!r.ok)setErro(d.erro??'Integração indisponível.');
       if (d.ok || d.configurado) {
         setConfigurado(d.configurado);
@@ -95,6 +106,17 @@ export default function CanaisChatwoot({ chatwootAccountId,superAdmin=false }: P
       const d=await r.json();if(!r.ok)throw Error(d.erro);
       setAccountId(String(d.chatwootAccountId));await carregar();setMensagem('Conta provisionada e vinculada. Conecte agora os canais autorizados. Nenhuma IA foi ativada.');
     }catch(e){setErro(e instanceof Error?e.message:'Falha ao provisionar.');}finally{setSalvando(false);}
+  }
+
+  async function prepararWhatsapp(canalId:number){
+    setSalvando(true);setErro(null);setMensagem(null);
+    try{
+      const r=await fetch('/api/canais/chatwoot',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({acao:'preparar_inbox_whatsapp',canalId})});
+      const d=await r.json();if(!r.ok)throw Error(d.erro??'Falha ao preparar caixa.');
+      await carregar();setMensagem('Caixa criada, aguardando homologação do transporte. Nenhum envio foi habilitado.');
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao preparar caixa.');}
+    finally{setSalvando(false);}
   }
 
   async function configurarAccount() {
@@ -176,21 +198,18 @@ export default function CanaisChatwoot({ chatwootAccountId,superAdmin=false }: P
   return (
     <div style={{ padding: '16px 0' }}>
       <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 8px' }}>
-        Canais Chatwoot
+        Conta de atendimento
       </h3>
       <p style={{ fontSize: 12, color: 'var(--ink-3)', margin: '0 0 16px' }}>
-        Inboxes do Chatwoot vinculados a esta conta. Uma conta pode ter
-        múltiplos canais simultaneamente (WhatsApp, Instagram, Telegram, etc).
+        Uma conta Chatwoot por workspace. As caixas de entrada são administradas a partir daqui; os transportes WhatsApp existentes são preservados.
       </p>
 
       {/* Configuração do Account ID */}
-      {!configurado&&<div><button type="button" disabled={carregando||salvando||!provisionavel} onClick={()=>void provisionar()}>{salvando?'Provisionando…':'Preparar Inbox desta workspace'}</button>
+      {!configurado&&<div><button type="button" disabled={carregando||salvando||!provisionavel} onClick={()=>void provisionar()}>{salvando?'Provisionando…':'Criar conta de atendimento'}</button>
         {!provisionavel&&<p className="ajuda">Provisionamento pela API administrativa aguardando credencial Platform App e usuário técnico da Figueira. Uma licença Inbox não comprova conta provisionada.</p>}</div>}
       {!configurado && superAdmin && (
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
-            Vincular conta existente (administração global)
-          </label>
+          <details><summary>Vincular conta existente (administração global)</summary>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               type="number"
@@ -214,13 +233,13 @@ export default function CanaisChatwoot({ chatwootAccountId,superAdmin=false }: P
             >
               {salvando ? 'Salvando…' : 'Conectar'}
             </button>
-          </div>
+          </div></details>
         </div>
       )}
 
       {configurado && (
         <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 12 }}>
-          Account ID: <strong>{accountId || chatwootAccountId}</strong>
+          Conta vinculada{superAdmin&&<> · ID <strong>{accountId || chatwootAccountId}</strong></>}
         </div>
       )}
 
@@ -229,6 +248,27 @@ export default function CanaisChatwoot({ chatwootAccountId,superAdmin=false }: P
           Carregando canais…
         </div>
       )}
+
+      {configurado&&!carregando&&<div style={{margin:'16px 0'}}>
+        <h3 style={{fontSize:14}}>WhatsApp via QR Code (WAHA / Evolution)</h3>
+        <p className="ajuda">Use o canal já conectado. Preparar a caixa não cria outro pareamento, não altera a rota atual e não ativa mensagens.</p>
+        {!preparosDisponiveis&&<p className="ajuda">Preparação de caixas ainda indisponível. Preserve as conexões existentes.</p>}
+        {preparosDisponiveis&&canaisWhatsapp.length===0&&<p className="ajuda">Conecte um número na área de transportes WhatsApp abaixo.</p>}
+        {canaisWhatsapp.map(c=>{
+          const p=preparos.find(x=>x.canal_id===c.id);
+          const vinculada=inboxes.find(x=>x.whatsapp_canal_id===c.id);
+          return <div key={c.id} style={{display:'flex',gap:10,alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid var(--rule)'}}>
+            <div><strong>{c.nome}</strong><p className="ajuda">{c.numero??'Número pendente'} · {c.provider.toUpperCase()} · {c.status}</p>
+              {vinculada?<small>Caixa vinculada · {vinculada.ativo?'ativa':'pausada'}</small>:
+                p?<small>{p.estado==='preparado'?'Caixa preparada; transporte a homologar':'Preparação em revisão; não repetir'}</small>:null}</div>
+            {!vinculada&&!p&&<button type="button" className="btn-teste" disabled={salvando||!preparosDisponiveis||c.status!=='conectado'} onClick={()=>void prepararWhatsapp(c.id)}>Preparar caixa</button>}
+          </div>;
+        })}
+        <h3 style={{fontSize:14,marginTop:16}}>Canais oficiais e sociais</h3>
+        <p className="ajuda">Instagram, Messenger, WhatsApp oficial e outros canais usam a autorização nativa do Chatwoot. A autorização do titular continua necessária. Não conecte a mesma identidade por dois provedores.</p>
+        {urlConfiguracao&&<a href={urlConfiguracao} target="_blank" rel="noreferrer">Abrir autorização de canais no Chatwoot (admin)</a>}
+        <button type="button" className="btn-teste" disabled={salvando} onClick={()=>void carregar()}>Atualizar caixas</button>
+      </div>}
 
       {/* Inboxes vinculados */}
       {!carregando && inboxes.length > 0 && (
@@ -317,7 +357,7 @@ export default function CanaisChatwoot({ chatwootAccountId,superAdmin=false }: P
 
       {!carregando && configurado && inboxes.length === 0 && disponiveis.length === 0 && !erro && (
         <div style={{ fontSize: 13, color: 'var(--ink-3)', padding: 12 }}>
-          Nenhum inbox encontrado no Chatwoot. Verifique se a instância tem canais configurados.
+          Nenhuma caixa vinculada ou disponível para vínculo. Caixas preparadas ainda precisam da homologação do transporte.
         </div>
       )}
 
