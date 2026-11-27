@@ -61,8 +61,18 @@ export async function GET() {
     }
   }
 
+  let urlConfiguracaoCanais:string|null=null;
+  if(chatwootAccountId&&perfil.papel==='super_admin'){
+    try{
+      const u=new URL(process.env.CHATWOOT_PUBLIC_URL??process.env.CHATWOOT_API_URL??'');
+      if(u.protocol==='https:'&&!u.username&&!u.password){
+        urlConfiguracaoCanais=new URL('/app/accounts/'+chatwootAccountId+'/settings/inboxes/new',u.origin).toString();
+      }
+    }catch{/* não expor link inválido */}
+  }
   return NextResponse.json({
     ok: true,
+    url_configuracao_canais:urlConfiguracaoCanais,
     provisionamento_disponivel:provisionamentoChatwootDisponivel(),
     configurado: !!chatwootAccountId,
     chatwootAccountId,
